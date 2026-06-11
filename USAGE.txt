@@ -1,0 +1,59 @@
+SteamXBox Portable Usage Guide
+==============================
+
+Overview
+--------
+SteamXBox is a portable Windows bridge that exposes a Valve Steam Controller as a virtual Xbox 360 controller.
+
+For a third-party user, the recommended package is the portable zip. After the required driver is installed, the user only needs `SteamXBox.exe` and the included launcher scripts. No separate SteamXBox installer and no local .NET runtime are required for the portable package.
+
+Required dependency
+-------------------
+Install ViGEmBus before launching SteamXBox:
+
+- ViGEmBus releases: https://github.com/nefarius/ViGEmBus/releases
+
+Optional dependency
+-------------------
+Install HidHide if a game still detects the physical Steam Controller directly and you get double input:
+
+- HidHide releases: https://github.com/nefarius/HidHide/releases
+- HidHide documentation: https://docs.nefarius.at/projects/HidHide/
+
+Quick start
+-----------
+1. Install ViGEmBus.
+2. Extract the SteamXBox portable zip anywhere.
+3. Connect the Steam Controller by USB or Bluetooth.
+4. Close Steam Input for this controller if Steam is taking exclusive control.
+5. Double-click `SteamXBox.exe`.
+
+Default launch behavior
+-----------------------
+- The app starts minimized in the Windows taskbar.
+- It starts in Xbox 360 mode.
+- Steam / Guide and Quick Access can switch between `Xbox360` and `Native` mode.
+
+Launchers included in the portable package
+------------------------------------------
+- `Start-Xbox360.cmd`: start in Xbox mode with haptics enabled.
+- `Start-Xbox360-NoHaptics.cmd`: start in Xbox mode with haptics disabled.
+- `Start-Native.cmd`: start in native Valve mode first.
+- `Stop-SteamXBox.cmd`: stop other running SteamXBox instances from the same executable path.
+- `HidHide-Setup.cmd`: register SteamXBox in HidHide and enable cloaking.
+- `HidHide-Status.cmd`: print current HidHide state.
+- `HidHide-Off.cmd`: disable HidHide cloaking.
+- `HID-Probe.cmd`: capture HID input reports for diagnostics.
+
+Important warning about mode switching
+--------------------------------------
+WARNING: Switching from `Xbox360` mode back to `Native` mode is not instant.
+The controller firmware needs a few seconds to restore and remap its native layer.
+During that short delay, inputs can appear partially inactive or temporarily remapped.
+This is expected behavior with the current SteamXBox mode handoff.
+
+Notes
+-----
+- If Windows or a game does not see the virtual Xbox 360 controller, verify that ViGEmBus is installed correctly.
+- If a game still reacts to the physical controller and the virtual Xbox controller at the same time, configure HidHide and whitelist `SteamXBox.exe`.
+- If you want the Steam button to behave like Xbox Guide only, launch with `SteamXBox.exe xbox-run --no-mode-switch`.

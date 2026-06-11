@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+**/TestResults/
+artifacts/
+dist/*/
+!dist/*.zip
+docs/hid-captures/*.bin
+docs/hid-captures/*.json
