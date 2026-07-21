@@ -5,7 +5,7 @@ Overview
 --------
 SteamXBox is a portable Windows bridge that exposes a Valve Steam Controller as a virtual Xbox 360 controller.
 
-For a third-party user, the recommended package is the portable zip. After the required driver is installed, the user needs `SteamXBox.exe`, `SteamXBox.Core.exe`, and the included launcher scripts. No separate SteamXBox installer and no local .NET runtime are required for the portable package.
+For a third-party user, the recommended package is the portable zip. After the required driver is installed, the user only needs `SteamXBox.exe` and the included launcher scripts. No separate SteamXBox installer and no local .NET runtime are required for the portable package.
 
 Required dependency
 -------------------
@@ -26,36 +26,24 @@ Quick start
 2. Extract the SteamXBox portable zip anywhere.
 3. Connect the Steam Controller by USB or Bluetooth.
 4. Close Steam Input for this controller if Steam is taking exclusive control.
-5. Double-click `SteamXBox.exe` or `Start-Xbox360.cmd`, or run `Install-Startup.cmd` once to launch it automatically at Windows user logon.
+5. Double-click `SteamXBox.exe`.
 
 Default launch behavior
 -----------------------
 - The app starts minimized in the Windows taskbar.
 - It starts in Xbox 360 mode.
 - Steam / Guide and Quick Access can switch between `Xbox360` and `Native` mode.
-- `SteamXBox.exe` is a small GUI launcher with the SteamXBox icon. It starts the resident supervisor in the background by default.
-- `SteamXBox.Core.exe` is the internal controller bridge used by the resident launcher and diagnostic scripts.
 
 Launchers included in the portable package
 ------------------------------------------
 - `Start-Xbox360.cmd`: start in Xbox mode with haptics enabled.
 - `Start-Xbox360-NoHaptics.cmd`: start in Xbox mode with haptics disabled.
 - `Start-Native.cmd`: start in native Valve mode first.
-- `Install-Startup.cmd`: start SteamXBox automatically at Windows user logon.
-- `Uninstall-Startup.cmd`: remove SteamXBox from Windows user logon.
 - `Stop-SteamXBox.cmd`: stop other running SteamXBox instances from the same executable path.
 - `HidHide-Setup.cmd`: register SteamXBox in HidHide and enable cloaking.
 - `HidHide-Status.cmd`: print current HidHide state.
 - `HidHide-Off.cmd`: disable HidHide cloaking.
 - `HID-Probe.cmd`: capture HID input reports for diagnostics.
-
-Resident startup behavior
--------------------------
-- The `Start-*.cmd` launchers run through `SteamXBox-Resident.cmd`.
-- If the Steam Controller is powered off or temporarily missing, the resident launcher waits and retries instead of ending permanently.
-- If `SteamXBox.exe` exits normally with code 0, the resident launcher treats it as a user close and does not relaunch.
-- Use `Stop-SteamXBox.cmd` for a forced voluntary stop. It creates a stop request, stops `SteamXBox.exe`, and lets the resident launcher exit instead of relaunching.
-- `Install-Startup.cmd` installs a per-user Windows Startup shortcut. This starts after the user signs in; it is intentionally not a Windows service, because SteamXBox is an interactive user-session controller bridge.
 
 Important warning about mode switching
 --------------------------------------
