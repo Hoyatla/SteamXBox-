@@ -1,0 +1,18 @@
+# Binaries
+SteamXBox.exe
+SteamXBox.Core.exe
+
+# Installer output
+SteamXBox_Full_Setup_*.exe
+SteamXBox_Setup_*.exe
+
+# ViGEmBus / HidHide installers (re-download at build time)
+ViGEmBus_*.exe
+HidHide_*.exe
+
+# .NET build artifacts
+launcher/bin/
+launcher/obj/
+
+# Temp
+*.pdb
