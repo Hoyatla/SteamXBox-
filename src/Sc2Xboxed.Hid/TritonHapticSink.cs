@@ -36,6 +36,19 @@ public sealed class TritonHapticSink : IHapticSink
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask SubmitPowerOffAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureOpen();
+
+        var report = new byte[Math.Max(2, _outputReportLength)];
+        report[0] = 0x9F;
+        report[1] = 0x01;
+        _stream!.Write(report);
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask DisposeAsync()
     {
         _stream?.Dispose();

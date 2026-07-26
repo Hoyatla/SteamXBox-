@@ -2,7 +2,6 @@ namespace Sc2Xboxed.Core.Runtime;
 
 public enum ControllerOutputMode
 {
-    Xbox360,
-    Native,
-    KeyboardMouse = Native
+    Xbox360 = 0,
+    Profile = 1
 }

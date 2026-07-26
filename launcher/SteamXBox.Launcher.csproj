@@ -7,5 +7,6 @@
     <AssemblyName>SteamXBox</AssemblyName>
     <RootNamespace>SteamXBoxLauncher</RootNamespace>
     <ApplicationIcon>SteamXBox.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 </Project>

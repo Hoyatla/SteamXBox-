@@ -3,7 +3,10 @@ using System.Threading;
 
 var baseDirectory = AppContext.BaseDirectory;
 var coreExecutable = Path.Combine(baseDirectory, "SteamXBox.Core.exe");
-var residentLauncher = Path.Combine(baseDirectory, "SteamXBox-Resident.cmd");
+var stateDirectory = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "SteamXBox");
+var stopFile = Path.Combine(stateDirectory, "stop.requested");
 
 if (!File.Exists(coreExecutable))
 {
@@ -11,40 +14,74 @@ if (!File.Exists(coreExecutable))
     return 2;
 }
 
-if (args.Length == 0)
+if (args.Length > 0 && string.Equals(args[0], "stop", StringComparison.OrdinalIgnoreCase))
 {
-    return RunResidentOnce(residentLauncher, [
-        "xbox-run",
-        "--restart",
-        "--switch-button",
-        "steam-or-quick-access"
-    ]);
+    Directory.CreateDirectory(stateDirectory);
+    File.WriteAllText(stopFile, "stop");
+    KillRunningCore();
+    return 0;
 }
 
-if (IsStopCommand(args[0]))
+if (args.Length > 0)
 {
-    RequestResidentStop();
-    return RunCore(coreExecutable, args);
+    var exitCode = RunCore(coreExecutable, args);
+    if (File.Exists(stopFile)) File.Delete(stopFile);
+    return exitCode;
 }
 
-if (IsXboxRunCommand(args[0]))
+using var mutex = new Mutex(true, @"Local\SteamXBox", out var createdNew);
+if (!createdNew)
 {
-    return RunResidentOnce(residentLauncher, args);
+    return 0;
 }
 
-return RunCore(coreExecutable, args);
+if (File.Exists(stopFile)) File.Delete(stopFile);
 
-static bool IsStopCommand(string command)
+while (true)
 {
-    return string.Equals(command, "stop", StringComparison.OrdinalIgnoreCase);
+    if (File.Exists(stopFile)) { File.Delete(stopFile); return 0; }
+
+    if (!HasControllerDevice(coreExecutable))
+    {
+        Thread.Sleep(5000);
+        continue;
+    }
+
+    var core = StartCoreProcess(coreExecutable, ["xbox-run", "--switch-button", "quick-access"]);
+    if (core is null) { Thread.Sleep(5000); continue; }
+
+    core.WaitForExit();
+
+    if (File.Exists(stopFile)) { File.Delete(stopFile); return 0; }
+
+    Thread.Sleep(core.ExitCode == 0 ? 1000 : 5000);
 }
 
-static bool IsXboxRunCommand(string command)
+static bool HasControllerDevice(string coreExecutable)
 {
-    return string.Equals(command, "xbox-run", StringComparison.OrdinalIgnoreCase);
+    try
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = coreExecutable,
+            Arguments = "hid-list",
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+            UseShellExecute = false
+        };
+        var proc = Process.Start(psi);
+        if (proc is null) return false;
+        var output = proc.StandardOutput.ReadToEnd();
+        proc.WaitForExit(10000);
+        return !output.Contains("No Valve HID device found.");
+    }
+    catch
+    {
+        return false;
+    }
 }
 
-static int RunCore(string executable, IReadOnlyList<string> arguments)
+static Process? StartCoreProcess(string executable, string[] arguments)
 {
     var startInfo = new ProcessStartInfo
     {
@@ -53,76 +90,25 @@ static int RunCore(string executable, IReadOnlyList<string> arguments)
         UseShellExecute = false,
         CreateNoWindow = true
     };
-
     foreach (var argument in arguments)
     {
         startInfo.ArgumentList.Add(argument);
     }
+    return Process.Start(startInfo);
+}
 
-    using var process = Process.Start(startInfo);
-    if (process is null)
-    {
-        Console.Error.WriteLine($"Failed to start {executable}");
-        return 3;
-    }
-
+static int RunCore(string executable, IReadOnlyList<string> arguments)
+{
+    var process = StartCoreProcess(executable, arguments.ToArray());
+    if (process is null) return 3;
     process.WaitForExit();
     return process.ExitCode;
 }
 
-static int RunResidentOnce(string residentLauncher, IReadOnlyList<string> arguments)
+static void KillRunningCore()
 {
-    using var mutex = new Mutex(true, @"Local\SteamXBoxResidentLauncher", out var createdNew);
-    if (!createdNew)
+    foreach (var process in Process.GetProcessesByName("SteamXBox.Core"))
     {
-        return 0;
+        try { process.Kill(entireProcessTree: true); } catch { }
     }
-
-    return RunResident(residentLauncher, arguments);
-}
-
-static int RunResident(string residentLauncher, IReadOnlyList<string> arguments)
-{
-    if (!File.Exists(residentLauncher))
-    {
-        Console.Error.WriteLine($"Missing resident launcher: {residentLauncher}");
-        return 2;
-    }
-
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = "cmd.exe",
-        WorkingDirectory = Path.GetDirectoryName(residentLauncher)!,
-        UseShellExecute = false,
-        CreateNoWindow = true
-    };
-
-    startInfo.ArgumentList.Add("/d");
-    startInfo.ArgumentList.Add("/c");
-    startInfo.ArgumentList.Add(residentLauncher);
-
-    foreach (var argument in arguments)
-    {
-        startInfo.ArgumentList.Add(argument);
-    }
-
-    using var process = Process.Start(startInfo);
-    if (process is null)
-    {
-        Console.Error.WriteLine($"Failed to start {residentLauncher}");
-        return 3;
-    }
-
-    process.WaitForExit();
-    return process.ExitCode;
-}
-
-static void RequestResidentStop()
-{
-    var stateDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SteamXBox");
-
-    Directory.CreateDirectory(stateDirectory);
-    File.WriteAllText(Path.Combine(stateDirectory, "stop.requested"), "stop");
 }

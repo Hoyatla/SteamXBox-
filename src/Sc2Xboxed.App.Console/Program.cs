@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Sc2Xboxed.Core.Input;
@@ -5,13 +6,29 @@ using Sc2Xboxed.Core.Haptics;
 using Sc2Xboxed.Core.Mapping;
 using Sc2Xboxed.Core.Output;
 using Sc2Xboxed.Core.Runtime;
+using HidSharp;
 using Sc2Xboxed.Hid;
 using Sc2Xboxed.VirtualGamepad;
 using Sc2Xboxed.Windows;
 
+Action<string>? DebugLog = null;
+
 if (args.Length > 0)
 {
-    await RunCommandAsync(args);
+    if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase))
+    {
+        var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
+        var logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        DebugLog = (string msg) =>
+        {
+            var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+            Console.WriteLine(line);
+            logFile.WriteLine(line);
+        };
+        DebugLog($"=== SteamXBox debug log ===");
+        DebugLog($"Log file: {logPath}");
+    }
+    await RunCommandAsync(args, DebugLog);
     return;
 }
 
@@ -21,8 +38,8 @@ await RunXbox360LiveAsync(new[]
     "xbox-run",
     "--restart",
     "--switch-button",
-    "steam-or-quick-access"
-});
+    "quick-access"
+}, DebugLog);
 
 static void RunMappingSanityCheck()
 {
@@ -51,11 +68,11 @@ static void MinimizeConsoleWindow()
     var window = NativeMethods.GetConsoleWindow();
     if (window != IntPtr.Zero)
     {
-        _ = NativeMethods.ShowWindow(window, NativeMethods.SwMinimize);
+        _ = NativeMethods.ShowWindow(window, NativeMethods.SwHide);
     }
 }
 
-static async Task RunCommandAsync(string[] args)
+static async Task RunCommandAsync(string[] args, Action<string>? debugLog = null)
 {
     switch (args[0])
     {
@@ -69,7 +86,7 @@ static async Task RunCommandAsync(string[] args)
             await RunHapticTestAsync(args);
             return;
         case "xbox-run":
-            await RunXbox360LiveAsync(args);
+            await RunXbox360LiveAsync(args, debugLog);
             return;
         case "stop":
             StopOtherInstances(waitForExit: true);
@@ -88,6 +105,9 @@ static async Task RunCommandAsync(string[] args)
             return;
         case "sanity":
             RunMappingSanityCheck();
+            return;
+        case "hid-diag":
+            RunHidDiagnostic();
             return;
         default:
             PrintUsage();
@@ -162,8 +182,8 @@ static async Task RunHapticTestAsync(string[] args)
     await using var sink = new TritonHapticSink();
     var frame = new HapticOutputFrame(new[]
     {
-        new HapticCommand(HapticActuator.LeftTrackpad, 120.0, 0.20, TimeSpan.FromMilliseconds(80)),
-        new HapticCommand(HapticActuator.RightTrackpad, 160.0, 0.20, TimeSpan.FromMilliseconds(80))
+        HapticCommand.TouchClick(HapticActuator.LeftTrackpad),
+        HapticCommand.TouchClick(HapticActuator.RightTrackpad)
     });
 
     await sink.SubmitAsync(frame, CancellationToken.None);
@@ -174,24 +194,43 @@ static async Task RunHapticTestAsync(string[] args)
         HapticCommand.Stop(HapticActuator.RightTrackpad)
     }), CancellationToken.None);
 
-    Console.WriteLine("Sent conservative trackpad haptic test reports.");
+    Console.WriteLine("Sent trackpad haptic click test reports.");
 }
 
-static async Task RunXbox360LiveAsync(string[] args)
+static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = null)
 {
+    var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
+    StreamWriter? logFile = null;
+    if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase) && debugLog == null)
+    {
+        logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        debugLog = (string msg) =>
+        {
+            var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+            Console.WriteLine(line);
+            logFile.WriteLine(line);
+        };
+    }
+    var DLog = debugLog;
+
+    DLog?.Invoke($"=== SteamXBox started ===");
+    DLog?.Invoke($"Args: {string.Join(" ", args)}");
+
     if (args.Contains("--restart", StringComparer.OrdinalIgnoreCase))
     {
+        DLog?.Invoke("Stopping other instances...");
         StopOtherInstances(waitForExit: true);
     }
 
     using var cancellation = new CancellationTokenSource();
-    var enableRumbleHaptics = !args.Contains("--no-haptics", StringComparer.OrdinalIgnoreCase);
-    var disableNativeLayer = !args.Contains("--keep-native-layer", StringComparer.OrdinalIgnoreCase);
     var enableModeSwitch = !args.Contains("--no-mode-switch", StringComparer.OrdinalIgnoreCase);
-    var modeSwitcher = new SteamButtonModeSwitcher(
-        ReadInitialOutputMode(args),
-        ReadModeSwitchButtons(args),
+    var initialMode = ReadInitialOutputMode(args);
+    var switchButtons = ReadModeSwitchButtons(args);
+    var modeSwitcher = new InputModeHandler(
+        initialMode,
+        switchButtons,
         TimeSpan.FromMilliseconds(350));
+    var profileMapper = new ProfileMapper();
     var seconds = ReadSecondsOption(args);
     if (seconds is { } durationSeconds)
     {
@@ -204,124 +243,195 @@ static async Task RunXbox360LiveAsync(string[] args)
         cancellation.Cancel();
     };
 
+    DLog?.Invoke($"Initial mode: {initialMode}");
+    DLog?.Invoke($"Switch buttons: {switchButtons}");
+    DLog?.Invoke($"Mode switch enabled: {enableModeSwitch}");
+
     var mapper = new DefaultSteamControllerMapper();
-    await using var source = new TritonSteamControllerSource(
-        new SteamHidDiscovery(),
-        new TritonInputReportParser(),
-        readTimeoutMs: 20,
-        manageNativeLayer: disableNativeLayer,
-        initialNativeLayerEnabled: modeSwitcher.CurrentMode == ControllerOutputMode.Native);
+
+    DLog?.Invoke("Creating ViGEm virtual gamepad...");
     await using var gamepad = new ViGEmXbox360Sink();
     await using var haptics = new TritonHapticSink();
     var rumbleMapper = new XboxRumbleToSteamHapticsMapper();
 
-    if (enableRumbleHaptics)
+    gamepad.RumbleReceived += (_, rumble) =>
     {
-        gamepad.RumbleReceived += (_, rumble) =>
+        _ = Task.Run(async () =>
         {
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await haptics.SubmitAsync(rumbleMapper.Map(rumble), CancellationToken.None)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
-                {
-                    Console.WriteLine($"Rumble haptics disabled after error: {exception.Message}");
-                }
-            });
-        };
-    }
+                await haptics.SubmitAsync(rumbleMapper.Map(rumble), CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
+            {
+                Console.WriteLine($"Rumble haptics disabled after error: {exception.Message}");
+            }
+        });
+    };
 
     await gamepad.ConnectAsync(cancellation.Token);
+    DLog?.Invoke("Virtual Xbox 360 controller connected.");
     Console.WriteLine("Virtual Xbox 360 controller connected.");
-    Console.WriteLine(enableRumbleHaptics
-        ? "Rumble -> Steam haptics enabled."
-        : "Rumble -> Steam haptics disabled.");
     Console.WriteLine(enableModeSwitch
-        ? $"Steam button mode switch enabled. Current mode: {modeSwitcher.CurrentMode}."
-        : $"Steam button mode switch disabled. Current mode: {modeSwitcher.CurrentMode}.");
-    Console.WriteLine($"Mode switch button(s): {ReadModeSwitchButtons(args)}");
-    Console.WriteLine(disableNativeLayer
-        ? $"Native Steam Controller layer is managed by mode. Current native layer: {(modeSwitcher.CurrentMode == ControllerOutputMode.Native ? "enabled" : "disabled")}."
-        : "Native Steam Controller layer: unmanaged and left enabled.");
+        ? $"Mode switch enabled. Current mode: {modeSwitcher.CurrentMode}."
+        : $"Mode switch disabled. Current mode: {modeSwitcher.CurrentMode}.");
+    Console.WriteLine($"Mode switch button(s): {switchButtons}");
     Console.WriteLine("Press Ctrl+C to stop.");
 
     var frameCount = 0;
     var lastStatus = DateTimeOffset.UtcNow;
+    var lastHapticTime = DateTimeOffset.MinValue;
+    const double HapticIntervalMs = 30;
 
-    try
+    while (!cancellation.Token.IsCancellationRequested)
     {
-        await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
+        TritonSteamControllerSource? source = null;
+        try
         {
-            if (enableModeSwitch && modeSwitcher.Update(state))
+            DLog?.Invoke("Opening HID device...");
+            source = new TritonSteamControllerSource(
+                new SteamHidDiscovery(),
+                new TritonInputReportParser(),
+                readTimeoutMs: 20,
+                manageNativeLayer: true,
+                initialNativeLayerEnabled: modeSwitcher.WantsNativeLayer);
+            DLog?.Invoke("HID device opened.");
+
+            await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
             {
-                mapper.ResetTransientState();
-                await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
-                await source.SetNativeLayerEnabledAsync(modeSwitcher.CurrentMode == ControllerOutputMode.Native);
-                Console.WriteLine($"Mode switched to {modeSwitcher.CurrentMode}.");
+                DLog?.Invoke($"Frame: buttons={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} touch={state.LeftPad.IsTouched} click={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} touch={state.RightPad.IsTouched} click={state.RightPad.IsPressed})");
+
+                if (enableModeSwitch && modeSwitcher.Update(state))
+                {
+                    DLog?.Invoke($"*** MODE SWITCH -> {modeSwitcher.CurrentMode} ***");
+                    mapper.ResetTransientState();
+                    profileMapper.Reset();
+                    await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    Console.WriteLine($"Mode switched to {modeSwitcher.CurrentMode}.");
+                }
+
+                if (modeSwitcher.SteamLaunchRequested)
+                {
+                    DLog?.Invoke("*** Steam launch requested ***");
+                    InputHelper.LaunchSteam();
+                    await source.SetNativeLayerEnabledAsync(true);
+                    Console.WriteLine("Steam launched, controller returned to native mode.");
+                }
+                else if (modeSwitcher.SteamKillRequested)
+                {
+                    DLog?.Invoke("*** Steam kill requested ***");
+                    InputHelper.KillProcess("steam");
+                    await source.SetNativeLayerEnabledAsync(false);
+                    Console.WriteLine("Steam killed, controller back to SteamXBox.");
+                }
+                else if (modeSwitcher.WantsNativeLayer)
+                {
+                    await source.SetNativeLayerEnabledAsync(true);
+                }
+
+                if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile && !modeSwitcher.WantsNativeLayer)
+                {
+                    var mappedState = modeSwitcher.ConsumeButton(state);
+                    profileMapper.Map(mappedState);
+                    await source.SetNativeLayerEnabledAsync(false);
+                    await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+
+                    var hapticNow = DateTimeOffset.UtcNow;
+                    bool shouldPulse = (hapticNow - lastHapticTime).TotalMilliseconds >= HapticIntervalMs;
+                    if (shouldPulse)
+                    {
+                        var cmds = new List<HapticCommand>();
+                        if (profileMapper.CursorMoved)
+                            cmds.Add(new HapticCommand(HapticActuator.RightTrackpad, HapticType.Tick, -12));
+                        if (profileMapper.Scrolled)
+                            cmds.Add(new HapticCommand(HapticActuator.LeftTrackpad, HapticType.Tick, -12));
+                        if (profileMapper.PadClicked)
+                            cmds.Add(new HapticCommand(HapticActuator.RightTrackpad, HapticType.Click, -8));
+                        if (cmds.Count > 0)
+                        {
+                            try
+                            {
+                                await haptics.SubmitAsync(new HapticOutputFrame(cmds), CancellationToken.None);
+                                lastHapticTime = hapticNow;
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                else if (!modeSwitcher.WantsNativeLayer)
+                {
+                    var mappedState = enableModeSwitch ? modeSwitcher.ConsumeButton(state) : state;
+                    var output = mapper.Map(mappedState);
+                    await source.SetNativeLayerEnabledAsync(false);
+                    await gamepad.SubmitAsync(output.Gamepad, cancellation.Token);
+                }
+
+                frameCount++;
+
+                var now = DateTimeOffset.UtcNow;
+                if (now - lastStatus >= TimeSpan.FromSeconds(1))
+                {
+                    Console.WriteLine(
+                        $"frames={frameCount} mode={modeSwitcher.CurrentMode} native={modeSwitcher.WantsNativeLayer}");
+                    frameCount = 0;
+                    lastStatus = now;
+                }
             }
+            DLog?.Invoke("Main loop ended (no more frames).");
+        }
+        catch (OperationCanceledException)
+        {
+            DLog?.Invoke("Cancelled (Ctrl+C or timeout).");
+            break;
+        }
+        catch (Exception ex)
+        {
+            DLog?.Invoke($"Connection lost: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (source is not null)
+                await source.DisposeAsync();
+        }
 
-            var mappedState = enableModeSwitch ? ConsumeSteamButton(state) : state;
-            var output = mapper.Map(mappedState);
+        if (cancellation.Token.IsCancellationRequested)
+            break;
 
-            if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360)
+        try
+        {
+            var probeDiscovery = new SteamHidDiscovery();
+            if (probeDiscovery.FindPreferredControllerDevice() is null)
             {
-                await source.SetNativeLayerEnabledAsync(enabled: false);
-                await gamepad.SubmitAsync(output.Gamepad, cancellation.Token);
-            }
-            else
-            {
-                await source.SetNativeLayerEnabledAsync(enabled: true);
-                await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
-            }
-
-            frameCount++;
-
-            var now = DateTimeOffset.UtcNow;
-            if (now - lastStatus >= TimeSpan.FromSeconds(1))
-            {
-                Console.WriteLine(
-                    $"frames={frameCount} mode={modeSwitcher.CurrentMode} buttons={output.Gamepad.Buttons} " +
-                    $"lt={output.Gamepad.LeftTrigger} rt={output.Gamepad.RightTrigger} " +
-                    $"ls=({output.Gamepad.LeftThumbX},{output.Gamepad.LeftThumbY}) " +
-                    $"rs=({output.Gamepad.RightThumbX},{output.Gamepad.RightThumbY}) " +
-                    $"tapL={output.LeftPadTap.WasTapped} tapR={output.RightPadTap.WasTapped}");
-                frameCount = 0;
-                lastStatus = now;
+                DLog?.Invoke("Controller disconnected. Exiting.");
+                break;
             }
         }
-    }
-    catch (OperationCanceledException)
-    {
-        // Normal shutdown path.
+        catch
+        {
+            DLog?.Invoke("Device check failed. Exiting.");
+            break;
+        }
+
+        DLog?.Invoke("Waiting 1s before reconnect...");
+        try { await Task.Delay(1000, cancellation.Token); }
+        catch (OperationCanceledException) { break; }
     }
 
+    DLog?.Invoke("Virtual Xbox 360 controller disconnected.");
     Console.WriteLine("Virtual Xbox 360 controller disconnected.");
-}
-
-static SteamControllerState ConsumeSteamButton(SteamControllerState state)
-{
-    return state with
-    {
-        Buttons = state.Buttons & ~SteamControllerButtons.Steam
-    };
+    logFile?.Dispose();
 }
 
 static ControllerOutputMode ReadInitialOutputMode(string[] args)
 {
     return ReadOptionValue(args, "--start-mode")?.ToLowerInvariant() switch
     {
-        "keyboard" => ControllerOutputMode.Native,
-        "keyboard-mouse" => ControllerOutputMode.Native,
-        "native" => ControllerOutputMode.Native,
-        "mouse" => ControllerOutputMode.Native,
-        "desktop" => ControllerOutputMode.Native,
         "xbox" => ControllerOutputMode.Xbox360,
         "xbox360" => ControllerOutputMode.Xbox360,
         "gamepad" => ControllerOutputMode.Xbox360,
-        _ => ControllerOutputMode.Xbox360
+        "profile" => ControllerOutputMode.Profile,
+        _ => ControllerOutputMode.Profile
     };
 }
 
@@ -337,7 +447,7 @@ static SteamControllerButtons ReadModeSwitchButtons(string[] args)
         "steam" => SteamControllerButtons.Steam,
         "guide" => SteamControllerButtons.Steam,
         "xbox" => SteamControllerButtons.Steam,
-        _ => SteamControllerButtons.Steam
+        _ => SteamControllerButtons.QuickAccess
     };
 }
 
@@ -486,18 +596,117 @@ static int? ReadSecondsOption(string[] args)
     return null;
 }
 
+static void RunHidDiagnostic()
+{
+    var discovery = new SteamHidDiscovery();
+
+    Console.WriteLine("=== HID Diagnostic ===");
+    Console.WriteLine();
+
+    Console.WriteLine("--- ListValveDevices() ---");
+    var devices = discovery.ListValveDevices();
+    Console.WriteLine($"  Found {devices.Count} device(s)");
+    foreach (var d in devices)
+    {
+        Console.WriteLine($"  {d.ProductName} ({d.ProductIdHex})");
+        Console.WriteLine($"    Reports: input={d.MaxInputReportLength}, output={d.MaxOutputReportLength}, feature={d.MaxFeatureReportLength}");
+        Console.WriteLine($"    CanOpen: {d.CanOpen}");
+        if (d.OpenError is not null) Console.WriteLine($"    OpenError: {d.OpenError}");
+        Console.WriteLine($"    IsKnownSteamController: {d.IsKnownSteamController}");
+        Console.WriteLine($"    Path: {d.DevicePath}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("--- FindPreferredControllerDevice() (original) ---");
+    try
+    {
+        var preferred = discovery.FindPreferredControllerDevice();
+        if (preferred is null)
+        {
+            Console.WriteLine("  Result: NULL");
+        }
+        else
+        {
+            Console.WriteLine($"  Result: {preferred.ProductID} path={preferred.DevicePath}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+        Console.WriteLine(ex.StackTrace);
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("--- Manual step-by-step (mirrors FindPreferredControllerDevice) ---");
+    try
+    {
+        var allDevices = HidSharp.DeviceList.Local
+            .GetHidDevices(SteamHidConstants.ValveVendorId)
+            .ToArray();
+        Console.WriteLine($"  Total Valve HID devices: {allDevices.Length}");
+
+        foreach (var device in allDevices)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Device: VID=0x{device.VendorID:X4} PID=0x{device.ProductID:X4} Path={device.DevicePath}");
+            Console.WriteLine($"    IsKnownProduct: {SteamHidConstants.IsKnownSteamControllerProduct(device.ProductID)}");
+
+            int inputLen = -1, outputLen = -1, featureLen = -1;
+            string? inputErr = null, outputErr = null, featureErr = null;
+            try { inputLen = device.GetMaxInputReportLength(); }
+            catch (Exception ex) { inputErr = $"{ex.GetType().Name}: {ex.Message}"; }
+            try { outputLen = device.GetMaxOutputReportLength(); }
+            catch (Exception ex) { outputErr = $"{ex.GetType().Name}: {ex.Message}"; }
+            try { featureLen = device.GetMaxFeatureReportLength(); }
+            catch (Exception ex) { featureErr = $"{ex.GetType().Name}: {ex.Message}"; }
+
+            Console.WriteLine($"    GetMaxInputReportLength:  {(inputErr is null ? inputLen.ToString() : $"ERROR ({inputErr})")}");
+            Console.WriteLine($"    GetMaxOutputReportLength: {(outputErr is null ? outputLen.ToString() : $"ERROR ({outputErr})")}");
+            Console.WriteLine($"    GetMaxFeatureReportLength:{(featureErr is null ? featureLen.ToString() : $"ERROR ({featureErr})")}");
+
+            bool canOpen = false;
+            string? openErr = null;
+            try
+            {
+                if (device.TryOpen(out var stream))
+                {
+                    canOpen = true;
+                    stream.Dispose();
+                }
+                else
+                {
+                    openErr = "TryOpen returned false";
+                }
+            }
+            catch (Exception ex) { openErr = $"{ex.GetType().Name}: {ex.Message}"; }
+
+            Console.WriteLine($"    CanOpen: {canOpen}");
+            if (openErr is not null) Console.WriteLine($"    OpenError: {openErr}");
+
+            bool isControllerState = inputLen >= 54 && outputLen > 0 && featureLen > 0;
+            Console.WriteLine($"    IsControllerStateInterface: {isControllerState} (input={inputLen} >=54: {inputLen >= 54}, output={outputLen} >0: {outputLen > 0}, feature={featureLen} >0: {featureLen > 0})");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+        Console.WriteLine(ex.StackTrace);
+    }
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("Commands:");
     Console.WriteLine("  hid-list       List Valve HID interfaces visible to HidSharp.");
     Console.WriteLine("  hid-probe      Capture raw input reports for 3 seconds.");
+    Console.WriteLine("  hid-diag       Diagnostic: compare ListValveDevices vs FindPreferredControllerDevice.");
     Console.WriteLine("  haptic-test    Send low-power Steam Controller 2026 trackpad haptic reports; requires --yes.");
     Console.WriteLine("  xbox-run       Stream Steam Controller input to a virtual Xbox 360 controller.");
     Console.WriteLine("                Options: --seconds N, --no-haptics, --restart");
-    Console.WriteLine("                         --start-mode xbox360|native");
+    Console.WriteLine("                         --start-mode xbox360|profile");
     Console.WriteLine("                         --no-mode-switch");
     Console.WriteLine("                         --switch-button steam|quick-access|steam-or-quick-access");
-    Console.WriteLine("                         --keep-native-layer");
+    Console.WriteLine("                         --debug  Log all activity to console + steamxbox-debug.log");
     Console.WriteLine("  stop           Kill other running SteamXBox instances from the same executable path.");
     Console.WriteLine("  hidhide-setup  Register SteamXBox with HidHide and cloak Valve physical HID devices.");
     Console.WriteLine("  hidhide-status Print HidHide state.");
@@ -508,7 +717,7 @@ static void PrintUsage()
 
 internal static partial class NativeMethods
 {
-    public const int SwMinimize = 6;
+    public const int SwHide = 0;
 
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetConsoleWindow();

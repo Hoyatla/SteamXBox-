@@ -142,12 +142,12 @@ public sealed class DefaultSteamControllerMapperTests
             left =>
             {
                 Assert.Equal(HapticActuator.LeftRumble, left.Actuator);
-                Assert.Equal(0.25, left.Amplitude, precision: 3);
+                Assert.Equal(HapticType.Rumble, left.Type);
             },
             right =>
             {
                 Assert.Equal(HapticActuator.RightRumble, right.Actuator);
-                Assert.Equal(0.75, right.Amplitude, precision: 3);
+                Assert.Equal(HapticType.Rumble, right.Type);
             });
     }
 

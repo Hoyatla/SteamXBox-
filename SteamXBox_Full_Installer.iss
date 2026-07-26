@@ -3,7 +3,7 @@
 ; Compile: iscc SteamXBox_Full_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "1.0"
+#define MyAppVersion "2.0"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=yes
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=.
+OutputDir=dist
 OutputBaseFilename=SteamXBox_Full_Setup_{#MyAppVersion}_win-x64
 SetupIconFile=SteamXBox.ico
 Compression=lzma
@@ -39,33 +39,26 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
-Name: "startup"; Description: "Demarrer SteamXBox au demarrage de Windows"; Flags: unchecked
 Name: "vigembus"; Description: "Installer ViGEmBus (bus virtuel manette Xbox/DS4)"
 Name: "hidhide"; Description: "Installer HidHide (masque manettes physiques)"
 
 [Files]
-; SteamXBox Portable
-Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
+; SteamXBox executables (self-contained single-file)
 Source: "SteamXBox.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "SteamXBox-Resident.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Start-KeyboardMouse.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Start-Native.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Start-Xbox360-NoHaptics.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Start-Xbox360.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Install-Startup.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Uninstall-Startup.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "SteamXBox-Autostart.vbs"; DestDir: "{app}"; Flags: ignoreversion
-Source: "HID-Probe.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "HidHide-Off.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "HidHide-Setup.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "HidHide-Status.cmd"; DestDir: "{app}"; Flags: ignoreversion
+
+; Documentation
 Source: "ChangeLog.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "README.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "USAGE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "COPYING-GPL-3.0.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE-LGPL-3.0.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "launcher\bin\Release\net8.0\win-x64\*"; DestDir: "{app}\launcher"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Icon
+Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Pilotes ViGEmBus + HidHide (embarqués)
 Source: "ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Tasks: vigembus
@@ -77,17 +70,13 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\SteamXBox.ico"; Tasks: desktopicon
 
 [Run]
-; 1. ViGEmBus (silencieux, admin, redémarrage si requis)
+; 1. ViGEmBus (silencieux, admin)
 Filename: "{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installation ViGEmBus (bus virtuel manette)..."; Tasks: vigembus; Flags: waituntilterminated shellexec
 
-; 2. HidHide (silencieux, admin, redémarrage obligatoire)
+; 2. HidHide (silencieux, admin)
 Filename: "{tmp}\HidHide_1.5.230_x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installation HidHide (masquage manettes)..."; Tasks: hidhide; Flags: waituntilterminated shellexec
 
-; 3. Config démarrage auto SteamXBox
-Filename: "{app}\Install-Startup.cmd"; Parameters: "xbox-run --restart --switch-button steam-or-quick-access"; WorkingDir: "{app}"; StatusMsg: "Configuration démarrage automatique..."; Tasks: startup; Flags: runhidden waituntilterminated
-
 [UninstallRun]
-Filename: "{app}\Uninstall-Startup.cmd"; Flags: runhidden waituntilterminated
 
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);

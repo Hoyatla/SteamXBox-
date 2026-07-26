@@ -2,21 +2,25 @@ namespace Sc2Xboxed.Core.Haptics;
 
 public readonly record struct HapticCommand(
     HapticActuator Actuator,
-    double FrequencyHz,
-    double Amplitude,
-    TimeSpan Duration)
+    HapticType Type,
+    int GainDb,
+    ushort Frequency = 0,
+    ushort DurationMs = 0,
+    ushort LfoFreq = 0,
+    byte LfoDepth = 0)
 {
     public static HapticCommand Stop(HapticActuator actuator)
     {
-        return new HapticCommand(actuator, 0.0, 0.0, TimeSpan.Zero);
+        return new HapticCommand(actuator, HapticType.Off, 0);
     }
 
-    public HapticCommand Normalize()
+    public static HapticCommand TouchClick(HapticActuator actuator)
     {
-        return new HapticCommand(
-            Actuator,
-            Math.Clamp(FrequencyHz, 0.0, 1000.0),
-            Math.Clamp(Amplitude, 0.0, 1.0),
-            Duration < TimeSpan.Zero ? TimeSpan.Zero : Duration);
+        return new HapticCommand(actuator, HapticType.Click, -6);
+    }
+
+    public static HapticCommand Tick(HapticActuator actuator)
+    {
+        return new HapticCommand(actuator, HapticType.Tick, -8);
     }
 }

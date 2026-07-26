@@ -1,6 +1,7 @@
 # Binaries
 SteamXBox.exe
 SteamXBox.Core.exe
+*.bak
 
 # Installer output
 SteamXBox_Full_Setup_*.exe
@@ -11,8 +12,18 @@ ViGEmBus_*.exe
 HidHide_*.exe
 
 # .NET build artifacts
-launcher/bin/
-launcher/obj/
+**/bin/
+**/obj/
 
-# Temp
+# Tools (rebundle, etc.)
+tools/
+
+# Distribution / temp
+dist/
+*.zip
+steamxbox-debug.log
 *.pdb
+
+# OS
+Thumbs.db
+Desktop.ini

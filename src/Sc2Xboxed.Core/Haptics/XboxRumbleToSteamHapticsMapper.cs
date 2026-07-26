@@ -2,9 +2,6 @@ namespace Sc2Xboxed.Core.Haptics;
 
 public sealed class XboxRumbleToSteamHapticsMapper
 {
-    private const double LowMotorFrequencyHz = 75.0;
-    private const double HighMotorFrequencyHz = 160.0;
-
     public HapticOutputFrame Map(XboxRumbleFrame rumble)
     {
         rumble = rumble.Normalize();
@@ -18,18 +15,13 @@ public sealed class XboxRumbleToSteamHapticsMapper
             });
         }
 
+        int leftGain = (int)(-24 + rumble.LeftMotor * 30);
+        int rightGain = (int)(-24 + rumble.RightMotor * 30);
+
         return new HapticOutputFrame(new[]
         {
-            new HapticCommand(
-                HapticActuator.LeftRumble,
-                LowMotorFrequencyHz,
-                rumble.LeftMotor,
-                TimeSpan.FromMilliseconds(80)),
-            new HapticCommand(
-                HapticActuator.RightRumble,
-                HighMotorFrequencyHz,
-                rumble.RightMotor,
-                TimeSpan.FromMilliseconds(80))
+            new HapticCommand(HapticActuator.LeftRumble, HapticType.Rumble, leftGain),
+            new HapticCommand(HapticActuator.RightRumble, HapticType.Rumble, rightGain)
         });
     }
 }

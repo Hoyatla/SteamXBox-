@@ -15,6 +15,7 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
     private bool? _appliedNativeLayerEnabled;
     private HidStream? _activeStream;
     private object? _activeStreamGate;
+    private int _outputReportLength = 65;
     private SteamControllerLizardModeHeartbeat? _heartbeat;
 
     public TritonSteamControllerSource()
@@ -76,6 +77,7 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
                 {
                     _activeStream = stream;
                     _activeStreamGate = streamGate;
+                    _outputReportLength = Math.Max(7, device.GetMaxOutputReportLength());
                     ApplyNativeLayerStateIfNeeded();
                 }
 
@@ -137,6 +139,25 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
 
     public ValueTask DisposeAsync()
     {
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask SendPowerOffAsync()
+    {
+        lock (_stateGate)
+        {
+            if (_activeStream is null || _activeStreamGate is null)
+                return ValueTask.CompletedTask;
+
+            lock (_activeStreamGate)
+            {
+                var report = new byte[Math.Max(2, _outputReportLength)];
+                report[0] = 0x9F;
+                report[1] = 0x01;
+                _activeStream.Write(report);
+            }
+        }
+
         return ValueTask.CompletedTask;
     }
 

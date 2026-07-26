@@ -17,7 +17,7 @@ public sealed class SteamHidDiscovery
 
     public HidDevice? FindPreferredControllerDevice()
     {
-        return DeviceList.Local
+        var candidates = DeviceList.Local
             .GetHidDevices(SteamHidConstants.ValveVendorId)
             .Where(device => SteamHidConstants.IsKnownSteamControllerProduct(device.ProductID))
             .Select(device => new HidDeviceCandidate(
@@ -26,6 +26,9 @@ public sealed class SteamHidDiscovery
                 SafeInt(device.GetMaxOutputReportLength),
                 SafeInt(device.GetMaxFeatureReportLength),
                 CanOpen(device)))
+            .ToArray();
+
+        var preferred = candidates
             .Where(candidate => candidate.IsControllerStateInterface)
             .OrderByDescending(candidate => candidate.CanOpen)
             .ThenByDescending(candidate => candidate.Device.ProductID == SteamHidConstants.SteamController2026ProductId)
@@ -33,6 +36,15 @@ public sealed class SteamHidDiscovery
             .ThenByDescending(candidate => candidate.Device.ProductID == SteamHidConstants.SteamPuckProductId)
             .ThenByDescending(candidate => candidate.OutputReportLength > 0)
             .ThenByDescending(candidate => candidate.FeatureReportLength > 0)
+            .ThenByDescending(candidate => candidate.InputReportLength)
+            .Select(candidate => candidate.Device)
+            .FirstOrDefault();
+
+        if (preferred is not null)
+            return preferred;
+
+        return candidates
+            .OrderByDescending(candidate => candidate.CanOpen)
             .ThenByDescending(candidate => candidate.InputReportLength)
             .Select(candidate => candidate.Device)
             .FirstOrDefault();
@@ -92,7 +104,7 @@ public sealed class SteamHidDiscovery
             stream.Dispose();
             return true;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or TimeoutException)
+        catch
         {
             return false;
         }
@@ -104,9 +116,9 @@ public sealed class SteamHidDiscovery
         {
             return getter();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or TimeoutException)
+        catch
         {
-            return $"<unavailable: {exception.GetType().Name}>";
+            return "<unavailable>";
         }
     }
 
@@ -116,7 +128,7 @@ public sealed class SteamHidDiscovery
         {
             return getter();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or TimeoutException)
+        catch
         {
             return 0;
         }
