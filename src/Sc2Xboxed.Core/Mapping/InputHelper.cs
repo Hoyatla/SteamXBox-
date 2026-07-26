@@ -10,6 +10,7 @@ public static class InputHelper
 	private const int INPUT_MOUSE = 0;
 	private const uint KEYEVENTF_KEYUP = 0x0002;
 	private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
+	private const uint KEYEVENTF_UNICODE = 0x0004;
 	private const uint MOUSEEVENTF_MOVE = 0x0001;
 	private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
 	private const uint MOUSEEVENTF_LEFTUP = 0x0004;
@@ -125,6 +126,35 @@ public static class InputHelper
 	{
 		KeyDown(vk);
 		KeyUp(vk);
+	}
+
+	public static void UnicodeChar(char character)
+	{
+		INPUT down = new INPUT
+		{
+			Type = INPUT_KEYBOARD,
+			Union = new INPUTUNION
+			{
+				Keyboard = new KEYBDINPUT
+				{
+					WScan = (ushort)character,
+					DwFlags = KEYEVENTF_UNICODE
+				}
+			}
+		};
+		INPUT up = new INPUT
+		{
+			Type = INPUT_KEYBOARD,
+			Union = new INPUTUNION
+			{
+				Keyboard = new KEYBDINPUT
+				{
+					WScan = (ushort)character,
+					DwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+				}
+			}
+		};
+		SendInput(2, new[] { down, up }, Marshal.SizeOf<INPUT>());
 	}
 
 	public static void KeyCombination(ushort[] vks)

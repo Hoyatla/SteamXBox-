@@ -1,138 +1,173 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Threading;
 using Sc2Xboxed.Core.Input;
+using Sc2Xboxed.Core.Mapping;
 
 namespace Sc2Xboxed.Osk;
 
 public static class Program
 {
-    [DllImport("user32.dll")]
-    private static extern bool SetCursorPos(int x, int y);
-
-    [DllImport("user32.dll")]
-    private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    private static extern bool ShowCursor(bool bShow);
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int nIndex);
-
-    private const uint MouseEventfLeftdown = 0x0002;
-    private const uint MouseEventfLeftup = 0x0004;
-    private const int SmXvirtualscreen = 76;
-    private const int SmYvirtualscreen = 77;
+    private const ushort VK_BACK = 0x08;
+    private const ushort VK_RETURN = 0x0D;
+    private const ushort VK_TAB = 0x09;
+    private const ushort VK_LSHIFT = 0xA0;
 
     [STAThread]
     public static async Task Main(string[] args)
     {
         var reader = new PadInputReader();
         var haptics = new HapticFeedback();
-        var mapper = new ScreenMapper();
-
         var window = new OverlayWindow();
 
-        int vx = GetSystemMetrics(SmXvirtualscreen);
-        int vy = GetSystemMetrics(SmYvirtualscreen);
-        int vw = GetSystemMetrics(78);
-        int vh = GetSystemMetrics(79);
-
         window.Show();
-        window.SetBounds(vx, vy, vw, vh);
-        ShowCursor(false);
 
         var cts = new CancellationTokenSource();
 
-        window.Closing += (_, _) =>
-        {
-            cts.Cancel();
-            ShowCursor(true);
-        };
+        window.Closing += (_, _) => cts.Cancel();
 
-        bool wasTouched = false;
-        bool prevRightClick = false;
-        bool prevLeftClick = false;
+        bool wasConnected = false;
+        bool shiftHeld = false;
+        bool prevRightPressed = false;
+        bool prevLeftPressed = false;
+        KeyDef? prevRightKey = null;
+        KeyDef? prevLeftKey = null;
 
         try
         {
             await foreach (var state in reader.ReadFramesAsync(cts.Token))
             {
-                mapper.UpdateOskBounds();
-
-                if (!mapper.IsOskFound)
+                if (!wasConnected)
                 {
-                    if (wasTouched)
-                    {
-                        ShowCursor(true);
-                        wasTouched = false;
-                    }
-                    continue;
+                    wasConnected = true;
+                    Log("OSK: pipe connected, keyboard active.");
                 }
 
-                if (!wasTouched)
+                var metrics = window.GetMetrics();
+                double bx = metrics.BoardX, by = metrics.BoardY;
+                double kw = metrics.KeyW, kh = metrics.KeyH;
+
+                bool rightTouched = state.RightPad.IsTouched || state.RightPad.IsPressed;
+                bool leftTouched = state.LeftPad.IsTouched || state.LeftPad.IsPressed;
+
+                int rightCol = -1, rightRow = -1;
+                int leftCol = -1, leftRow = -1;
+                KeyDef? rightKey = null;
+                KeyDef? leftKey = null;
+
+                if (rightTouched)
                 {
-                    mapper.Reset();
-                    ShowCursor(false);
-                    wasTouched = true;
+                    double px = (state.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                    double py = (1.0 - state.RightPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
+                    rightCol = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
+                    rightRow = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
+                    rightKey = KeyboardLayout.FindKeyAt(rightRow, rightCol);
                 }
 
-                mapper.UpdateRightPad(state.RightPad.X, state.RightPad.Y);
-                mapper.UpdateLeftPad(state.LeftPad.X, state.LeftPad.Y);
-
-                var right = mapper.RightCursor;
-                var left = mapper.LeftCursor;
+                if (leftTouched)
+                {
+                    double px = (state.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                    double py = (1.0 - state.LeftPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
+                    leftCol = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
+                    leftRow = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
+                    leftKey = KeyboardLayout.FindKeyAt(leftRow, leftCol);
+                }
 
                 _ = window.Dispatcher.BeginInvoke(() =>
                 {
-                    window.SetRightCursor(right.X, right.Y);
-                    window.SetLeftCursor(left.X, left.Y);
+                    if (rightTouched)
+                    {
+                        double rx = (state.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                        double ry = (1.0 - state.RightPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
+                        window.SetRightCursor(rx, ry);
+                        window.HighlightKey(rightKey);
+                    }
+                    else
+                    {
+                        window.HideRightCursor();
+                    }
+
+                    if (leftTouched)
+                    {
+                        double lx = (state.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                        double ly = (1.0 - state.LeftPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
+                        window.SetLeftCursor(lx, ly);
+                    }
+                    else
+                    {
+                        window.HideLeftCursor();
+                    }
                 });
 
-                bool rightClick = state.RightPad.IsPressed;
-                bool leftClick = state.LeftPad.IsPressed;
+                bool rightPressed = state.RightPad.IsPressed;
+                bool leftPressed = state.LeftPad.IsPressed;
 
-                if (rightClick && !prevRightClick)
+                if (rightPressed && !prevRightPressed && rightKey is not null)
                 {
-                    int sx = (int)(right.X + vx);
-                    int sy = (int)(right.Y + vy);
-                    _ = window.Dispatcher.BeginInvoke(() => window.FlashRight());
-                    SetCursorPos(sx, sy);
-                    mouse_event(MouseEventfLeftdown, 0, 0, 0, IntPtr.Zero);
-                    mouse_event(MouseEventfLeftup, 0, 0, 0, IntPtr.Zero);
-                    _ = haptics.PulseRightAsync();
+                    SendKey(rightKey, shiftHeld);
+                    _ = window.Dispatcher.BeginInvoke(() => window.FlashKey(rightKey));
+                    try { await haptics.PulseRightAsync(); } catch { }
                 }
 
-                if (leftClick && !prevLeftClick)
+                if (leftPressed && !prevLeftPressed && leftKey is not null)
                 {
-                    int sx = (int)(left.X + vx);
-                    int sy = (int)(left.Y + vy);
-                    _ = window.Dispatcher.BeginInvoke(() => window.FlashLeft());
-                    SetCursorPos(sx, sy);
-                    mouse_event(MouseEventfLeftdown, 0, 0, 0, IntPtr.Zero);
-                    mouse_event(MouseEventfLeftup, 0, 0, 0, IntPtr.Zero);
-                    _ = haptics.PulseLeftAsync();
+                    SendKey(leftKey, shiftHeld);
+                    _ = window.Dispatcher.BeginInvoke(() => window.FlashKey(leftKey));
+                    try { await haptics.PulseLeftAsync(); } catch { }
                 }
 
-                prevRightClick = rightClick;
-                prevLeftClick = leftClick;
-
-                if (Process.GetProcessesByName("osk").Length == 0)
-                    break;
+                prevRightPressed = rightPressed;
+                prevLeftPressed = leftPressed;
+                prevRightKey = rightKey;
+                prevLeftKey = leftKey;
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"OSK overlay error: {ex.Message}");
+            Log($"OSK error: {ex.Message}");
         }
         finally
         {
-            ShowCursor(true);
+            window.Dispatcher.Invoke(() => window.HideAll());
             window.Dispatcher.Invoke(() => window.Close());
             await reader.DisposeAsync().ConfigureAwait(false);
             await haptics.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    private static void SendKey(KeyDef key, bool shiftHeld)
+    {
+        switch (key.Action)
+        {
+            case SpecialAction.Shift:
+                shiftHeld = !shiftHeld;
+                if (shiftHeld)
+                    InputHelper.KeyDown(VK_LSHIFT);
+                else
+                    InputHelper.KeyUp(VK_LSHIFT);
+                break;
+            case SpecialAction.Backspace:
+                InputHelper.KeyTap(VK_BACK);
+                break;
+            case SpecialAction.Enter:
+                InputHelper.KeyTap(VK_RETURN);
+                break;
+            case SpecialAction.Tab:
+                InputHelper.KeyTap(VK_TAB);
+                break;
+            case SpecialAction.Space:
+                InputHelper.UnicodeChar(' ');
+                break;
+            default:
+                char ch = shiftHeld ? key.ShiftedChar : key.NormalChar;
+                if (ch != '\0')
+                    InputHelper.UnicodeChar(ch);
+                break;
+        }
+    }
+
+    private static void Log(string msg)
+    {
+        try { Console.Error.WriteLine(msg); } catch { }
     }
 }

@@ -1,26 +1,15 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace Sc2Xboxed.Osk;
 
 public partial class OverlayWindow : Window
 {
-    private const int WsExTransparent = 0x00000020;
-    private const int WsExLayered = 0x00080000;
-    private const int GwlExstyle = -20;
-
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    private double _scaleX = 1.0;
-    private double _scaleY = 1.0;
+    private readonly Dictionary<KeyDef, Rectangle> _keyRects = new();
+    private readonly Dictionary<KeyDef, TextBlock> _keyLabels = new();
+    private double _keyW, _keyH, _boardX, _boardY;
 
     public OverlayWindow()
     {
@@ -30,69 +19,116 @@ public partial class OverlayWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var handle = new WindowInteropHelper(this).Handle;
-        var exStyle = GetWindowLong(handle, GwlExstyle);
-        SetWindowLong(handle, GwlExstyle, exStyle | WsExTransparent | WsExLayered);
+        var screen = SystemParameters.PrimaryScreenWidth;
+        var sh = SystemParameters.PrimaryScreenHeight;
 
-        var ps = PresentationSource.FromVisual(this);
-        if (ps?.CompositionTarget != null)
+        Left = 0; Top = 0;
+        Width = screen; Height = sh;
+
+        _boardY = sh - 260;
+        _boardX = 0;
+        _keyW = screen / KeyboardLayout.MaxCols;
+        _keyH = 50;
+
+        DrawKeyboard();
+    }
+
+    private void DrawKeyboard()
+    {
+        foreach (var key in KeyboardLayout.Keys)
         {
-            _scaleX = ps.CompositionTarget.TransformToDevice.M11;
-            _scaleY = ps.CompositionTarget.TransformToDevice.M22;
+            double x = _boardX + key.Col * _keyW;
+            double y = _boardY + key.Row * _keyH;
+            double w = key.Width * _keyW - 2;
+
+            var rect = new Rectangle
+            {
+                Width = w,
+                Height = _keyH - 2,
+                Fill = new SolidColorBrush(Color.FromArgb(0x80, 0x20, 0x20, 0x30)),
+                Stroke = new SolidColorBrush(Color.FromArgb(0x90, 0x80, 0x80, 0x90)),
+                StrokeThickness = 1,
+                RadiusX = 4,
+                RadiusY = 4
+            };
+            Canvas.SetLeft(rect, x + 1);
+            Canvas.SetTop(rect, y + 1);
+            Canvas.Children.Add(rect);
+            _keyRects[key] = rect;
+
+            var label = new TextBlock
+            {
+                Text = key.Label,
+                Foreground = Brushes.White,
+                FontSize = key.Action != SpecialAction.None ? 13 : 20,
+                FontWeight = key.Action != SpecialAction.None ? FontWeights.Normal : FontWeights.Bold,
+                IsHitTestVisible = false
+            };
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double lx = x + 1 + (w - label.DesiredSize.Width) / 2;
+            double ly = y + 1 + (_keyH - 2 - label.DesiredSize.Height) / 2;
+            Canvas.SetLeft(label, lx);
+            Canvas.SetTop(label, ly);
+            Canvas.Children.Add(label);
+            _keyLabels[key] = label;
         }
     }
 
-    public void SetBounds(double vx, double vy, double vw, double vh)
+    public void SetRightCursor(double px, double py)
     {
-        Left = vx / _scaleX;
-        Top = vy / _scaleY;
-        Width = vw / _scaleX;
-        Height = vh / _scaleY;
+        Canvas.SetLeft(RightCursor, px - 12);
+        Canvas.SetTop(RightCursor, py - 12);
+        RightCursor.Visibility = Visibility.Visible;
     }
 
-    public void SetRightCursor(double physicalX, double physicalY)
+    public void SetLeftCursor(double px, double py)
     {
-        Canvas.SetLeft(RightCursor, physicalX / _scaleX - 10);
-        Canvas.SetTop(RightCursor, physicalY / _scaleY - 10);
+        Canvas.SetLeft(LeftCursor, px - 12);
+        Canvas.SetTop(LeftCursor, py - 12);
+        LeftCursor.Visibility = Visibility.Visible;
     }
 
-    public void SetLeftCursor(double physicalX, double physicalY)
+    public void HideRightCursor() => RightCursor.Visibility = Visibility.Collapsed;
+    public void HideLeftCursor() => LeftCursor.Visibility = Visibility.Collapsed;
+
+    public void HighlightKey(KeyDef? key)
     {
-        Canvas.SetLeft(LeftCursor, physicalX / _scaleX - 10);
-        Canvas.SetTop(LeftCursor, physicalY / _scaleY - 10);
+        ClearHighlight();
+        if (key is null) return;
+        if (_keyRects.TryGetValue(key, out var rect))
+            rect.Fill = new SolidColorBrush(Color.FromArgb(0xC0, 0x40, 0x80, 0xFF));
     }
 
-    public void FlashRight()
+    public void FlashKey(KeyDef? key)
     {
-        RightCursor.StrokeThickness = 3;
-        RightCursor.Stroke = new SolidColorBrush(System.Windows.Media.Colors.White);
-        var timer = new System.Windows.Threading.DispatcherTimer
+        if (key is null) return;
+        if (_keyRects.TryGetValue(key, out var rect))
         {
-            Interval = TimeSpan.FromMilliseconds(100)
-        };
-        timer.Tick += (_, _) =>
-        {
-            RightCursor.StrokeThickness = 2;
-            RightCursor.Stroke = new SolidColorBrush(System.Windows.Media.Colors.White);
-            timer.Stop();
-        };
-        timer.Start();
+            rect.Fill = new SolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
+            _ = Task.Delay(120).ContinueWith(_ =>
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (rect.Fill is SolidColorBrush)
+                        rect.Fill = new SolidColorBrush(Color.FromArgb(0x80, 0x20, 0x20, 0x30));
+                });
+            });
+        }
     }
 
-    public void FlashLeft()
+    private void ClearHighlight()
     {
-        LeftCursor.StrokeThickness = 3;
-        LeftCursor.Stroke = new SolidColorBrush(System.Windows.Media.Colors.White);
-        var timer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(100)
-        };
-        timer.Tick += (_, _) =>
-        {
-            LeftCursor.StrokeThickness = 2;
-            LeftCursor.Stroke = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF));
-            timer.Stop();
-        };
-        timer.Start();
+        foreach (var kv in _keyRects)
+            kv.Value.Fill = new SolidColorBrush(Color.FromArgb(0x80, 0x20, 0x20, 0x30));
     }
+
+    public void HideAll()
+    {
+        HideRightCursor();
+        HideLeftCursor();
+        ClearHighlight();
+    }
+
+    public (double BoardX, double BoardY, double KeyW, double KeyH) GetMetrics()
+        => (_boardX, _boardY, _keyW, _keyH);
 }

@@ -231,6 +231,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         switchButtons,
         TimeSpan.FromMilliseconds(350));
     var profileMapper = new ProfileMapper();
+    var padSender = new PadDataSender();
+    padSender.Start();
+    DLog?.Invoke("PadData pipe server started (SteamXBox_OskPad).");
     var seconds = ReadSecondsOption(args);
     if (seconds is { } durationSeconds)
     {
@@ -334,6 +337,10 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     var mappedState = modeSwitcher.ConsumeButton(state);
                     profileMapper.Map(mappedState);
+
+                    if (profileMapper.OskActive)
+                        padSender.SendPadState(state.RightPad, state.LeftPad);
+
                     await source.SetNativeLayerEnabledAsync(false);
                     await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
 
@@ -342,18 +349,22 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                         if (!profileMapper.OskActive)
                         {
                             DLog?.Invoke("OSK overlay: starting...");
-                            InputHelper.LaunchOrBringToFront("osk");
-                            await Task.Delay(500);
                             var oskDir = AppContext.BaseDirectory;
                             var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
                             if (File.Exists(overlayPath))
                             {
-                                Process.Start(new ProcessStartInfo
+                                try
                                 {
-                                    FileName = overlayPath,
-                                    UseShellExecute = true,
-                                    Verb = "runas"
-                                });
+                                    Process.Start(new ProcessStartInfo
+                                    {
+                                        FileName = overlayPath,
+                                        UseShellExecute = false
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    DLog?.Invoke($"OSK overlay start failed: {ex.Message}");
+                                }
                             }
                             profileMapper.OskActive = true;
                             DLog?.Invoke("OSK overlay: started.");
@@ -365,7 +376,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             {
                                 try { p.Kill(entireProcessTree: true); } catch { }
                             }
-                            InputHelper.KillProcess("osk");
                             profileMapper.OskActive = false;
                             DLog?.Invoke("OSK overlay: stopped.");
                         }
@@ -454,6 +464,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
     DLog?.Invoke("Virtual Xbox 360 controller disconnected.");
     Console.WriteLine("Virtual Xbox 360 controller disconnected.");
+    await padSender.DisposeAsync();
     logFile?.Dispose();
 }
 

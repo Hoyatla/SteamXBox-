@@ -35,6 +35,7 @@ public sealed class ProfileMapper
 	private readonly SmoothedTouchpadInput _rightPadSmooth = new();
 
 	private bool _leftPadWasOskMode;
+	private bool _firstFrame = true;
 
 	public bool CursorMoved { get; private set; }
 	public bool Scrolled { get; private set; }
@@ -82,6 +83,34 @@ public sealed class ProfileMapper
 		Scrolled = false;
 		PadClicked = false;
 		OskToggleRequested = false;
+
+		if (_firstFrame)
+		{
+			_prevRightTriggerDown = state.RightTrigger > 0.5;
+			_prevLeftTriggerDown = state.LeftTrigger > 0.5;
+			_prevRightPadClick = state.RightPad.IsPressed;
+			_prevLeftPadClick = state.LeftPad.IsPressed;
+			_prevL4 = state.Buttons.HasFlag(SteamControllerButtons.L4);
+			_prevR4 = state.Buttons.HasFlag(SteamControllerButtons.R4);
+			_prevL5 = state.Buttons.HasFlag(SteamControllerButtons.L5);
+			_prevR5 = state.Buttons.HasFlag(SteamControllerButtons.R5);
+			_prevDPadUp = state.Buttons.HasFlag(SteamControllerButtons.DPadUp);
+			_prevDPadDown = state.Buttons.HasFlag(SteamControllerButtons.DPadDown);
+			_prevDPadLeft = state.Buttons.HasFlag(SteamControllerButtons.DPadLeft);
+			_prevDPadRight = state.Buttons.HasFlag(SteamControllerButtons.DPadRight);
+			_prevLB = state.Buttons.HasFlag(SteamControllerButtons.LeftBumper);
+			_prevRB = state.Buttons.HasFlag(SteamControllerButtons.RightBumper);
+			_prevX = state.Buttons.HasFlag(SteamControllerButtons.X);
+			_prevY = state.Buttons.HasFlag(SteamControllerButtons.Y);
+			_prevA = state.Buttons.HasFlag(SteamControllerButtons.A);
+			_prevB = state.Buttons.HasFlag(SteamControllerButtons.B);
+			_prevL3 = state.Buttons.HasFlag(SteamControllerButtons.LeftStick);
+			_prevR3 = state.Buttons.HasFlag(SteamControllerButtons.RightStick);
+			_prevMenu = state.Buttons.HasFlag(SteamControllerButtons.Menu);
+			_prevView = state.Buttons.HasFlag(SteamControllerButtons.View);
+			_firstFrame = false;
+			return;
+		}
 
 		bool rightTriggerDown = state.RightTrigger > 0.5;
 		bool leftTriggerDown = state.LeftTrigger > 0.5;
@@ -151,10 +180,6 @@ public sealed class ProfileMapper
 				if (OskActive)
 				{
 					OskToggleRequested = true;
-				}
-				else
-				{
-					InputHelper.KillProcess("osk");
 				}
 			}, () => { });
 		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B),

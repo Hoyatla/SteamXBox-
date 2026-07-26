@@ -1,72 +1,85 @@
 using System.IO;
-using System.Runtime.CompilerServices;
-using HidSharp;
+using System.IO.Pipes;
 using Sc2Xboxed.Core.Input;
-using Sc2Xboxed.Hid;
 
 namespace Sc2Xboxed.Osk;
 
 public sealed class PadInputReader : IAsyncDisposable
 {
-    private readonly SteamHidDiscovery _discovery = new();
-    private readonly TritonInputReportParser _parser = new();
-    private HidStream? _stream;
+    private const string PipeName = "SteamXBox_OskPad";
+    private NamedPipeClientStream? _pipe;
 
-    public bool IsOpen => _stream is not null;
+    public bool IsOpen => _pipe is not null && _pipe.IsConnected;
 
     public async IAsyncEnumerable<SteamControllerState> ReadFramesAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        EnsureOpen();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                _pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.In);
+                await _pipe.ConnectAsync(5000, cancellationToken).ConfigureAwait(false);
+                break;
+            }
+            catch
+            {
+                _pipe?.Dispose();
+                _pipe = null;
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
-        var buffer = new byte[64];
+        var buffer = new byte[36];
         while (!cancellationToken.IsCancellationRequested)
         {
             int bytesRead;
             try
             {
-                bytesRead = await _stream!.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                bytesRead = await _pipe!.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
-            {
-                yield break;
-            }
-            catch (IOException)
-            {
-                yield break;
-            }
+            catch (OperationCanceledException) { yield break; }
+            catch (IOException) { yield break; }
 
-            if (bytesRead <= 0)
-                continue;
+            if (bytesRead < 36) continue;
 
-            var report = buffer.AsSpan(0, bytesRead);
-            if (_parser.TryParse(report, TimeSpan.FromMilliseconds(Environment.TickCount64), out var state))
-            {
-                yield return state;
-            }
+            int offset = 0;
+            var rightX = ReadDouble(buffer, ref offset);
+            var rightY = ReadDouble(buffer, ref offset);
+            bool rightTouched = buffer[offset++] != 0;
+            bool rightPressed = buffer[offset++] != 0;
+
+            var leftX = ReadDouble(buffer, ref offset);
+            var leftY = ReadDouble(buffer, ref offset);
+            bool leftTouched = buffer[offset++] != 0;
+            bool leftPressed = buffer[offset++] != 0;
+
+            var right = new TouchpadSample(rightTouched, rightX, rightY, 0.0, rightPressed);
+            var left = new TouchpadSample(leftTouched, leftX, leftY, 0.0, leftPressed);
+
+            yield return new SteamControllerState(
+                TimeSpan.FromMilliseconds(Environment.TickCount64),
+                SteamControllerButtons.None,
+                NormalizedStick.Center,
+                NormalizedStick.Center,
+                0.0,
+                0.0,
+                left,
+                right);
         }
     }
 
-    public void EnsureOpen()
+    private static double ReadDouble(byte[] buffer, ref int offset)
     {
-        if (_stream is not null)
-            return;
-
-        var device = _discovery.FindPreferredControllerDevice()
-            ?? throw new InvalidOperationException("No Steam Controller HID device found.");
-
-        if (!device.TryOpen(out _stream))
-            throw new IOException($"Cannot open HID device.");
-
-        _stream.ReadTimeout = 20;
+        double value = BitConverter.ToDouble(buffer, offset);
+        offset += 8;
+        return value;
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (_stream is not null)
-        {
-            await _stream.DisposeAsync().ConfigureAwait(false);
-            _stream = null;
-        }
+        _pipe?.Dispose();
+        _pipe = null;
+        return ValueTask.CompletedTask;
     }
 }
