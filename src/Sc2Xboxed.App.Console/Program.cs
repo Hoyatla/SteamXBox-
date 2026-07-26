@@ -337,6 +337,40 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     await source.SetNativeLayerEnabledAsync(false);
                     await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
 
+                    if (profileMapper.OskToggleRequested)
+                    {
+                        if (!profileMapper.OskActive)
+                        {
+                            DLog?.Invoke("OSK overlay: starting...");
+                            InputHelper.LaunchOrBringToFront("osk");
+                            await Task.Delay(500);
+                            var oskDir = AppContext.BaseDirectory;
+                            var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
+                            if (File.Exists(overlayPath))
+                            {
+                                Process.Start(new ProcessStartInfo
+                                {
+                                    FileName = overlayPath,
+                                    UseShellExecute = true,
+                                    Verb = "runas"
+                                });
+                            }
+                            profileMapper.OskActive = true;
+                            DLog?.Invoke("OSK overlay: started.");
+                        }
+                        else
+                        {
+                            DLog?.Invoke("OSK overlay: stopping...");
+                            foreach (var p in Process.GetProcessesByName("Sc2Xboxed.Osk"))
+                            {
+                                try { p.Kill(entireProcessTree: true); } catch { }
+                            }
+                            InputHelper.KillProcess("osk");
+                            profileMapper.OskActive = false;
+                            DLog?.Invoke("OSK overlay: stopped.");
+                        }
+                    }
+
                     var hapticNow = DateTimeOffset.UtcNow;
                     bool shouldPulse = (hapticNow - lastHapticTime).TotalMilliseconds >= HapticIntervalMs;
                     if (shouldPulse)

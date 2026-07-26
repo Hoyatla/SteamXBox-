@@ -39,6 +39,8 @@ public sealed class ProfileMapper
 	public bool CursorMoved { get; private set; }
 	public bool Scrolled { get; private set; }
 	public bool PadClicked { get; private set; }
+	public bool OskToggleRequested { get; private set; }
+	public bool OskActive { get; set; }
 
 	public void Reset()
 	{
@@ -79,6 +81,7 @@ public sealed class ProfileMapper
 		CursorMoved = false;
 		Scrolled = false;
 		PadClicked = false;
+		OskToggleRequested = false;
 
 		bool rightTriggerDown = state.RightTrigger > 0.5;
 		bool leftTriggerDown = state.LeftTrigger > 0.5;
@@ -86,16 +89,25 @@ public sealed class ProfileMapper
 		HandleEdge(ref _prevRightTriggerDown, rightTriggerDown, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
 		HandleEdge(ref _prevLeftTriggerDown, leftTriggerDown, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
 
-		var rightSmooth = _rightPadSmooth.Update(state.RightPad);
-		var rightFrame = _rightTrackball.Update(state.Timestamp, rightSmooth);
-		ApplyMouseFrame(rightFrame);
-		CursorMoved = rightSmooth.IsTouched && rightFrame.HasMouseMotion && (Math.Abs(rightFrame.DeltaX) > 2.0 || Math.Abs(rightFrame.DeltaY) > 2.0);
-		HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed, () => { InputHelper.MouseLeftDown(); PadClicked = true; }, () => InputHelper.MouseLeftUp());
+		if (!OskActive)
+		{
+			var rightSmooth = _rightPadSmooth.Update(state.RightPad);
+			var rightFrame = _rightTrackball.Update(state.Timestamp, rightSmooth);
+			ApplyMouseFrame(rightFrame);
+			CursorMoved = rightSmooth.IsTouched && rightFrame.HasMouseMotion && (Math.Abs(rightFrame.DeltaX) > 2.0 || Math.Abs(rightFrame.DeltaY) > 2.0);
+			HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed, () => { InputHelper.MouseLeftDown(); PadClicked = true; }, () => InputHelper.MouseLeftUp());
 
-		var leftFrame = MapLeftPad(state.Timestamp, state.LeftPad);
-		ApplyMouseFrame(leftFrame);
-		Scrolled = leftFrame.HasWheel;
-		HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => InputHelper.MouseMiddleDown(), () => InputHelper.MouseMiddleUp());
+			var leftFrame = MapLeftPad(state.Timestamp, state.LeftPad);
+			ApplyMouseFrame(leftFrame);
+			Scrolled = leftFrame.HasWheel;
+			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => InputHelper.MouseMiddleDown(), () => InputHelper.MouseMiddleUp());
+		}
+		else
+		{
+			HandleEdge(ref _prevRightPadClick, state.RightPad.IsPressed, () => { }, () => { });
+			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => { }, () => { });
+			_leftPadWasOskMode = InputHelper.IsOskRunning();
+		}
 
 		HandleEdge(ref _prevLB, state.Buttons.HasFlag(SteamControllerButtons.LeftBumper),
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_TAB }),
@@ -134,9 +146,22 @@ public sealed class ProfileMapper
 			() => { });
 
 		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A),
-			() => InputHelper.KillProcess("osk"), () => { });
+			() =>
+			{
+				if (OskActive)
+				{
+					OskToggleRequested = true;
+				}
+				else
+				{
+					InputHelper.KillProcess("osk");
+				}
+			}, () => { });
 		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B),
-			() => InputHelper.LaunchOrBringToFront("osk"), () => { });
+			() =>
+			{
+				OskToggleRequested = true;
+			}, () => { });
 
 		HandleEdge(ref _prevMenu, state.Buttons.HasFlag(SteamControllerButtons.Menu),
 			() => InputHelper.KeyTap(0x5B), () => { });

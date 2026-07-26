@@ -1,6 +1,7 @@
 # Binaries
 SteamXBox.exe
 SteamXBox.Core.exe
+Sc2Xboxed.Osk.exe
 *.bak
 
 # Installer output

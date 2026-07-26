@@ -40,6 +40,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; SteamXBox executables (self-contained single-file)
 Source: "SteamXBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Sc2Xboxed.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion

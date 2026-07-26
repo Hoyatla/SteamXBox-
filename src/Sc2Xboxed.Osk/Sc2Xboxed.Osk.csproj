@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Sc2Xboxed.Osk</AssemblyName>
+    <RootNamespace>Sc2Xboxed.Osk</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Hid\Sc2Xboxed.Hid.csproj" />
+  </ItemGroup>
+
+</Project>
