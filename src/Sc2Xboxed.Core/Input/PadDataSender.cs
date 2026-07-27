@@ -6,9 +6,10 @@ public sealed class PadDataSender : IAsyncDisposable
 {
     private const string PipeName = "SteamXBox_OskPad";
     private readonly List<NamedPipeServerStream> _clients = new();
+    private readonly object _lock = new();
     private bool _isRunning;
 
-    public bool HasClients => _clients.Count > 0;
+    public bool HasClients { get { lock (_lock) return _clients.Count > 0; } }
 
     public void Start()
     {
@@ -21,9 +22,10 @@ public sealed class PadDataSender : IAsyncDisposable
     {
         while (_isRunning)
         {
+            NamedPipeServerStream? server = null;
             try
             {
-                var server = new NamedPipeServerStream(
+                server = new NamedPipeServerStream(
                     PipeName,
                     PipeDirection.Out,
                     1,
@@ -31,16 +33,19 @@ public sealed class PadDataSender : IAsyncDisposable
                     PipeOptions.Asynchronous);
 
                 await server.WaitForConnectionAsync().ConfigureAwait(false);
-                _clients.Add(server);
+                lock (_lock) { _clients.Add(server); }
+                server = null;
             }
-            catch { break; }
+            catch
+            {
+                server?.Dispose();
+                if (_isRunning) await Task.Delay(500).ConfigureAwait(false);
+            }
         }
     }
 
     public void SendPadState(TouchpadSample rightPad, TouchpadSample leftPad)
     {
-        if (_clients.Count == 0) return;
-
         var buffer = new byte[36];
         var span = buffer.AsSpan();
         int offset = 0;
@@ -55,17 +60,20 @@ public sealed class PadDataSender : IAsyncDisposable
         span[offset++] = (byte)(leftPad.IsTouched ? 1 : 0);
         span[offset++] = (byte)(leftPad.IsPressed ? 1 : 0);
 
-        for (int i = _clients.Count - 1; i >= 0; i--)
+        lock (_lock)
         {
-            try
+            for (int i = _clients.Count - 1; i >= 0; i--)
             {
-                _clients[i].Write(buffer, 0, offset);
-                _clients[i].Flush();
-            }
-            catch
-            {
-                try { _clients[i].Dispose(); } catch { }
-                _clients.RemoveAt(i);
+                try
+                {
+                    _clients[i].Write(buffer, 0, offset);
+                    _clients[i].Flush();
+                }
+                catch
+                {
+                    try { _clients[i].Dispose(); } catch { }
+                    _clients.RemoveAt(i);
+                }
             }
         }
     }
@@ -79,10 +87,13 @@ public sealed class PadDataSender : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _isRunning = false;
-        foreach (var client in _clients)
+        lock (_lock)
         {
-            try { await client.DisposeAsync().ConfigureAwait(false); } catch { }
+            foreach (var client in _clients)
+            {
+                try { client.Dispose(); } catch { }
+            }
+            _clients.Clear();
         }
-        _clients.Clear();
     }
 }

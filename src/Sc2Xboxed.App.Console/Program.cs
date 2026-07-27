@@ -348,26 +348,31 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     {
                         if (!profileMapper.OskActive)
                         {
-                            DLog?.Invoke("OSK overlay: starting...");
                             var oskDir = AppContext.BaseDirectory;
                             var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
+                            DLog?.Invoke($"OSK toggle: BaseDir={oskDir}, exe={File.Exists(overlayPath)}");
                             if (File.Exists(overlayPath))
                             {
                                 try
                                 {
-                                    Process.Start(new ProcessStartInfo
+                                    var psi = new ProcessStartInfo
                                     {
                                         FileName = overlayPath,
-                                        UseShellExecute = false
-                                    });
+                                        UseShellExecute = true
+                                    };
+                                    var proc = Process.Start(psi);
+                                    DLog?.Invoke($"OSK overlay launched: PID={proc?.Id}");
+                                    profileMapper.OskActive = true;
                                 }
                                 catch (Exception ex)
                                 {
-                                    DLog?.Invoke($"OSK overlay start failed: {ex.Message}");
+                                    DLog?.Invoke($"OSK overlay start FAILED: {ex.GetType().Name}: {ex.Message}");
                                 }
                             }
-                            profileMapper.OskActive = true;
-                            DLog?.Invoke("OSK overlay: started.");
+                            else
+                            {
+                                DLog?.Invoke($"OSK overlay exe NOT FOUND at: {overlayPath}");
+                            }
                         }
                         else
                         {

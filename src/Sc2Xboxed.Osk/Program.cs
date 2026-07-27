@@ -1,5 +1,5 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.IO;
+using System.Windows.Forms;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Mapping;
 
@@ -12,130 +12,217 @@ public static class Program
     private const ushort VK_TAB = 0x09;
     private const ushort VK_LSHIFT = 0xA0;
 
-    [STAThread]
-    public static async Task Main(string[] args)
+    private static StreamWriter? _logFile;
+
+    internal static void Log(string msg)
     {
-        var reader = new PadInputReader();
-        var haptics = new HapticFeedback();
-        var window = new OverlayWindow();
+        var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+        try { _logFile?.WriteLine(line); _logFile?.Flush(); } catch { }
+    }
 
-        window.Show();
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-osk-debug.log");
+        _logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
 
-        var cts = new CancellationTokenSource();
+        Log($"OSK overlay starting. BaseDir={AppContext.BaseDirectory}");
 
-        window.Closing += (_, _) => cts.Cancel();
-
-        bool wasConnected = false;
-        bool shiftHeld = false;
-        bool prevRightPressed = false;
-        bool prevLeftPressed = false;
-        KeyDef? prevRightKey = null;
-        KeyDef? prevLeftKey = null;
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
 
         try
         {
-            await foreach (var state in reader.ReadFramesAsync(cts.Token))
+            Run();
+        }
+        catch (Exception ex)
+        {
+            Log($"FATAL: {ex.GetType().Name}: {ex.Message}");
+            Log($"Stack: {ex.StackTrace}");
+            if (ex.InnerException is { } ie)
+                Log($"Inner: {ie.GetType().Name}: {ie.Message}");
+        }
+        finally
+        {
+            _logFile?.Dispose();
+        }
+    }
+
+    private static void Run()
+    {
+        var form = new OverlayForm();
+        Log("Overlay form created.");
+
+        var cts = new CancellationTokenSource();
+        form.FormClosing += (_, _) => cts.Cancel();
+
+        var reader = new PadInputReader();
+        var haptics = new HapticFeedback();
+        Log("Reader + haptics created, starting pipe loop...");
+
+        var state = new LoopState(reader, haptics, form, cts);
+
+        var bgThread = new Thread(() => RunPipeLoop(state))
+        {
+            IsBackground = true,
+            Name = "PadPipeLoop"
+        };
+        bgThread.Start();
+
+        form.Show();
+        Log("Overlay form shown.");
+
+        Application.Run(form);
+        Log("Application.Run exited.");
+
+        cts.Cancel();
+        bgThread.Join(2000);
+
+        reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        haptics.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        Log("Overlay stopped.");
+    }
+
+    private sealed class LoopState(
+        PadInputReader reader,
+        HapticFeedback haptics,
+        OverlayForm form,
+        CancellationTokenSource cts)
+    {
+        public PadInputReader Reader = reader;
+        public HapticFeedback Haptics = haptics;
+        public OverlayForm Form = form;
+        public CancellationTokenSource Cts = cts;
+        public bool WasConnected;
+        public bool ShiftHeld;
+        public bool PrevRightPressed;
+        public bool PrevLeftPressed;
+        public double SmoothRightX, SmoothRightY, SmoothLeftX, SmoothLeftY;
+        public bool HasSmoothRight, HasSmoothLeft;
+
+        private const double Smoothing = 0.20;
+
+        public double EaseRight(double rawX, double rawY)
+        {
+            if (!HasSmoothRight) { SmoothRightX = rawX; SmoothRightY = rawY; HasSmoothRight = true; }
+            else { SmoothRightX += Smoothing * (rawX - SmoothRightX); SmoothRightY += Smoothing * (rawY - SmoothRightY); }
+            return 0;
+        }
+
+        public double EaseLeft(double rawX, double rawY)
+        {
+            if (!HasSmoothLeft) { SmoothLeftX = rawX; SmoothLeftY = rawY; HasSmoothLeft = true; }
+            else { SmoothLeftX += Smoothing * (rawX - SmoothLeftX); SmoothLeftY += Smoothing * (rawY - SmoothLeftY); }
+            return 0;
+        }
+    }
+
+    private static async void RunPipeLoop(LoopState s)
+    {
+        try
+        {
+            await foreach (var frame in s.Reader.ReadFramesAsync(s.Cts.Token))
             {
-                if (!wasConnected)
+                if (!s.WasConnected)
                 {
-                    wasConnected = true;
+                    s.WasConnected = true;
                     Log("OSK: pipe connected, keyboard active.");
                 }
 
-                var metrics = window.GetMetrics();
-                double bx = metrics.BoardX, by = metrics.BoardY;
-                double kw = metrics.KeyW, kh = metrics.KeyH;
+                double kw = s.Form.KeyW, kh = s.Form.KeyH;
 
-                bool rightTouched = state.RightPad.IsTouched || state.RightPad.IsPressed;
-                bool leftTouched = state.LeftPad.IsTouched || state.LeftPad.IsPressed;
+                bool rightTouched = frame.RightPad.IsTouched || frame.RightPad.IsPressed;
+                bool leftTouched = frame.LeftPad.IsTouched || frame.LeftPad.IsPressed;
 
-                int rightCol = -1, rightRow = -1;
-                int leftCol = -1, leftRow = -1;
                 KeyDef? rightKey = null;
                 KeyDef? leftKey = null;
 
                 if (rightTouched)
                 {
-                    double px = (state.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
-                    double py = (1.0 - state.RightPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
-                    rightCol = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
-                    rightRow = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
-                    rightKey = KeyboardLayout.FindKeyAt(rightRow, rightCol);
+                    double px = (frame.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                    double py = (frame.RightPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
+                    int col = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
+                    int row = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
+                    rightKey = KeyboardLayout.FindKeyAt(row, col);
                 }
 
                 if (leftTouched)
                 {
-                    double px = (state.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
-                    double py = (1.0 - state.LeftPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
-                    leftCol = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
-                    leftRow = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
-                    leftKey = KeyboardLayout.FindKeyAt(leftRow, leftCol);
+                    double px = (frame.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                    double py = (frame.LeftPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
+                    int col = Math.Clamp((int)(px / kw), 0, KeyboardLayout.MaxCols - 1);
+                    int row = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
+                    leftKey = KeyboardLayout.FindKeyAt(row, col);
                 }
 
-                _ = window.Dispatcher.BeginInvoke(() =>
+                try
                 {
+                    double boardY = s.Form.BoardY;
+
                     if (rightTouched)
                     {
-                        double rx = (state.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
-                        double ry = (1.0 - state.RightPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
-                        window.SetRightCursor(rx, ry);
-                        window.HighlightKey(rightKey);
+                        double rawRx = (frame.RightPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                        double rawRy = (frame.RightPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
+                        if (!s.HasSmoothRight) { s.SmoothRightX = rawRx; s.SmoothRightY = rawRy; s.HasSmoothRight = true; }
+                        else { s.SmoothRightX += 0.35 * (rawRx - s.SmoothRightX); s.SmoothRightY += 0.35 * (rawRy - s.SmoothRightY); }
+                        s.Form.SetRightCursor(s.SmoothRightX, boardY + s.SmoothRightY);
+                        s.Form.HighlightKey(rightKey);
                     }
                     else
                     {
-                        window.HideRightCursor();
+                        s.HasSmoothRight = false;
+                        s.Form.HideRightCursor();
                     }
 
                     if (leftTouched)
                     {
-                        double lx = (state.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
-                        double ly = (1.0 - state.LeftPad.Y) / 2.0 * (kh * KeyboardLayout.Rows);
-                        window.SetLeftCursor(lx, ly);
+                        double rawLx = (frame.LeftPad.X + 1.0) / 2.0 * (kw * KeyboardLayout.MaxCols);
+                        double rawLy = (frame.LeftPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
+                        if (!s.HasSmoothLeft) { s.SmoothLeftX = rawLx; s.SmoothLeftY = rawLy; s.HasSmoothLeft = true; }
+                        else { s.SmoothLeftX += 0.35 * (rawLx - s.SmoothLeftX); s.SmoothLeftY += 0.35 * (rawLy - s.SmoothLeftY); }
+                        s.Form.SetLeftCursor(s.SmoothLeftX, boardY + s.SmoothLeftY);
+                        s.Form.HighlightLeftKey(leftKey);
                     }
                     else
                     {
-                        window.HideLeftCursor();
+                        s.HasSmoothLeft = false;
+                        s.Form.HideLeftCursor();
                     }
-                });
+                }
+                catch (ObjectDisposedException) { break; }
+                catch (InvalidOperationException) { break; }
 
-                bool rightPressed = state.RightPad.IsPressed;
-                bool leftPressed = state.LeftPad.IsPressed;
+                bool rightPressed = frame.RightPad.IsPressed;
+                bool leftPressed = frame.LeftPad.IsPressed;
 
-                if (rightPressed && !prevRightPressed && rightKey is not null)
+                if (rightPressed && !s.PrevRightPressed && rightKey is not null)
                 {
-                    SendKey(rightKey, shiftHeld);
-                    _ = window.Dispatcher.BeginInvoke(() => window.FlashKey(rightKey));
-                    try { await haptics.PulseRightAsync(); } catch { }
+                    SendKey(rightKey, ref s.ShiftHeld);
+                    try { s.Form.FlashKey(rightKey); } catch { }
+                    try { await s.Haptics.PulseRightAsync(); } catch { }
                 }
 
-                if (leftPressed && !prevLeftPressed && leftKey is not null)
+                if (leftPressed && !s.PrevLeftPressed && leftKey is not null)
                 {
-                    SendKey(leftKey, shiftHeld);
-                    _ = window.Dispatcher.BeginInvoke(() => window.FlashKey(leftKey));
-                    try { await haptics.PulseLeftAsync(); } catch { }
+                    SendKey(leftKey, ref s.ShiftHeld);
+                    try { s.Form.FlashKey(leftKey); } catch { }
+                    try { await s.Haptics.PulseLeftAsync(); } catch { }
                 }
 
-                prevRightPressed = rightPressed;
-                prevLeftPressed = leftPressed;
-                prevRightKey = rightKey;
-                prevLeftKey = leftKey;
+                s.PrevRightPressed = rightPressed;
+                s.PrevLeftPressed = leftPressed;
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            Log($"OSK error: {ex.Message}");
+            Log($"OSK pipe error: {ex.GetType().Name}: {ex.Message}");
         }
-        finally
-        {
-            window.Dispatcher.Invoke(() => window.HideAll());
-            window.Dispatcher.Invoke(() => window.Close());
-            await reader.DisposeAsync().ConfigureAwait(false);
-            await haptics.DisposeAsync().ConfigureAwait(false);
-        }
+
+        Log("Pipe loop ended.");
     }
 
-    private static void SendKey(KeyDef key, bool shiftHeld)
+    private static void SendKey(KeyDef key, ref bool shiftHeld)
     {
         switch (key.Action)
         {
@@ -164,10 +251,5 @@ public static class Program
                     InputHelper.UnicodeChar(ch);
                 break;
         }
-    }
-
-    private static void Log(string msg)
-    {
-        try { Console.Error.WriteLine(msg); } catch { }
     }
 }

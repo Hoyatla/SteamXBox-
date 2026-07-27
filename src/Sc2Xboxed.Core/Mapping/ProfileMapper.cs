@@ -186,6 +186,7 @@ public sealed class ProfileMapper
 			() =>
 			{
 				OskToggleRequested = true;
+				System.Diagnostics.Debug.WriteLine($"[ProfileMapper] B pressed → OskToggleRequested=true, OskActive={OskActive}");
 			}, () => { });
 
 		HandleEdge(ref _prevMenu, state.Buttons.HasFlag(SteamControllerButtons.Menu),
