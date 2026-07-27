@@ -353,6 +353,20 @@ public static class InputHelper
 		return Process.GetProcessesByName(processName).Length > 0;
 	}
 
+	public static bool IsSteamWindowActive()
+	{
+		try
+		{
+			return Process.GetProcessesByName("steam")
+				.Any(p =>
+				{
+					try { return p.MainWindowHandle != IntPtr.Zero; }
+					catch { return false; }
+				});
+		}
+		catch { return false; }
+	}
+
 	private static int _oskCheckTick;
 	private static bool _oskRunning;
 

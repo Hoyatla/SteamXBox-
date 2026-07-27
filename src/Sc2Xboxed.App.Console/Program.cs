@@ -325,8 +325,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     DLog?.Invoke("*** Steam kill requested ***");
                     InputHelper.KillProcess("steam");
+                    await source.SetNativeLayerEnabledAsync(false);
                     Console.WriteLine("Steam killed, controller back to SteamXBox.");
-                    break;
                 }
                 else if (modeSwitcher.WantsNativeLayer)
                 {
@@ -348,9 +348,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     {
                         if (!profileMapper.OskActive)
                         {
-                            if (InputHelper.IsProcessRunning("steam"))
+                            if (InputHelper.IsSteamWindowActive())
                             {
-                                DLog?.Invoke("OSK toggle blocked: Steam is running. Kill Steam first (Y+Steam in Profile mode).");
+                                DLog?.Invoke("OSK toggle blocked: Steam window is active. Kill Steam first (Y+Steam in Profile mode).");
                             }
                             else
                             {
