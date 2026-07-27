@@ -325,8 +325,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     DLog?.Invoke("*** Steam kill requested ***");
                     InputHelper.KillProcess("steam");
-                    await source.SetNativeLayerEnabledAsync(false);
                     Console.WriteLine("Steam killed, controller back to SteamXBox.");
+                    break;
                 }
                 else if (modeSwitcher.WantsNativeLayer)
                 {
@@ -348,39 +348,66 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     {
                         if (!profileMapper.OskActive)
                         {
-                            var oskDir = AppContext.BaseDirectory;
-                            var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
-                            DLog?.Invoke($"OSK toggle: BaseDir={oskDir}, exe={File.Exists(overlayPath)}");
-                            if (File.Exists(overlayPath))
+                            if (InputHelper.IsProcessRunning("steam"))
                             {
-                                try
-                                {
-                                    var psi = new ProcessStartInfo
-                                    {
-                                        FileName = overlayPath,
-                                        UseShellExecute = true
-                                    };
-                                    var proc = Process.Start(psi);
-                                    DLog?.Invoke($"OSK overlay launched: PID={proc?.Id}");
-                                    profileMapper.OskActive = true;
-                                }
-                                catch (Exception ex)
-                                {
-                                    DLog?.Invoke($"OSK overlay start FAILED: {ex.GetType().Name}: {ex.Message}");
-                                }
+                                DLog?.Invoke("OSK toggle blocked: Steam is running. Kill Steam first (Y+Steam in Profile mode).");
                             }
                             else
                             {
-                                DLog?.Invoke($"OSK overlay exe NOT FOUND at: {overlayPath}");
+                                var oskDir = AppContext.BaseDirectory;
+                                var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
+                                DLog?.Invoke($"OSK toggle: BaseDir={oskDir}, exe={File.Exists(overlayPath)}");
+                                if (File.Exists(overlayPath))
+                                {
+                                    try
+                                    {
+                                        var psi = new ProcessStartInfo
+                                        {
+                                            FileName = overlayPath,
+                                            UseShellExecute = true
+                                        };
+                                        var proc = Process.Start(psi);
+                                        DLog?.Invoke($"OSK overlay launched: PID={proc?.Id}");
+                                        profileMapper.OskActive = true;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        DLog?.Invoke($"OSK overlay start FAILED: {ex.GetType().Name}: {ex.Message}");
+                                    }
+                                }
+                                else
+                                {
+                                    DLog?.Invoke($"OSK overlay exe NOT FOUND at: {overlayPath}");
+                                }
                             }
                         }
                         else
                         {
                             DLog?.Invoke("OSK overlay: stopping...");
-                            foreach (var p in Process.GetProcessesByName("Sc2Xboxed.Osk"))
+                            bool signaled = false;
+                            if (OperatingSystem.IsWindows())
                             {
-                                try { p.Kill(entireProcessTree: true); } catch { }
+                                try
+                                {
+                                    using var closeHandle = EventWaitHandle.OpenExisting("SteamXBox_OskClose");
+                                    closeHandle.Set();
+                                    signaled = true;
+                                    DLog?.Invoke("OSK close event signaled.");
+                                }
+                                catch (Exception ex)
+                                {
+                                    DLog?.Invoke($"OSK close event not found ({ex.GetType().Name}), falling back to Kill.");
+                                }
                             }
+
+                            if (!signaled)
+                            {
+                                foreach (var p in Process.GetProcessesByName("Sc2Xboxed.Osk"))
+                                {
+                                    try { p.Kill(entireProcessTree: true); } catch { }
+                                }
+                            }
+
                             profileMapper.OskActive = false;
                             DLog?.Invoke("OSK overlay: stopped.");
                         }
@@ -447,24 +474,38 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         if (cancellation.Token.IsCancellationRequested)
             break;
 
-        try
+        DLog?.Invoke("Waiting 3s for controller to reset...");
+        try { await Task.Delay(3000, cancellation.Token); }
+        catch (OperationCanceledException) { break; }
+
+        bool found = false;
+        for (int retry = 0; retry < 5; retry++)
         {
-            var probeDiscovery = new SteamHidDiscovery();
-            if (probeDiscovery.FindPreferredControllerDevice() is null)
+            try
             {
-                DLog?.Invoke("Controller disconnected. Exiting.");
-                break;
+                var probeDiscovery = new SteamHidDiscovery();
+                if (probeDiscovery.FindPreferredControllerDevice() is not null)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            catch { }
+
+            if (retry < 4)
+            {
+                int delay = 1000 * (retry + 1);
+                DLog?.Invoke($"Controller not found, retry {retry + 1}/5 in {delay}ms...");
+                try { await Task.Delay(delay, cancellation.Token); }
+                catch (OperationCanceledException) { break; }
             }
         }
-        catch
+
+        if (!found)
         {
-            DLog?.Invoke("Device check failed. Exiting.");
+            DLog?.Invoke("Controller disconnected after retries. Exiting.");
             break;
         }
-
-        DLog?.Invoke("Waiting 1s before reconnect...");
-        try { await Task.Delay(1000, cancellation.Token); }
-        catch (OperationCanceledException) { break; }
     }
 
     DLog?.Invoke("Virtual Xbox 360 controller disconnected.");

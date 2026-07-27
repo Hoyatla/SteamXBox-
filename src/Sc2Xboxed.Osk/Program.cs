@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Mapping;
@@ -56,6 +57,36 @@ public static class Program
         var cts = new CancellationTokenSource();
         form.FormClosing += (_, _) => cts.Cancel();
 
+        EventWaitHandle? closeEvent = null;
+        try
+        {
+            closeEvent = new EventWaitHandle(false, EventResetMode.ManualReset, "SteamXBox_OskClose");
+            Log("Close event handle created.");
+
+            var closeWatcher = new Thread(() =>
+            {
+                if (closeEvent.WaitOne(TimeSpan.FromSeconds(15)))
+                {
+                    Log("Close event signaled, shutting down overlay.");
+                    try { form.Invoke(form.Close); }
+                    catch { try { form.Close(); } catch { } }
+                }
+                else
+                {
+                    Log("Close event timed out (15s), no signal received.");
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "OskCloseWatcher"
+            };
+            closeWatcher.Start();
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to create close event handle: {ex.Message}");
+        }
+
         var reader = new PadInputReader();
         var haptics = new HapticFeedback();
         Log("Reader + haptics created, starting pipe loop...");
@@ -79,6 +110,7 @@ public static class Program
         reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         haptics.DisposeAsync().AsTask().GetAwaiter().GetResult();
         bgThread.Join(3000);
+        closeEvent?.Dispose();
         Log("Overlay stopped.");
     }
 
