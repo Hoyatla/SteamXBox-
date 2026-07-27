@@ -2,7 +2,7 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "2.0"
+#define MyAppVersion "2.1"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -41,6 +41,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "SteamXBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Sc2Xboxed.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; WPF native dependencies
+Source: "D3DCompiler_47_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "PenImc_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "PresentationNative_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "vcruntime140_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "wpfgfx_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion
