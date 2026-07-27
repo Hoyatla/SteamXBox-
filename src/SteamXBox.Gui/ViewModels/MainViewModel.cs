@@ -26,12 +26,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel()
     {
         _core = new CoreProcessService();
-        _device = new DeviceDetectionService(_core);
+        _device = new DeviceDetectionService();
         _profileService = new ProfileService();
 
         _core.OutputReceived += msg =>
         {
-            App.Current.Dispatcher.Invoke(() =>
+            App.Current.Dispatcher.BeginInvoke(() =>
             {
                 var time = DateTime.Now.ToString("HH:mm:ss");
                 LogText += $"[{time}] {msg}\n";
@@ -42,7 +42,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _core.ProcessExited += _ =>
         {
-            App.Current.Dispatcher.Invoke(() =>
+            App.Current.Dispatcher.BeginInvoke(() =>
             {
                 IsCoreRunning = false;
                 StatusText = "Arrêté";
@@ -51,7 +51,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _device.DeviceChanged += dev =>
         {
-            App.Current.Dispatcher.Invoke(() =>
+            App.Current.Dispatcher.BeginInvoke(() =>
             {
                 IsDeviceConnected = dev.IsConnected;
                 DeviceName = dev.IsConnected ? dev.DisplayName : "Aucun device";

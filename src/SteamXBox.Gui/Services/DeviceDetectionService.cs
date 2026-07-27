@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.IO;
+using HidSharp;
 using SteamXBox.Gui.Models;
 
 namespace SteamXBox.Gui.Services;
@@ -7,15 +7,15 @@ namespace SteamXBox.Gui.Services;
 public sealed class DeviceDetectionService : IDisposable
 {
     private System.Threading.Timer? _timer;
-    private readonly CoreProcessService _core;
+
+    private const int ValveVendorId = 0x28DE;
+    private static readonly HashSet<int> KnownControllerProducts =
+    [
+        0x1102, 0x1142, 0x1205, 0x1302, 0x1303, 0x1304
+    ];
 
     public DeviceInfo CurrentDevice { get; private set; } = new() { IsConnected = false };
     public event Action<DeviceInfo>? DeviceChanged;
-
-    public DeviceDetectionService(CoreProcessService core)
-    {
-        _core = core;
-    }
 
     public void StartPolling(int intervalMs = 3000)
     {
@@ -32,63 +32,40 @@ public sealed class DeviceDetectionService : IDisposable
     {
         try
         {
-            var corePath = _core.GetCorePath();
-            if (!File.Exists(corePath)) return;
+            var devices = DeviceList.Local.GetHidDevices(ValveVendorId)
+                .Where(d => KnownControllerProducts.Contains(d.ProductID))
+                .ToList();
 
-            var psi = new ProcessStartInfo
+            if (devices.Count == 0)
             {
-                FileName = corePath,
-                Arguments = "hid-list",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(3000);
-
-            var connected = !output.Contains("No Valve HID device found");
-            var productName = "";
-            var productId = "";
-            var devicePath = "";
-
-            if (connected)
-            {
-                var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
-                {
-                    var trimmed = line.Trim();
-                    if (trimmed.StartsWith("Product:"))
-                        productName = trimmed["Product:".Length..].Trim();
-                    else if (trimmed.StartsWith("Product ID:"))
-                        productId = trimmed["Product ID:".Length..].Trim();
-                    else if (trimmed.StartsWith("Device Path:"))
-                        devicePath = trimmed["Device Path:".Length..].Trim();
-                    else if (trimmed.StartsWith("  Product:"))
-                        productName = trimmed["  Product:".Length..].Trim();
-                }
+                var off = new DeviceInfo { IsConnected = false };
+                CurrentDevice = off;
+                DeviceChanged?.Invoke(off);
+                return;
             }
 
-            var device = new DeviceInfo
+            var dev = devices.First();
+            var name = dev.GetProductName();
+            if (string.IsNullOrWhiteSpace(name))
+                name = $"Valve Controller (PID 0x{dev.ProductID:X4})";
+
+            var info = new DeviceInfo
             {
-                ProductName = productName,
-                ProductIdHex = productId,
-                DevicePath = devicePath,
-                CanOpen = connected,
-                IsConnected = connected,
+                ProductName = name,
+                ProductIdHex = $"0x{dev.ProductID:X4}",
+                DevicePath = dev.DevicePath,
+                CanOpen = dev.TryOpen(out _),
+                IsConnected = true,
             };
 
-            CurrentDevice = device;
-            DeviceChanged?.Invoke(device);
+            CurrentDevice = info;
+            DeviceChanged?.Invoke(info);
         }
         catch
         {
-            var disconnected = new DeviceInfo { IsConnected = false };
-            CurrentDevice = disconnected;
-            DeviceChanged?.Invoke(disconnected);
+            var off = new DeviceInfo { IsConnected = false };
+            CurrentDevice = off;
+            DeviceChanged?.Invoke(off);
         }
     }
 

@@ -14,60 +14,89 @@
     </Window.DataContext>
 
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <Border Grid.Column="0" Background="{StaticResource BgMediumBrush}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
-            <DockPanel>
-                <Border DockPanel.Dock="Top" Padding="16,20,16,12">
-                    <StackPanel>
-                        <TextBlock Text="SteamXBox" FontSize="22" FontWeight="Bold"
-                                   Foreground="{StaticResource AccentBrush}"/>
-                        <TextBlock Text="v2.1" FontSize="11"
-                                   Foreground="{StaticResource TextDimBrush}" Margin="0,2,0,0"/>
+        <!-- Title bar -->
+        <Grid Grid.Row="0" Background="{StaticResource BgMediumBrush}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock Text="SteamXBox" VerticalAlignment="Center" Margin="12,0,0,0"
+                       FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="─" Click="Minimize_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" Foreground="{StaticResource TextSecondaryBrush}"
+                        BorderThickness="0" />
+                <Button Content="□" Click="Maximize_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" Foreground="{StaticResource TextSecondaryBrush}"
+                        BorderThickness="0" />
+                <Button Content="✕" Click="Close_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" Foreground="{StaticResource TextSecondaryBrush}"
+                        BorderThickness="0" >
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{StaticResource BgMediumBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="16,0,16,16">
+                        <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8">
+                            <StackPanel>
+                                <TextBlock Text="Status" FontSize="10" Foreground="{StaticResource TextDimBrush}"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{Binding IsCoreRunning, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Device" FontSize="10" Foreground="{StaticResource TextDimBrush}"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding DeviceName}" FontSize="11"
+                                           Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
 
-                <StackPanel DockPanel.Dock="Bottom" Margin="16,0,16,16">
-                    <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8">
-                        <StackPanel>
-                            <TextBlock Text="Status" FontSize="10" Foreground="{StaticResource TextDimBrush}"
-                                       FontWeight="SemiBold"/>
-                            <TextBlock Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="{Binding IsCoreRunning, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Device" FontSize="10" Foreground="{StaticResource TextDimBrush}"
-                                       FontWeight="SemiBold"/>
-                            <TextBlock Text="{Binding DeviceName}" FontSize="11"
-                                       Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                    <StackPanel Margin="16,16">
+                        <Button Content="🏠  Accueil" Tag="0" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                        <Button Content="📋  Profils" Tag="1" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                        <Button Content="⚙  Paramètres" Tag="2" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                        <Button Content="📄  Log" Tag="3" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
 
-                <StackPanel Margin="16,8">
-                    <Button Content="🏠  Accueil" Tag="0" Click="Nav_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                    <Button Content="📋  Profils" Tag="1" Click="Nav_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                    <Button Content="⚙  Paramètres" Tag="2" Click="Nav_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                    <Button Content="📄  Log" Tag="3" Click="Nav_Click"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <Grid Grid.Column="1">
-            <views:HomeView x:Name="HomeView" Margin="24"/>
-            <views:ProfileView x:Name="ProfileView" Margin="24" Visibility="Collapsed"/>
-            <views:SettingsView x:Name="SettingsView" Margin="24" Visibility="Collapsed"/>
-            <views:LogView x:Name="LogView" Margin="24" Visibility="Collapsed"/>
+            <Grid Grid.Column="1">
+                <views:HomeView x:Name="HomeView" Margin="24"/>
+                <views:ProfileView x:Name="ProfileView" Margin="24" Visibility="Collapsed"/>
+                <views:SettingsView x:Name="SettingsView" Margin="24" Visibility="Collapsed"/>
+                <views:LogView x:Name="LogView" Margin="24" Visibility="Collapsed"/>
+            </Grid>
         </Grid>
     </Grid>
 
