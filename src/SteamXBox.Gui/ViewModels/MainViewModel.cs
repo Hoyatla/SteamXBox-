@@ -20,6 +20,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private ProfileData? _selectedProfile;
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private int _selectedTabIndex;
+    [ObservableProperty] private bool _autoStart;
+    private bool _wasDeviceConnected;
 
     public ObservableCollection<ProfileData> Profiles => _profileService.Profiles;
 
@@ -55,6 +57,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 IsDeviceConnected = dev.IsConnected;
                 DeviceName = dev.IsConnected ? dev.DisplayName : "Aucun device";
+
+                if (AutoStart && dev.IsConnected && !_wasDeviceConnected && !IsCoreRunning)
+                    StartCore();
+
+                _wasDeviceConnected = dev.IsConnected;
+            });
+        };
+
+        _profileService.ProfileSaved += profile =>
+        {
+            App.Current.Dispatcher.BeginInvoke(() =>
+            {
+                if (SelectedProfile?.Name == profile.Name)
+                {
+                    SelectedProfile = profile;
+                    CurrentMode = profile.Mode;
+                }
             });
         };
 

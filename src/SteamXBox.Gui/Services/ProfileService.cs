@@ -10,6 +10,8 @@ public sealed class ProfileService
 
     public ProfileData? ActiveProfile { get; set; }
 
+    public event Action<ProfileData>? ProfileSaved;
+
     public void LoadAll()
     {
         Profiles.Clear();
@@ -30,6 +32,8 @@ public sealed class ProfileService
 
         if (ActiveProfile?.Name == profile.Name)
             ActiveProfile = profile;
+
+        ProfileSaved?.Invoke(profile);
     }
 
     public void Delete(ProfileData profile)
