@@ -22,6 +22,8 @@ public sealed class OverlayForm : Form
     private KeyDef? _highlightedLeftKey;
     private KeyDef? _flashingKey;
     private DateTime _flashEnd;
+    private bool _symActive;
+    private bool _shiftHeld;
     private readonly object _lock = new();
     private readonly System.Windows.Forms.Timer _topMostTimer;
 
@@ -105,16 +107,22 @@ public sealed class OverlayForm : Form
         using var borderPen = new Pen(Color.FromArgb(0x90, 0x80, 0x80, 0x90), 1);
         using var highlightBrush = new SolidBrush(Color.FromArgb(0xC0, 0x40, 0x80, 0xFF));
         using var flashBrush = new SolidBrush(Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
+        using var symBrush = new SolidBrush(Color.FromArgb(0xC0, 0xFF, 0xCC, 0x44));
+        using var symHighlightBrush = new SolidBrush(Color.FromArgb(0xFF, 0x18, 0x18, 0x18));
         using var normalFont = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
         using var specialFont = new Font("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Pixel);
         using var shiftFont = new Font("Segoe UI", 9, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var symFont = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
         using var textBrush = new SolidBrush(Color.White);
         using var shiftBrush = new SolidBrush(Color.FromArgb(0x90, 0xCC, 0xCC, 0xCC));
         using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        using var sfShift = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near };
+        using var sfTopRight = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near };
+        using var sfBotRight = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Far };
 
         lock (_lock)
         {
+            bool sym = _symActive;
+
             foreach (var key in KeyboardLayout.Keys)
             {
                 double x = _boardX + key.Col * _keyW;
@@ -123,23 +131,39 @@ public sealed class OverlayForm : Form
                 float h = (float)(_keyH - 2);
                 var rect = new RectangleF((float)(x + 1), (float)(y + 1), w, h);
 
-                Brush fill = key == _flashingKey && DateTime.UtcNow < _flashEnd
-                    ? flashBrush
-                    : key == _highlightedKey || key == _highlightedLeftKey
-                        ? highlightBrush
-                        : keyBrush;
+                Brush fill;
+                if (key == _flashingKey && DateTime.UtcNow < _flashEnd)
+                    fill = flashBrush;
+                else if (key == _highlightedKey || key == _highlightedLeftKey)
+                    fill = highlightBrush;
+                else if (sym && key.Action == SpecialAction.Sym)
+                    fill = highlightBrush;
+                else
+                    fill = keyBrush;
 
                 g.FillRectangle(fill, rect);
                 g.DrawRectangle(borderPen, rect.X, rect.Y, rect.Width, rect.Height);
 
-                var font = key.Action != SpecialAction.None ? specialFont : normalFont;
-                g.DrawString(key.Label, font, textBrush, rect, sf);
-
-                if (key.Action == SpecialAction.None && key.ShiftedChar != '\0')
+                if (sym && key.Action == SpecialAction.None && key.SymChar != '\0')
                 {
-                    var shiftRect = new RectangleF(rect.X + 2, rect.Y + 2, rect.Width - 4, rect.Height - 4);
-                    string shiftLabel = key.ShiftedChar.ToString();
-                    g.DrawString(shiftLabel, shiftFont, shiftBrush, shiftRect, sfShift);
+                    g.DrawString(key.SymChar.ToString(), symFont, symBrush, rect, sf);
+                }
+                else if (sym && key.Action == SpecialAction.Sym)
+                {
+                    g.DrawString("SYM", specialFont, highlightBrush, rect, sf);
+                }
+                else
+                {
+                    var font = key.Action != SpecialAction.None ? specialFont : normalFont;
+                    g.DrawString(key.Label, font, textBrush, rect, sf);
+
+                    if (key.Action == SpecialAction.None)
+                    {
+                        var detailRect = new RectangleF(rect.X + 2, rect.Y + 2, rect.Width - 4, rect.Height - 4);
+
+                        if (key.ShiftedChar != '\0')
+                            g.DrawString(key.ShiftedChar.ToString(), shiftFont, shiftBrush, detailRect, sfTopRight);
+                    }
                 }
             }
         }
@@ -184,6 +208,9 @@ public sealed class OverlayForm : Form
     public void HighlightLeftKey(KeyDef? key)
     { lock (_lock) _highlightedLeftKey = key; Invalidate(); }
 
+    public void SetModifierState(bool shift, bool sym)
+    { lock (_lock) { _shiftHeld = shift; _symActive = sym; } Invalidate(); }
+
     public void FlashKey(KeyDef? key)
     {
         if (key is null) return;
@@ -211,6 +238,13 @@ public sealed class OverlayForm : Form
             _flashingKey = null;
         }
         Invalidate();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _topMostTimer.Stop();
+        _topMostTimer.Dispose();
+        base.OnFormClosing(e);
     }
 
     public (double BoardX, double BoardY, double KeyW, double KeyH) GetMetrics()

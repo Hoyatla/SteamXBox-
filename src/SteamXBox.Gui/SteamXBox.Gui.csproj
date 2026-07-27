@@ -13,10 +13,19 @@
     <AssemblyTitle>SteamXBox GUI</AssemblyTitle>
     <Description>SteamXBox - Steam Controller to Xbox 360 bridge GUI.</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\paypal-support.gif" />
+    <Resource Include="Resources\paypal-support.gif" />
   </ItemGroup>
 
   <ItemGroup>

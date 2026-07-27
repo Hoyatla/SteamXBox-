@@ -112,5 +112,22 @@
                            FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,6,0,0"/>
             </StackPanel>
         </Border>
+
+        <Grid HorizontalAlignment="Right" Margin="0,12,0,0">
+            <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="Support Me, Plz!" FontSize="13" FontStyle="Italic"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <Border Cursor="Hand" HorizontalAlignment="Center"
+                        BorderThickness="0" Background="Transparent" Padding="0">
+                    <Border.InputBindings>
+                        <MouseBinding MouseAction="LeftClick"
+                                      Command="{x:Static views:HomeView.OpenPayPalCommand}"/>
+                    </Border.InputBindings>
+                    <Image Source="/Resources/paypal-support.gif" Stretch="None"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                </Border>
+            </StackPanel>
+        </Grid>
     </StackPanel>
 </UserControl>

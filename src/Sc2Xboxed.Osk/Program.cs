@@ -76,10 +76,9 @@ public static class Program
         Log("Application.Run exited.");
 
         cts.Cancel();
-        bgThread.Join(2000);
-
         reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         haptics.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        bgThread.Join(3000);
         Log("Overlay stopped.");
     }
 
@@ -95,6 +94,7 @@ public static class Program
         public CancellationTokenSource Cts = cts;
         public bool WasConnected;
         public bool ShiftHeld;
+        public bool SymActive;
         public bool PrevRightPressed;
         public bool PrevLeftPressed;
         public double SmoothRightX, SmoothRightY, SmoothLeftX, SmoothLeftY;
@@ -157,6 +157,7 @@ public static class Program
 
                 try
                 {
+                    s.Form.SetModifierState(s.ShiftHeld, s.SymActive);
                     double boardY = s.Form.BoardY;
 
                     if (rightTouched)
@@ -197,14 +198,14 @@ public static class Program
 
                 if (rightPressed && !s.PrevRightPressed && rightKey is not null)
                 {
-                    SendKey(rightKey, ref s.ShiftHeld);
+                    SendKey(rightKey, ref s.ShiftHeld, ref s.SymActive);
                     try { s.Form.FlashKey(rightKey); } catch { }
                     try { await s.Haptics.PulseRightAsync(); } catch { }
                 }
 
                 if (leftPressed && !s.PrevLeftPressed && leftKey is not null)
                 {
-                    SendKey(leftKey, ref s.ShiftHeld);
+                    SendKey(leftKey, ref s.ShiftHeld, ref s.SymActive);
                     try { s.Form.FlashKey(leftKey); } catch { }
                     try { await s.Haptics.PulseLeftAsync(); } catch { }
                 }
@@ -222,7 +223,7 @@ public static class Program
         Log("Pipe loop ended.");
     }
 
-    private static void SendKey(KeyDef key, ref bool shiftHeld)
+    private static void SendKey(KeyDef key, ref bool shiftHeld, ref bool symActive)
     {
         switch (key.Action)
         {
@@ -232,6 +233,9 @@ public static class Program
                     InputHelper.KeyDown(VK_LSHIFT);
                 else
                     InputHelper.KeyUp(VK_LSHIFT);
+                break;
+            case SpecialAction.Sym:
+                symActive = !symActive;
                 break;
             case SpecialAction.Backspace:
                 InputHelper.KeyTap(VK_BACK);
@@ -246,7 +250,11 @@ public static class Program
                 InputHelper.UnicodeChar(' ');
                 break;
             default:
-                char ch = shiftHeld ? key.ShiftedChar : key.NormalChar;
+                char ch;
+                if (symActive && key.SymChar != '\0')
+                    ch = key.SymChar;
+                else
+                    ch = shiftHeld ? key.ShiftedChar : key.NormalChar;
                 if (ch != '\0')
                     InputHelper.UnicodeChar(ch);
                 break;

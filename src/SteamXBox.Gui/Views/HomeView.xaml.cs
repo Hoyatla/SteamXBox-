@@ -1,8 +1,27 @@
+using System.Diagnostics;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace SteamXBox.Gui.Views;
 
 public partial class HomeView : UserControl
 {
+    public static readonly ICommand OpenPayPalCommand = new RelayCommand(_ =>
+    {
+        Process.Start(new ProcessStartInfo("https://paypal.me/Hoyatla") { UseShellExecute = true });
+    });
+
     public HomeView() => InitializeComponent();
+}
+
+internal class RelayCommand(Action<object?> execute) : ICommand
+{
+    private readonly Action<object?> _execute = execute;
+    public event EventHandler? CanExecuteChanged
+    {
+        add => CommandManager.RequerySuggested += value;
+        remove => CommandManager.RequerySuggested -= value;
+    }
+    public bool CanExecute(object? parameter) => true;
+    public void Execute(object? parameter) => _execute(parameter);
 }

@@ -41,6 +41,7 @@ public sealed class PadInputReader : IAsyncDisposable
             catch (OperationCanceledException) { yield break; }
             catch (IOException) { yield break; }
 
+            if (bytesRead == 0) yield break;
             if (bytesRead < 36) continue;
 
             int offset = 0;

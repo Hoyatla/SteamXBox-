@@ -83,19 +83,24 @@ public static class SystemKeyboardLayout
         new() { Row = 3, Col = 9, Vk = 0xBD },  // -/_
         new() { Row = 3, Col = 10, Vk = 0xBF },  // OEM_2 ($/£) Swiss French
 
-        // Row 4: special (11 cols total)
+        // Row 4: special (11 cols: 2+2+2+2+3)
         new() { Row = 4, Col = 0, Vk = 0xA0, Width = 2, Label = "SHIFT", Action = SpecialAction.Shift },
         new() { Row = 4, Col = 2, Vk = 0x08, Width = 2, Label = "←", Action = SpecialAction.Backspace },
-        new() { Row = 4, Col = 4, Vk = 0x20, Width = 3, Label = "ESPACE", Action = SpecialAction.Space },
-        new() { Row = 4, Col = 7, Vk = 0x09, Width = 1, Label = "TAB", Action = SpecialAction.Tab },
+        new() { Row = 4, Col = 4, Vk = 0xDF, Width = 2, Label = "SYM", Action = SpecialAction.Sym },
+        new() { Row = 4, Col = 6, Vk = 0x20, Width = 2, Label = "ESPACE", Action = SpecialAction.Space },
         new() { Row = 4, Col = 8, Vk = 0x0D, Width = 3, Label = "ENTRÉE", Action = SpecialAction.Enter },
+    ];
 
-        // Row 4: special
-        new() { Row = 4, Col = 0, Vk = 0xA0, Width = 2, Label = "SHIFT", Action = SpecialAction.Shift },
-        new() { Row = 4, Col = 2, Vk = 0x08, Width = 2, Label = "←", Action = SpecialAction.Backspace },
-        new() { Row = 4, Col = 4, Vk = 0x20, Width = 3, Label = "ESPACE", Action = SpecialAction.Space },
-        new() { Row = 4, Col = 7, Vk = 0x09, Width = 1, Label = "TAB", Action = SpecialAction.Tab },
-        new() { Row = 4, Col = 8, Vk = 0x0D, Width = 2, Label = "ENTRÉE", Action = SpecialAction.Enter },
+    private static readonly char[] SymLayer =
+    [
+        // Row 0: ! @ # $ % ^ & * ( ) ?
+        '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '?',
+        // Row 1: [ ] { } ~ ` | \ < > € µ
+        '[', ']', '{', '}', '~', '`', '|', '\\', '<', '>', '\u20AC',
+        // Row 2: ; : ° § ± × ÷ = + £ ©
+        ';', ':', '\u00B0', '\u00A7', '\u00B1', '\u00D7', '\u00F7', '=', '+', '\u00A3', '\u00A9',
+        // Row 3: - _ / " ' µ ® , . ? ¢
+        '-', '_', '/', '"', '\'', '\u00B5', '\u00AE', ',', '.', '?', '\u00A2',
     ];
 
     public static IReadOnlyList<KeyDef> DetectLayout()
@@ -103,14 +108,14 @@ public static class SystemKeyboardLayout
         var hkl = GetKeyboardLayout(0);
         var state = new byte[256];
         GetKeyboardState(state);
-        var sb = new StringBuilder(8);
         var keys = new List<KeyDef>();
+        int symIdx = 0;
 
         foreach (var m in Grid)
         {
             if (m.Action != SpecialAction.None)
             {
-                keys.Add(new KeyDef(m.Row, m.Col, m.Label ?? "", '\0', '\0', m.Action, m.Width));
+                keys.Add(new KeyDef(m.Row, m.Col, m.Label ?? "", '\0', '\0', '\0', m.Action, m.Width));
                 continue;
             }
 
@@ -140,7 +145,9 @@ public static class SystemKeyboardLayout
                 shiftedChar = '\0';
             }
 
-            keys.Add(new KeyDef(m.Row, m.Col, label, normalChar, shiftedChar, SpecialAction.None, m.Width));
+            char symChar = symIdx < SymLayer.Length ? SymLayer[symIdx++] : '\0';
+
+            keys.Add(new KeyDef(m.Row, m.Col, label, normalChar, shiftedChar, symChar, SpecialAction.None, m.Width));
         }
 
         return keys;
