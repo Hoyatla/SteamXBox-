@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Output;
 
@@ -29,10 +30,11 @@ public sealed class ProfileMapper
 	private bool _prevMenu;
 	private bool _prevView;
 
-	private readonly RightTouchpadTrackballMapper _rightTrackball = new(RightTouchpadTrackballSettings.Default with { InvertY = true });
-	private readonly LeftTouchpadScrollMapper _leftScroll = new(LeftTouchpadScrollSettings.Default with { InvertVertical = true, WheelDeltaPerPadUnit = 10.0 });
-	private readonly RightTouchpadTrackballMapper _leftTrackball = new(RightTouchpadTrackballSettings.Default with { InvertY = true });
+	private readonly RightTouchpadTrackballMapper _rightTrackball;
+	private readonly LeftTouchpadScrollMapper _leftScroll;
+	private readonly RightTouchpadTrackballMapper _leftTrackball;
 	private readonly SmoothedTouchpadInput _rightPadSmooth = new();
+	private readonly double _stickDeadZone;
 
 	private bool _leftPadWasOskMode;
 	private bool _firstFrame = true;
@@ -42,6 +44,59 @@ public sealed class ProfileMapper
 	public bool PadClicked { get; private set; }
 	public bool OskToggleRequested { get; private set; }
 	public bool OskActive { get; set; }
+
+	public ProfileMapper() : this(Sc2XboxedProfileSettings.Default) { }
+
+	public ProfileMapper(Sc2XboxedProfileSettings settings)
+	{
+		_stickDeadZone = settings.StickDeadZone;
+		_rightTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
+		_leftScroll = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
+		_leftTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball with { InvertY = settings.LeftPadScroll.InvertVertical });
+	}
+
+	public static Sc2XboxedProfileSettings LoadFromProfilesDirectory(string profileName)
+	{
+		var profilesDir = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+			"SteamXBox", "profiles");
+		var filePath = Path.Combine(profilesDir, $"{profileName}.json");
+
+		if (!File.Exists(filePath))
+			return Sc2XboxedProfileSettings.Default;
+
+		try
+		{
+			var json = File.ReadAllText(filePath);
+			var doc = JsonDocument.Parse(json);
+			var root = doc.RootElement;
+
+			double sens = root.TryGetProperty("rightPadSensitivity", out var s) ? s.GetDouble() : 900.0;
+			bool invertY = root.TryGetProperty("rightPadInvertY", out var iy) && iy.GetBoolean();
+			bool invertX = root.TryGetProperty("rightPadInvertX", out var ix) && ix.GetBoolean();
+			double deadzone = root.TryGetProperty("stickDeadZone", out var dz) ? dz.GetDouble() : 0.08;
+			bool leftInvert = root.TryGetProperty("leftPadInvertVertical", out var li) && li.GetBoolean();
+
+			return Sc2XboxedProfileSettings.Default with
+			{
+				StickDeadZone = deadzone,
+				RightPadTrackball = RightTouchpadTrackballSettings.Default with
+				{
+					PixelsPerPadUnit = sens,
+					InvertY = invertY,
+					InvertX = invertX,
+				},
+				LeftPadScroll = LeftTouchpadScrollSettings.Default with
+				{
+					InvertVertical = leftInvert,
+				},
+			};
+		}
+		catch
+		{
+			return Sc2XboxedProfileSettings.Default;
+		}
+	}
 
 	public void Reset()
 	{
@@ -237,24 +292,22 @@ public sealed class ProfileMapper
 
 	private void MapLeftStickArrows(NormalizedStick stick)
 	{
-		double deadzone = 0.5;
-
-		if (stick.Y > deadzone)
+		if (stick.Y > _stickDeadZone)
 			InputHelper.KeyDown(InputHelper.VK_UP);
 		else
 			InputHelper.KeyUp(InputHelper.VK_UP);
 
-		if (stick.Y < -deadzone)
+		if (stick.Y < -_stickDeadZone)
 			InputHelper.KeyDown(InputHelper.VK_DOWN);
 		else
 			InputHelper.KeyUp(InputHelper.VK_DOWN);
 
-		if (stick.X < -deadzone)
+		if (stick.X < -_stickDeadZone)
 			InputHelper.KeyDown(InputHelper.VK_LEFT);
 		else
 			InputHelper.KeyUp(InputHelper.VK_LEFT);
 
-		if (stick.X > deadzone)
+		if (stick.X > _stickDeadZone)
 			InputHelper.KeyDown(InputHelper.VK_RIGHT);
 		else
 			InputHelper.KeyUp(InputHelper.VK_RIGHT);

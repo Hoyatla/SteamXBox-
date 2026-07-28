@@ -272,6 +272,13 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         switchButtons,
         TimeSpan.FromMilliseconds(350));
     var profileMapper = new ProfileMapper();
+    var profileName = ReadOptionValue(args, "--profile");
+    if (!string.IsNullOrEmpty(profileName))
+    {
+        var settings = ProfileMapper.LoadFromProfilesDirectory(profileName);
+        profileMapper = new ProfileMapper(settings);
+        DLog($"Loaded profile '{profileName}': sensitivity={settings.RightPadTrackball.PixelsPerPadUnit}, invertY={settings.RightPadTrackball.InvertY}, deadzone={settings.StickDeadZone}");
+    }
     var padSender = new PadDataSender();
     padSender.Start();
     DLog("PadData pipe server started (SteamXBox_OskPad).");

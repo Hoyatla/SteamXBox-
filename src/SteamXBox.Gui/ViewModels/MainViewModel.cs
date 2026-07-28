@@ -11,6 +11,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly CoreProcessService _core;
     private readonly DeviceDetectionService _device;
     private readonly ProfileService _profileService;
+    private readonly SettingsService _settings;
 
     [ObservableProperty] private bool _isCoreRunning;
     [ObservableProperty] private bool _isDeviceConnected;
@@ -30,6 +31,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _core = new CoreProcessService();
         _device = new DeviceDetectionService();
         _profileService = new ProfileService();
+        _settings = new SettingsService();
+        _settings.Load();
 
         _core.OutputReceived += msg =>
         {
@@ -78,10 +81,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         };
 
         _profileService.LoadAll();
-        SelectedProfile = _profileService.ActiveProfile;
-        CurrentMode = SelectedProfile?.Mode ?? "Profile";
 
-        _device.StartPolling(3000);
+        AutoStart = _settings.Settings.AutoStart;
+        _device.StartPolling(_settings.Settings.DevicePollIntervalMs);
+
+        var lastProfile = _settings.Settings.LastActiveProfile;
+        var match = _profileService.Profiles.FirstOrDefault(p => p.Name == lastProfile);
+        SelectedProfile = match ?? _profileService.ActiveProfile;
+        CurrentMode = SelectedProfile?.Mode ?? "Profile";
     }
 
     [RelayCommand]
@@ -119,7 +126,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _profileService.ActiveProfile = value;
             CurrentMode = value.Mode;
+            _settings.Settings.LastActiveProfile = value.Name;
+            _settings.Save();
         }
+    }
+
+    partial void OnAutoStartChanged(bool value)
+    {
+        _settings.Settings.AutoStart = value;
+        _settings.Save();
     }
 
     public void Dispose()

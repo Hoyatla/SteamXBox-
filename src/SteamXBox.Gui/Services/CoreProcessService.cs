@@ -44,7 +44,7 @@ public sealed class CoreProcessService : IDisposable
                 return;
             }
 
-            var args = $"xbox-run --restart --start-mode {profile.Mode.ToLower()} --switch-button {profile.SwitchButton}";
+            var args = $"xbox-run --restart --start-mode {profile.Mode.ToLower()} --switch-button {profile.SwitchButton} --profile {profile.Name}";
 
             var psi = new ProcessStartInfo
             {

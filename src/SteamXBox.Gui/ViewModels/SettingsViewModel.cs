@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SteamXBox.Gui.Services;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -8,6 +9,8 @@ namespace SteamXBox.Gui.ViewModels;
 
 public partial class SettingsViewModel : ObservableObject
 {
+    private readonly SettingsService _settingsService;
+
     [ObservableProperty] private bool _autoStart = false;
     [ObservableProperty] private bool _minimizeToTray = true;
     [ObservableProperty] private int _devicePollInterval = 3;
@@ -18,7 +21,33 @@ public partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel()
     {
+        _settingsService = new SettingsService();
+        _settingsService.Load();
+
+        AutoStart = _settingsService.Settings.AutoStart;
+        MinimizeToTray = _settingsService.Settings.MinimizeToTray;
+        DevicePollInterval = _settingsService.Settings.DevicePollIntervalMs / 1000;
+        if (DevicePollInterval < 1) DevicePollInterval = 1;
+
         CheckDriverStatus();
+    }
+
+    partial void OnAutoStartChanged(bool value)
+    {
+        _settingsService.Settings.AutoStart = value;
+        _settingsService.Save();
+    }
+
+    partial void OnMinimizeToTrayChanged(bool value)
+    {
+        _settingsService.Settings.MinimizeToTray = value;
+        _settingsService.Save();
+    }
+
+    partial void OnDevicePollIntervalChanged(int value)
+    {
+        _settingsService.Settings.DevicePollIntervalMs = value * 1000;
+        _settingsService.Save();
     }
 
     [RelayCommand]
