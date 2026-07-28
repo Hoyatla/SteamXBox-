@@ -357,15 +357,19 @@ public static class InputHelper
 	{
 		try
 		{
-			return Process.GetProcessesByName("steam")
-				.Any(p =>
-				{
-					try { return p.MainWindowHandle != IntPtr.Zero; }
-					catch { return false; }
-				});
+			IntPtr hWnd = GetForegroundWindow();
+			if (hWnd == IntPtr.Zero) return false;
+			uint pid;
+			GetWindowThreadProcessId(hWnd, out pid);
+			if (pid == 0) return false;
+			using var proc = Process.GetProcessById((int)pid);
+			return string.Equals(proc.ProcessName, "steam", StringComparison.OrdinalIgnoreCase);
 		}
 		catch { return false; }
 	}
+
+	[DllImport("user32.dll")]
+	private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
 	private static int _oskCheckTick;
 	private static bool _oskRunning;

@@ -325,8 +325,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     DLog?.Invoke("*** Steam kill requested ***");
                     InputHelper.KillProcess("steam");
-                    await source.SetNativeLayerEnabledAsync(false);
-                    Console.WriteLine("Steam killed, controller back to SteamXBox.");
+                    Console.WriteLine("Steam killed, reconnecting controller...");
+                    break;
                 }
                 else if (modeSwitcher.WantsNativeLayer)
                 {
