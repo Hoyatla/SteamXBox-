@@ -30,6 +30,9 @@ public sealed class ProfileData
     [JsonPropertyName("stickDeadZone")]
     public double StickDeadZone { get; set; } = 0.5;
 
+    [JsonPropertyName("xboxStickDeadZone")]
+    public double XboxStickDeadZone { get; set; } = 0.08;
+
     [JsonPropertyName("motions")]
     public Dictionary<string, string> Motions { get; set; } = new()
     {

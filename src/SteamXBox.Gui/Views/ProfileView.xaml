@@ -153,27 +153,19 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Bouton de switch" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                                      SelectedItem="{Binding ActiveEdit.Mode}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Profile"/>
-                                <ComboBoxItem Content="Xbox360"/>
-                            </ComboBox>
-
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Bouton de switch" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}"
-                                      SelectedItem="{Binding ActiveEdit.SwitchButton}" Margin="0,4,0,4">
+                                      SelectedItem="{Binding ActiveEdit.SwitchButton}" Margin="0,4,12,4">
                                 <ComboBoxItem Content="quick-access"/>
                                 <ComboBoxItem Content="steam"/>
                                 <ComboBoxItem Content="steam-or-quick-access"/>
                             </ComboBox>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Dead zone stick" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Dead zone stick" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource TextBoxDark}"
-                                     Text="{Binding ActiveEdit.StickDeadZone, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,12,4"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource TextBoxDark}"
+                                     Text="{Binding ActiveEdit.StickDeadZone, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,4"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="2" Text="Sensibilité pad droit" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>

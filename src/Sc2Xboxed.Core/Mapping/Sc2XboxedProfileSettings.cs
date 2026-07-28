@@ -10,6 +10,8 @@ public sealed record Sc2XboxedProfileSettings
 
     public double StickDeadZone { get; init; } = 0.5;
 
+    public double GamepadStickDeadZone { get; init; } = 0.08;
+
     public LeftTouchpadScrollSettings LeftPadScroll { get; init; } = LeftTouchpadScrollSettings.Default;
 
     public RightTouchpadTrackballSettings RightPadTrackball { get; init; } = RightTouchpadTrackballSettings.Default;

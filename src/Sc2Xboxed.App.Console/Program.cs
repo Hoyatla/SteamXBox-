@@ -271,14 +271,15 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         initialMode,
         switchButtons,
         TimeSpan.FromMilliseconds(350));
-    var profileMapper = new ProfileMapper();
     var profileName = ReadOptionValue(args, "--profile");
-    if (!string.IsNullOrEmpty(profileName))
+    var loadedSettings = !string.IsNullOrEmpty(profileName)
+        ? ProfileMapper.LoadFromProfilesDirectory(profileName)
+        : null;
+    if (loadedSettings is not null)
     {
-        var settings = ProfileMapper.LoadFromProfilesDirectory(profileName);
-        profileMapper = new ProfileMapper(settings);
-        DLog($"Loaded profile '{profileName}': sensitivity={settings.RightPadTrackball.PixelsPerPadUnit}, invertY={settings.RightPadTrackball.InvertY}, deadzone={settings.StickDeadZone}");
+        DLog($"Loaded profile '{profileName}': trackSens={loadedSettings.RightPadTrackball.PixelsPerPadUnit}, invertY={loadedSettings.RightPadTrackball.InvertY}, deadzone={loadedSettings.StickDeadZone}, gamepadDeadzone={loadedSettings.GamepadStickDeadZone}");
     }
+    var profileMapper = loadedSettings is not null ? new ProfileMapper(loadedSettings) : new ProfileMapper();
     var padSender = new PadDataSender();
     padSender.Start();
     DLog("PadData pipe server started (SteamXBox_OskPad).");
@@ -298,7 +299,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     DLog($"Switch buttons: {switchButtons}");
     DLog($"Mode switch enabled: {enableModeSwitch}");
 
-    var mapper = new DefaultSteamControllerMapper();
+    var mapper = loadedSettings is not null ? new DefaultSteamControllerMapper(loadedSettings) : new DefaultSteamControllerMapper();
 
     DLog("Creating ViGEm virtual gamepad...");
     await using var gamepad = new ViGEmXbox360Sink();

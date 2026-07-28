@@ -90,7 +90,7 @@ public sealed class DefaultSteamControllerMapper
 
     private double ApplyDeadZone(double value)
     {
-        return Math.Abs(value) < _settings.StickDeadZone ? 0.0 : value;
+        return Math.Abs(value) < _settings.GamepadStickDeadZone ? 0.0 : value;
     }
 
     private static byte ToByteTrigger(double normalized)

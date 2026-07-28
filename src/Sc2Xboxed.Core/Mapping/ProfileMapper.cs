@@ -75,11 +75,13 @@ public sealed class ProfileMapper
 			bool invertY = root.TryGetProperty("rightPadInvertY", out var iy) ? iy.GetBoolean() : true;
 			bool invertX = root.TryGetProperty("rightPadInvertX", out var ix) && ix.GetBoolean();
 			double deadzone = root.TryGetProperty("stickDeadZone", out var dz) ? dz.GetDouble() : 0.5;
+			double gamepadDeadzone = root.TryGetProperty("xboxStickDeadZone", out var gdz) ? gdz.GetDouble() : 0.08;
 			bool leftInvert = root.TryGetProperty("leftPadInvertVertical", out var li) ? li.GetBoolean() : true;
 
 			return Sc2XboxedProfileSettings.Default with
 			{
 				StickDeadZone = deadzone,
+				GamepadStickDeadZone = gamepadDeadzone,
 				RightPadTrackball = RightTouchpadTrackballSettings.Default with
 				{
 					PixelsPerPadUnit = sens,
