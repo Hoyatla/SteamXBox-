@@ -39,7 +39,7 @@ await RunXbox360LiveAsync(new[]
     "--restart",
     "--switch-button",
     "quick-access"
-}, DebugLog);
+}, null);
 
 static void RunMappingSanityCheck()
 {
@@ -200,25 +200,20 @@ static async Task RunHapticTestAsync(string[] args)
 static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = null)
 {
     var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
-    StreamWriter? logFile = null;
-    if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase) && debugLog == null)
+    StreamWriter? logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+    var DLog = debugLog ?? ((string msg) =>
     {
-        logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
-        debugLog = (string msg) =>
-        {
-            var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
-            Console.WriteLine(line);
-            logFile.WriteLine(line);
-        };
-    }
-    var DLog = debugLog;
+        var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+        logFile.WriteLine(line);
+    });
 
-    DLog?.Invoke($"=== SteamXBox started ===");
-    DLog?.Invoke($"Args: {string.Join(" ", args)}");
+    DLog($"=== SteamXBox started ===");
+    DLog($"Args: {string.Join(" ", args)}");
+    DLog($"Log file: {logPath}");
 
     if (args.Contains("--restart", StringComparer.OrdinalIgnoreCase))
     {
-        DLog?.Invoke("Stopping other instances...");
+        DLog("Stopping other instances...");
         StopOtherInstances(waitForExit: true);
     }
 
@@ -233,7 +228,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     var profileMapper = new ProfileMapper();
     var padSender = new PadDataSender();
     padSender.Start();
-    DLog?.Invoke("PadData pipe server started (SteamXBox_OskPad).");
+    DLog("PadData pipe server started (SteamXBox_OskPad).");
     var seconds = ReadSecondsOption(args);
     if (seconds is { } durationSeconds)
     {
@@ -246,13 +241,13 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         cancellation.Cancel();
     };
 
-    DLog?.Invoke($"Initial mode: {initialMode}");
-    DLog?.Invoke($"Switch buttons: {switchButtons}");
-    DLog?.Invoke($"Mode switch enabled: {enableModeSwitch}");
+    DLog($"Initial mode: {initialMode}");
+    DLog($"Switch buttons: {switchButtons}");
+    DLog($"Mode switch enabled: {enableModeSwitch}");
 
     var mapper = new DefaultSteamControllerMapper();
 
-    DLog?.Invoke("Creating ViGEm virtual gamepad...");
+    DLog("Creating ViGEm virtual gamepad...");
     await using var gamepad = new ViGEmXbox360Sink();
     await using var haptics = new TritonHapticSink();
     var rumbleMapper = new XboxRumbleToSteamHapticsMapper();
@@ -268,13 +263,13 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             }
             catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
             {
-                Console.WriteLine($"Rumble haptics disabled after error: {exception.Message}");
+                DLog($"Rumble haptics disabled after error: {exception.Message}");
             }
         });
     };
 
     await gamepad.ConnectAsync(cancellation.Token);
-    DLog?.Invoke("Virtual Xbox 360 controller connected.");
+    DLog("Virtual Xbox 360 controller connected.");
     Console.WriteLine("Virtual Xbox 360 controller connected.");
     Console.WriteLine(enableModeSwitch
         ? $"Mode switch enabled. Current mode: {modeSwitcher.CurrentMode}."
@@ -292,22 +287,22 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         TritonSteamControllerSource? source = null;
         try
         {
-            DLog?.Invoke("Opening HID device...");
+            DLog("Opening HID device...");
             source = new TritonSteamControllerSource(
                 new SteamHidDiscovery(),
                 new TritonInputReportParser(),
                 readTimeoutMs: 20,
                 manageNativeLayer: true,
                 initialNativeLayerEnabled: modeSwitcher.WantsNativeLayer);
-            DLog?.Invoke("HID device opened.");
+            DLog($"HID device opened. nativeLayer={modeSwitcher.WantsNativeLayer}");
 
             await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
             {
-                DLog?.Invoke($"Frame: buttons={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} touch={state.LeftPad.IsTouched} click={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} touch={state.RightPad.IsTouched} click={state.RightPad.IsPressed})");
+                DLog($"Frame: btn={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} t={state.LeftPad.IsTouched} c={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} t={state.RightPad.IsTouched} c={state.RightPad.IsPressed})");
 
                 if (enableModeSwitch && modeSwitcher.Update(state))
                 {
-                    DLog?.Invoke($"*** MODE SWITCH -> {modeSwitcher.CurrentMode} ***");
+                    DLog($"*** MODE SWITCH -> {modeSwitcher.CurrentMode} ***");
                     mapper.ResetTransientState();
                     profileMapper.Reset();
                     await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
@@ -316,15 +311,16 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                 if (modeSwitcher.SteamLaunchRequested)
                 {
-                    DLog?.Invoke("*** Steam launch requested ***");
+                    DLog("*** Steam launch requested ***");
                     InputHelper.LaunchSteam();
                     await source.SetNativeLayerEnabledAsync(true);
                     Console.WriteLine("Steam launched, controller returned to native mode.");
                 }
                 else if (modeSwitcher.SteamKillRequested)
                 {
-                    DLog?.Invoke("*** Steam kill requested ***");
+                    DLog("*** Steam kill requested ***");
                     InputHelper.KillProcess("steam");
+                    DLog("Steam killed. Breaking source loop for fresh reconnection...");
                     Console.WriteLine("Steam killed, reconnecting controller...");
                     break;
                 }
@@ -346,17 +342,22 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                     if (profileMapper.OskToggleRequested)
                     {
+                        DLog($"OSK toggle requested. OskActive={profileMapper.OskActive}");
+
                         if (!profileMapper.OskActive)
                         {
-                            if (InputHelper.IsSteamWindowActive())
+                            bool steamActive = OperatingSystem.IsWindows() && InputHelper.IsSteamWindowActive();
+                            DLog($"IsSteamWindowActive={steamActive}");
+
+                            if (steamActive)
                             {
-                                DLog?.Invoke("OSK toggle blocked: Steam window is active. Kill Steam first (Y+Steam in Profile mode).");
+                                DLog("OSK toggle BLOCKED: Steam window is in foreground.");
                             }
                             else
                             {
                                 var oskDir = AppContext.BaseDirectory;
                                 var overlayPath = Path.Combine(oskDir, "Sc2Xboxed.Osk.exe");
-                                DLog?.Invoke($"OSK toggle: BaseDir={oskDir}, exe={File.Exists(overlayPath)}");
+                                DLog($"OSK launch: dir={oskDir} exe={File.Exists(overlayPath)}");
                                 if (File.Exists(overlayPath))
                                 {
                                     try
@@ -367,23 +368,23 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                             UseShellExecute = true
                                         };
                                         var proc = Process.Start(psi);
-                                        DLog?.Invoke($"OSK overlay launched: PID={proc?.Id}");
+                                        DLog($"OSK overlay launched: PID={proc?.Id}");
                                         profileMapper.OskActive = true;
                                     }
                                     catch (Exception ex)
                                     {
-                                        DLog?.Invoke($"OSK overlay start FAILED: {ex.GetType().Name}: {ex.Message}");
+                                        DLog($"OSK overlay start FAILED: {ex.GetType().Name}: {ex.Message}");
                                     }
                                 }
                                 else
                                 {
-                                    DLog?.Invoke($"OSK overlay exe NOT FOUND at: {overlayPath}");
+                                    DLog($"OSK overlay exe NOT FOUND at: {overlayPath}");
                                 }
                             }
                         }
                         else
                         {
-                            DLog?.Invoke("OSK overlay: stopping...");
+                            DLog("OSK overlay: stopping...");
                             bool signaled = false;
                             if (OperatingSystem.IsWindows())
                             {
@@ -392,11 +393,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                     using var closeHandle = EventWaitHandle.OpenExisting("SteamXBox_OskClose");
                                     closeHandle.Set();
                                     signaled = true;
-                                    DLog?.Invoke("OSK close event signaled.");
+                                    DLog("OSK close event signaled.");
                                 }
                                 catch (Exception ex)
                                 {
-                                    DLog?.Invoke($"OSK close event not found ({ex.GetType().Name}), falling back to Kill.");
+                                    DLog($"OSK close event not found ({ex.GetType().Name}), falling back to Kill.");
                                 }
                             }
 
@@ -409,7 +410,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             }
 
                             profileMapper.OskActive = false;
-                            DLog?.Invoke("OSK overlay: stopped.");
+                            DLog("OSK overlay stopped.");
                         }
                     }
 
@@ -454,28 +455,33 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     lastStatus = now;
                 }
             }
-            DLog?.Invoke("Main loop ended (no more frames).");
+            DLog("Main loop ended (no more frames).");
         }
         catch (OperationCanceledException)
         {
-            DLog?.Invoke("Cancelled (Ctrl+C or timeout).");
+            DLog("Cancelled (Ctrl+C or timeout).");
             break;
         }
         catch (Exception ex)
         {
-            DLog?.Invoke($"Connection lost: {ex.GetType().Name}: {ex.Message}");
+            DLog($"Connection error: {ex.GetType().Name}: {ex.Message}");
+            DLog($"Stack: {ex.StackTrace}");
         }
         finally
         {
             if (source is not null)
+            {
+                DLog("Disposing HID source...");
                 await source.DisposeAsync();
+                DLog("HID source disposed.");
+            }
         }
 
         if (cancellation.Token.IsCancellationRequested)
             break;
 
-        DLog?.Invoke("Waiting 3s for controller to reset...");
-        try { await Task.Delay(3000, cancellation.Token); }
+        DLog("Waiting 5s for controller to reset after disconnect...");
+        try { await Task.Delay(5000, cancellation.Token); }
         catch (OperationCanceledException) { break; }
 
         bool found = false;
@@ -484,18 +490,24 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             try
             {
                 var probeDiscovery = new SteamHidDiscovery();
-                if (probeDiscovery.FindPreferredControllerDevice() is not null)
+                var dev = probeDiscovery.FindPreferredControllerDevice();
+                if (dev is not null)
                 {
+                    DLog($"Controller found on retry {retry + 1}: PID=0x{dev.ProductID:X4} path={dev.DevicePath}");
                     found = true;
                     break;
                 }
+                DLog($"Controller not found on attempt {retry + 1}/5.");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                DLog($"Controller discovery error on attempt {retry + 1}/5: {ex.GetType().Name}: {ex.Message}");
+            }
 
             if (retry < 4)
             {
                 int delay = 1000 * (retry + 1);
-                DLog?.Invoke($"Controller not found, retry {retry + 1}/5 in {delay}ms...");
+                DLog($"Retrying in {delay}ms...");
                 try { await Task.Delay(delay, cancellation.Token); }
                 catch (OperationCanceledException) { break; }
             }
@@ -503,14 +515,18 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
         if (!found)
         {
-            DLog?.Invoke("Controller disconnected after retries. Exiting.");
+            DLog("Controller disconnected after 5 retries. Exiting.");
+            Console.WriteLine("Controller disconnected. Exiting.");
             break;
         }
+
+        DLog("Reconnection successful, resuming main loop.");
     }
 
-    DLog?.Invoke("Virtual Xbox 360 controller disconnected.");
+    DLog("Virtual Xbox 360 controller disconnected.");
     Console.WriteLine("Virtual Xbox 360 controller disconnected.");
     await padSender.DisposeAsync();
+    DLog("PadSender disposed.");
     logFile?.Dispose();
 }
 
