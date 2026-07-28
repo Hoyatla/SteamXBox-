@@ -99,21 +99,26 @@
         <!-- Right: Default read-only card -->
         <Border Grid.Column="1" Style="{StaticResource CardBorder}"
                 Visibility="{Binding IsEditingDefault, Converter={StaticResource BoolToVis}}"
-                VerticalAlignment="Top">
-            <StackPanel Margin="40">
-                <TextBlock Text="Profil par défaut" FontSize="18" FontWeight="Bold"
-                           Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"
-                           Margin="0,0,0,8"/>
-                <TextBlock Text="Le profil « Default » est le profil d'usine. Il n'est pas modifiable."
-                           FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"
-                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
-                <Button Content="🔄  Restaurer les paramètres d'usine" Command="{Binding ResetToFactoryDefaultsCommand}"
-                        Style="{StaticResource SecondaryButton}" Padding="16,8" HorizontalAlignment="Center"
-                        Margin="0,0,0,16"/>
-
-                <TextBlock Text="Valeurs d'usine" FontSize="14" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+                VerticalAlignment="Stretch">
+            <Grid Margin="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Profil par défaut" FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="Le profil « Default » est le profil d'usine. Il n'est pas modifiable."
+                               FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
+                    <Button Content="🔄  Restaurer les paramètres d'usine" Command="{Binding ResetToFactoryDefaultsCommand}"
+                            Style="{StaticResource SecondaryButton}" Padding="16,8" HorizontalAlignment="Center"
+                            Margin="0,0,0,16"/>
+                    <TextBlock Text="Valeurs d'usine" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                </StackPanel>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel TextElement.Foreground="{StaticResource TextSecondaryBrush}" TextElement.FontSize="12">
                         <TextBlock Text="Mouvements :" FontWeight="SemiBold" Margin="0,0,0,4"/>
                         <TextBlock Text="  Pad droit → Trackball (sensibilité 900 px/unité)"/>
@@ -137,7 +142,7 @@
                         <TextBlock Text="  DPad ← → Back       DPad → → Forward"/>
                     </StackPanel>
                 </ScrollViewer>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Right: editor panel -->

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SteamXBox.Gui.Models;
@@ -104,7 +105,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (_core.IsRunning) return;
         var profile = SelectedProfile ?? new ProfileData();
-        _core.Start(profile);
+        var corePath = _core.GetCorePath();
+        LogText += $"[{DateTime.Now:HH:mm:ss}] [INFO] Démarrage Core: {corePath} (exists={File.Exists(corePath)})\n";
+        if (!_core.Start(profile))
+        {
+            LogText += $"[{DateTime.Now:HH:mm:ss}] [ERROR] Échec du démarrage de Core\n";
+            StatusText = "Erreur au démarrage";
+            return;
+        }
         IsCoreRunning = true;
         StatusText = $"En cours ({profile.Mode})";
         CurrentMode = profile.Mode;

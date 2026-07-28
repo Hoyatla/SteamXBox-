@@ -36,11 +36,14 @@ public partial class ProfileViewModel : ObservableObject
 
     private void SyncActiveProfileName()
     {
-        var active = App.MainVm.SelectedProfile?.Name ?? "";
-        ActiveProfileName = active;
+        SetActiveHighlight(App.MainVm.SelectedProfile?.Name ?? "");
+    }
 
+    private void SetActiveHighlight(string name)
+    {
+        ActiveProfileName = name;
         foreach (var p in Profiles)
-            p.IsActive = p.Name == active;
+            p.IsActive = p.Name == name;
     }
 
     [RelayCommand]
@@ -59,6 +62,7 @@ public partial class ProfileViewModel : ObservableObject
         ActiveEdit = p;
         IsEditing = true;
         IsEditingDefault = false;
+        SetActiveHighlight(p.Name);
         StatusMessage = "Nouveau profil créé à partir de la configuration actuelle.";
     }
 
@@ -70,6 +74,7 @@ public partial class ProfileViewModel : ObservableObject
         IsEditing = true;
         IsEditingDefault = profile.Name == "Default";
         StatusMessage = "";
+        SetActiveHighlight(profile.Name);
     }
 
     [RelayCommand]

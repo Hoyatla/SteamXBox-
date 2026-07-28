@@ -29,11 +29,11 @@ public sealed class CoreProcessService : IDisposable
         return Path.GetFullPath(alt);
     }
 
-    public void Start(ProfileData profile)
+    public bool Start(ProfileData profile)
     {
         lock (_lock)
         {
-            if (IsRunning) return;
+            if (IsRunning) return false;
 
             _cts = new CancellationTokenSource();
             var corePath = GetCorePath();
@@ -41,7 +41,7 @@ public sealed class CoreProcessService : IDisposable
             if (!File.Exists(corePath))
             {
                 OutputReceived?.Invoke($"[ERROR] Core introuvable: {corePath}");
-                return;
+                return false;
             }
 
             var args = $"xbox-run --restart --start-mode {profile.Mode.ToLower()} --switch-button {profile.SwitchButton} --profile {profile.Name}";
@@ -83,11 +83,13 @@ public sealed class CoreProcessService : IDisposable
                 _coreProcess.BeginOutputReadLine();
                 _coreProcess.BeginErrorReadLine();
                 OutputReceived?.Invoke($"[INFO] Core démarré (PID {_coreProcess.Id})");
+                return true;
             }
             catch (Exception ex)
             {
                 OutputReceived?.Invoke($"[ERROR] Impossible de démarrer Core: {ex.Message}");
                 _coreProcess = null;
+                return false;
             }
         }
     }
