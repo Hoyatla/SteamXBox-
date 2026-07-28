@@ -17,7 +17,7 @@ if (args.Length > 0)
 {
     if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase))
     {
-        var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "steamxbox-debug.log");
+        var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
         var logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
         DebugLog = (string msg) =>
         {
@@ -245,7 +245,7 @@ static async Task RunHapticTestAsync(string[] args)
 
 static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = null)
 {
-    var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "steamxbox-debug.log");
+    var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
     StreamWriter? logFile = debugLog is not null ? null : new StreamWriter(logPath, append: false) { AutoFlush = true };
     var DLog = debugLog ?? ((string msg) =>
     {
