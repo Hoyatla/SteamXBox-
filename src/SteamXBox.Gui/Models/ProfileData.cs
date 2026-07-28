@@ -25,10 +25,10 @@ public sealed class ProfileData
     public bool RightPadInvertX { get; set; } = false;
 
     [JsonPropertyName("rightPadInvertY")]
-    public bool RightPadInvertY { get; set; } = false;
+    public bool RightPadInvertY { get; set; } = true;
 
     [JsonPropertyName("stickDeadZone")]
-    public double StickDeadZone { get; set; } = 0.08;
+    public double StickDeadZone { get; set; } = 0.5;
 
     [JsonPropertyName("motions")]
     public Dictionary<string, string> Motions { get; set; } = new()

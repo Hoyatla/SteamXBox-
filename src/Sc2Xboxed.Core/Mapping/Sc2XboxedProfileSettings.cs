@@ -2,9 +2,13 @@ namespace Sc2Xboxed.Core.Mapping;
 
 public sealed record Sc2XboxedProfileSettings
 {
-    public static Sc2XboxedProfileSettings Default { get; } = new();
+    public static Sc2XboxedProfileSettings Default { get; } = new()
+    {
+        RightPadTrackball = RightTouchpadTrackballSettings.Default with { InvertY = true },
+        LeftPadScroll = LeftTouchpadScrollSettings.Default with { InvertVertical = true, WheelDeltaPerPadUnit = 10.0 },
+    };
 
-    public double StickDeadZone { get; init; } = 0.08;
+    public double StickDeadZone { get; init; } = 0.5;
 
     public LeftTouchpadScrollSettings LeftPadScroll { get; init; } = LeftTouchpadScrollSettings.Default;
 

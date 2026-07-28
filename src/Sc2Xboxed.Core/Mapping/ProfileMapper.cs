@@ -52,7 +52,7 @@ public sealed class ProfileMapper
 		_stickDeadZone = settings.StickDeadZone;
 		_rightTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
 		_leftScroll = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
-		_leftTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball with { InvertY = settings.LeftPadScroll.InvertVertical });
+		_leftTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
 	}
 
 	public static Sc2XboxedProfileSettings LoadFromProfilesDirectory(string profileName)
@@ -72,10 +72,10 @@ public sealed class ProfileMapper
 			var root = doc.RootElement;
 
 			double sens = root.TryGetProperty("rightPadSensitivity", out var s) ? s.GetDouble() : 900.0;
-			bool invertY = root.TryGetProperty("rightPadInvertY", out var iy) && iy.GetBoolean();
+			bool invertY = root.TryGetProperty("rightPadInvertY", out var iy) ? iy.GetBoolean() : true;
 			bool invertX = root.TryGetProperty("rightPadInvertX", out var ix) && ix.GetBoolean();
-			double deadzone = root.TryGetProperty("stickDeadZone", out var dz) ? dz.GetDouble() : 0.08;
-			bool leftInvert = root.TryGetProperty("leftPadInvertVertical", out var li) && li.GetBoolean();
+			double deadzone = root.TryGetProperty("stickDeadZone", out var dz) ? dz.GetDouble() : 0.5;
+			bool leftInvert = root.TryGetProperty("leftPadInvertVertical", out var li) ? li.GetBoolean() : true;
 
 			return Sc2XboxedProfileSettings.Default with
 			{
