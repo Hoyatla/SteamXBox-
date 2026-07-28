@@ -13,6 +13,8 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _newProfileName = "";
     [ObservableProperty] private bool _isEditing;
     [ObservableProperty] private ProfileData? _activeEdit;
+    [ObservableProperty] private bool _isEditingDefault;
+    [ObservableProperty] private string _statusMessage = "";
 
     public ObservableCollection<ProfileData> Profiles => _service.Profiles;
 
@@ -28,10 +30,18 @@ public partial class ProfileViewModel : ObservableObject
     private void CreateNewProfile()
     {
         if (string.IsNullOrWhiteSpace(NewProfileName)) return;
-        var p = _service.CreateNew(NewProfileName.Trim());
+        var name = NewProfileName.Trim();
+        if (name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusMessage = "Impossible de créer un profil nommé 'Default'.";
+            return;
+        }
+        var p = _service.CreateNew(name);
         NewProfileName = "";
         ActiveEdit = p;
         IsEditing = true;
+        IsEditingDefault = false;
+        StatusMessage = "";
     }
 
     [RelayCommand]
@@ -40,26 +50,40 @@ public partial class ProfileViewModel : ObservableObject
         if (profile == null) return;
         ActiveEdit = profile;
         IsEditing = true;
+        IsEditingDefault = profile.Name == "Default";
+        StatusMessage = "";
     }
 
     [RelayCommand]
     private void SaveProfile()
     {
         if (ActiveEdit == null) return;
+        if (ActiveEdit.Name == "Default") return;
         _service.Save(ActiveEdit);
         IsEditing = false;
         ActiveEdit = null;
+        IsEditingDefault = false;
+    }
+
+    [RelayCommand]
+    private void ResetToFactoryDefaults()
+    {
+        var factory = new ProfileData { Name = "Default" };
+        _service.Save(factory);
+        StatusMessage = "Profil « Default » restauré aux valeurs d'usine.";
     }
 
     [RelayCommand]
     private void DeleteActiveProfile(ProfileData? profile)
     {
         if (profile == null) return;
+        if (profile.Name == "Default") return;
         _service.Delete(profile);
         if (ActiveEdit?.Name == profile.Name)
         {
             IsEditing = false;
             ActiveEdit = null;
+            IsEditingDefault = false;
         }
     }
 
@@ -68,5 +92,6 @@ public partial class ProfileViewModel : ObservableObject
     {
         IsEditing = false;
         ActiveEdit = null;
+        IsEditingDefault = false;
     }
 }

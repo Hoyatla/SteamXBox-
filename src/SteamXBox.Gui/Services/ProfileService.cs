@@ -15,7 +15,22 @@ public sealed class ProfileService
     public void LoadAll()
     {
         Profiles.Clear();
-        foreach (var p in ProfileData.LoadAll())
+
+        var list = ProfileData.LoadAll();
+
+        var defaultProfile = list.FirstOrDefault(p => p.Name == "Default");
+        if (defaultProfile is null)
+        {
+            defaultProfile = new ProfileData { Name = "Default" };
+            list.Insert(0, defaultProfile);
+        }
+
+        var ordered = list
+            .OrderBy(p => p.Name == "Default" ? 0 : 1)
+            .ThenBy(p => p.Name)
+            .ToList();
+
+        foreach (var p in ordered)
             Profiles.Add(p);
 
         ActiveProfile ??= Profiles.FirstOrDefault();
@@ -24,11 +39,18 @@ public sealed class ProfileService
     public void Save(ProfileData profile)
     {
         profile.Save();
-        var idx = Profiles.ToList().FindIndex(p => p.Name == profile.Name);
-        if (idx >= 0)
+
+        var existing = Profiles.FirstOrDefault(p => p.Name == profile.Name);
+        if (existing is not null)
+        {
+            var idx = Profiles.IndexOf(existing);
             Profiles[idx] = profile;
+        }
         else
-            Profiles.Add(profile);
+        {
+            var insertAt = Profiles.Count(p => p.Name != "Default");
+            Profiles.Insert(insertAt + 1, profile);
+        }
 
         if (ActiveProfile?.Name == profile.Name)
             ActiveProfile = profile;
@@ -38,6 +60,7 @@ public sealed class ProfileService
 
     public void Delete(ProfileData profile)
     {
+        if (profile.Name == "Default") return;
         profile.Delete();
         Profiles.Remove(profile);
         if (ActiveProfile?.Name == profile.Name)
@@ -46,6 +69,8 @@ public sealed class ProfileService
 
     public ProfileData CreateNew(string name)
     {
+        if (name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cannot create profile named 'Default'.");
         var p = new ProfileData { Name = name };
         Save(p);
         return p;
