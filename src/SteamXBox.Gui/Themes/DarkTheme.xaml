@@ -90,6 +90,15 @@
         <Setter Property="CaretBrush" Value="White"/>
     </Style>
 
+    <Style x:Key="ComboBoxItemDark" TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="8,6"/>
+    </Style>
+
+    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource ComboBoxItemDark}"/>
+
     <Style x:Key="ComboBoxDark" TargetType="ComboBox">
         <Setter Property="Background" Value="{StaticResource BgLightBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -97,6 +106,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="8,6"/>
         <Setter Property="FontSize" Value="13"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource ComboBoxItemDark}"/>
     </Style>
 
     <Style x:Key="ToggleSwitch" TargetType="CheckBox">
