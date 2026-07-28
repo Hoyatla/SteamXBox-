@@ -48,7 +48,7 @@ public sealed class SteamHidDiscovery
                     SafeInt(device.GetMaxOutputReportLength),
                     SafeInt(device.GetMaxFeatureReportLength),
                     CanOpen(device));
-                Log($"  Candidate PID=0x{device.ProductID:X4} input={c.InputReportLength} output={c.OutputReportLength} feature={c.FeatureReportLength} canOpen={c.CanOpen} isControllerState={c.IsControllerStateInterface}");
+                Log($"  Candidate PID=0x{device.ProductID:X4} input={c.InputReportLength} output={c.OutputReportLength} feature={c.FeatureReportLength} canOpen={c.CanOpen} isControllerState={c.IsControllerStateInterface} path={device.DevicePath}");
                 return c;
             })
             .ToArray();
@@ -71,13 +71,24 @@ public sealed class SteamHidDiscovery
             return preferred;
         }
 
-        Log("  No candidate passed IsControllerStateInterface filter. Falling back...");
+        Log("  No candidate passed IsControllerStateInterface filter. Trying all openable Valve devices...");
 
-        return candidates
-            .OrderByDescending(candidate => candidate.CanOpen)
+        var fallback = candidates
+            .Where(candidate => candidate.CanOpen && candidate.InputReportLength > 0)
+            .OrderByDescending(candidate => candidate.Device.ProductID == SteamHidConstants.SteamController2026ProductId)
+            .ThenByDescending(candidate => candidate.Device.ProductID == SteamHidConstants.SteamController2026BluetoothProductId)
             .ThenByDescending(candidate => candidate.InputReportLength)
             .Select(candidate => candidate.Device)
             .FirstOrDefault();
+
+        if (fallback is not null)
+        {
+            Log($"  Fallback: PID=0x{fallback.ProductID:X4} path={fallback.DevicePath}");
+            return fallback;
+        }
+
+        Log("  No openable device found at all.");
+        return null;
     }
 
     private static SteamHidDeviceInfo ToInfo(HidDevice device)

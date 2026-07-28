@@ -65,15 +65,15 @@ public static class Program
 
             var closeWatcher = new Thread(() =>
             {
-                if (closeEvent.WaitOne(TimeSpan.FromSeconds(15)))
+                while (!cts.Token.IsCancellationRequested)
                 {
-                    Log("Close event signaled, shutting down overlay.");
-                    try { form.Invoke(form.Close); }
-                    catch { try { form.Close(); } catch { } }
-                }
-                else
-                {
-                    Log("Close event timed out (15s), no signal received.");
+                    if (closeEvent.WaitOne(TimeSpan.FromSeconds(5)))
+                    {
+                        Log("Close event signaled, shutting down overlay.");
+                        try { form.Invoke(form.Close); }
+                        catch { try { form.Close(); } catch { } }
+                        return;
+                    }
                 }
             })
             {

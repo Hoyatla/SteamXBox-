@@ -74,7 +74,7 @@ static void LogHidEnumeration(Action<string> dlog)
             dlog($"  PID=0x{device.ProductID:X4} known={knownProduct} input={inputLen}{(inputErr != "" ? $" ERR({inputErr})" : "")} output={outputLen}{(outputErr != "" ? $" ERR({outputErr})" : "")} feature={featureLen}{(featureErr != "" ? $" ERR({featureErr})" : "")} canOpen={canOpen}{(openErr != "" ? $" ERR({openErr})" : "")} isControllerState={isControllerState} path={device.DevicePath}");
         }
 
-        var discovery = new SteamHidDiscovery();
+        var discovery = new SteamHidDiscovery(dlog);
         var preferred = discovery.FindPreferredControllerDevice();
         dlog($"FindPreferredControllerDevice result: {(preferred is null ? "NULL" : $"PID=0x{preferred.ProductID:X4} path={preferred.DevicePath}")}");
     }
@@ -513,6 +513,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         {
             DLog($"Connection error: {ex.GetType().Name}: {ex.Message}");
             DLog($"Stack: {ex.StackTrace}");
+            Console.WriteLine($"Connection error: {ex.Message}");
         }
         finally
         {
@@ -528,6 +529,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             break;
 
         DLog("Waiting 5s for controller to reset after disconnect...");
+        Console.WriteLine("Waiting for controller to reset...");
         try { await Task.Delay(5000, cancellation.Token); }
         catch (OperationCanceledException) { break; }
 
@@ -536,11 +538,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         {
             try
             {
-                var probeDiscovery = new SteamHidDiscovery();
+                var probeDiscovery = new SteamHidDiscovery(DLog);
                 var dev = probeDiscovery.FindPreferredControllerDevice();
                 if (dev is not null)
                 {
                     DLog($"Controller found on retry {retry + 1}: PID=0x{dev.ProductID:X4} path={dev.DevicePath}");
+                    Console.WriteLine($"Controller reconnected: PID=0x{dev.ProductID:X4}");
                     found = true;
                     break;
                 }
