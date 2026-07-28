@@ -1,10 +1,12 @@
 <UserControl x:Class="SteamXBox.Gui.Views.ProfileView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:SteamXBox.Gui.ViewModels">
+             xmlns:vm="clr-namespace:SteamXBox.Gui.ViewModels"
+             xmlns:Converters="clr-namespace:SteamXBox.Gui.Converters">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Converters:InvertedBoolToVisibilityConverter x:Key="InvertedBoolToVis"/>
     </UserControl.Resources>
 
     <Grid>
@@ -82,7 +84,7 @@
         </StackPanel>
 
         <Border Grid.Column="1" Style="{StaticResource CardBorder}"
-                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                Visibility="{Binding IsEditing, Converter={StaticResource InvertedBoolToVis}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="Sélectionnez un profil pour l'éditer"
                            Foreground="{StaticResource TextDimBrush}" FontSize="14"
@@ -109,7 +111,7 @@
                       Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
                       VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="4,0,0,0"
-                        Visibility="{Binding IsEditingDefault, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                        Visibility="{Binding IsEditingDefault, Converter={StaticResource InvertedBoolToVis}}">
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
