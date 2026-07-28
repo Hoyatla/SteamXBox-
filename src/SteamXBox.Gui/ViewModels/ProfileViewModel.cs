@@ -60,9 +60,7 @@ public partial class ProfileViewModel : ObservableObject
         if (ActiveEdit == null) return;
         if (ActiveEdit.Name == "Default") return;
         _service.Save(ActiveEdit);
-        IsEditing = false;
-        ActiveEdit = null;
-        IsEditingDefault = false;
+        StatusMessage = "Profil sauvegardé.";
     }
 
     [RelayCommand]
