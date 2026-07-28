@@ -15,6 +15,7 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private ProfileData? _activeEdit;
     [ObservableProperty] private bool _isEditingDefault;
     [ObservableProperty] private string _statusMessage = "";
+    [ObservableProperty] private string _activeProfileName = "";
 
     public ObservableCollection<ProfileData> Profiles => _service.Profiles;
 
@@ -24,6 +25,22 @@ public partial class ProfileViewModel : ObservableObject
     public ProfileViewModel()
     {
         _service = App.ProfileSvc;
+        SyncActiveProfileName();
+
+        App.MainVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedProfile))
+                SyncActiveProfileName();
+        };
+    }
+
+    private void SyncActiveProfileName()
+    {
+        var active = App.MainVm.SelectedProfile?.Name ?? "";
+        ActiveProfileName = active;
+
+        foreach (var p in Profiles)
+            p.IsActive = p.Name == active;
     }
 
     [RelayCommand]
@@ -36,12 +53,13 @@ public partial class ProfileViewModel : ObservableObject
             StatusMessage = "Impossible de créer un profil nommé 'Default'.";
             return;
         }
-        var p = _service.CreateNew(name);
+        var source = App.MainVm.SelectedProfile ?? new ProfileData();
+        var p = _service.CreateNew(name, source);
         NewProfileName = "";
         ActiveEdit = p;
         IsEditing = true;
         IsEditingDefault = false;
-        StatusMessage = "";
+        StatusMessage = "Nouveau profil créé à partir de la configuration actuelle.";
     }
 
     [RelayCommand]

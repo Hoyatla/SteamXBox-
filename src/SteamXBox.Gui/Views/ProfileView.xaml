@@ -30,6 +30,9 @@
                                         <DataTrigger Binding="{Binding Name}" Value="Default">
                                             <Setter Property="Background" Value="#FF222233"/>
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
@@ -97,7 +100,7 @@
         <Border Grid.Column="1" Style="{StaticResource CardBorder}"
                 Visibility="{Binding IsEditingDefault, Converter={StaticResource BoolToVis}}"
                 VerticalAlignment="Top">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
+            <StackPanel Margin="40">
                 <TextBlock Text="Profil par défaut" FontSize="18" FontWeight="Bold"
                            Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"
                            Margin="0,0,0,8"/>
@@ -105,7 +108,35 @@
                            FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"
                            TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
                 <Button Content="🔄  Restaurer les paramètres d'usine" Command="{Binding ResetToFactoryDefaultsCommand}"
-                        Style="{StaticResource SecondaryButton}" Padding="16,8"/>
+                        Style="{StaticResource SecondaryButton}" Padding="16,8" HorizontalAlignment="Center"
+                        Margin="0,0,0,16"/>
+
+                <TextBlock Text="Valeurs d'usine" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+                    <StackPanel TextElement.Foreground="{StaticResource TextSecondaryBrush}" TextElement.FontSize="12">
+                        <TextBlock Text="Mouvements :" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="  Pad droit → Trackball (sensibilité 900 px/unité)"/>
+                        <TextBlock Text="  Pad gauche → Scroll (molette 10 px/pas)"/>
+                        <TextBlock Text="  Stick gauche → Flèches directionnelles"/>
+                        <TextBlock Text="  Inversion Y pad droit : Activée"/>
+                        <TextBlock Text="  Inversion X pad droit : Désactivée"/>
+                        <TextBlock Text="  Inversion verticale pad gauche : Activée"/>
+                        <TextBlock Text="  Dead zone stick : 0.5 (50%)"/>
+                        <TextBlock Text="  Dead zone stick Xbox : 0.08 (8%)"/>
+                        <TextBlock Text=" " Margin="0,8,0,0"/>
+                        <TextBlock Text="Boutons :" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="  L4 → PrintScreen    R4 → Win+G"/>
+                        <TextBlock Text="  L5 → Win+R          R5 → Alt+F4"/>
+                        <TextBlock Text="  LB → Alt+Tab        RB → Win+Tab"/>
+                        <TextBlock Text="  A → OSK Toggle      B → OSK Toggle"/>
+                        <TextBlock Text="  X → Alt+←           Y → Alt+→"/>
+                        <TextBlock Text="  L3 → Enter          R3 → Aucun"/>
+                        <TextBlock Text="  Menu → Win          View → Win+D"/>
+                        <TextBlock Text="  DPad ↑ → Volume+    DPad ↓ → Volume-"/>
+                        <TextBlock Text="  DPad ← → Back       DPad → → Forward"/>
+                    </StackPanel>
+                </ScrollViewer>
             </StackPanel>
         </Border>
 

@@ -1,0 +1,10 @@
+[17:29:58.391] OSK overlay starting. BaseDir=D:\sauv.minecraft\Modspack perso\Mods\Projets\SteamXBox-portable-win-x64\
+[17:29:58.845] Overlay form created.
+[17:29:58.845] Close signal path: D:\sauv.minecraft\Modspack perso\Mods\Projets\SteamXBox-portable-win-x64\osk-close.signal
+[17:29:58.845] Close watcher started (file-based signal).
+[17:29:58.850] Reader + haptics created, starting pipe loop...
+[17:29:58.923] OSK: pipe connected, keyboard active.
+[17:29:58.950] Overlay form shown.
+[17:30:00.716] Close signal file detected, shutting down overlay.
+[17:30:00.750] Application.Run exited.
+[17:30:00.763] Overlay stopped.

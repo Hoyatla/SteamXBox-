@@ -6,6 +6,9 @@ namespace SteamXBox.Gui.Models;
 
 public sealed class ProfileData
 {
+    [JsonIgnore]
+    public bool IsActive { get; set; }
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = "Default";
 
@@ -99,5 +102,23 @@ public sealed class ProfileData
                      .Where(p => p != null)
                      .Cast<ProfileData>()
                      .ToList();
+    }
+
+    public ProfileData Clone()
+    {
+        return new ProfileData
+        {
+            Name = Name,
+            Mode = Mode,
+            SwitchButton = SwitchButton,
+            RightPadSensitivity = RightPadSensitivity,
+            LeftPadInvertVertical = LeftPadInvertVertical,
+            RightPadInvertX = RightPadInvertX,
+            RightPadInvertY = RightPadInvertY,
+            StickDeadZone = StickDeadZone,
+            XboxStickDeadZone = XboxStickDeadZone,
+            Motions = new Dictionary<string, string>(Motions),
+            Buttons = new Dictionary<string, string>(Buttons),
+        };
     }
 }

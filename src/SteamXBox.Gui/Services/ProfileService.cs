@@ -69,9 +69,15 @@ public sealed class ProfileService
 
     public ProfileData CreateNew(string name)
     {
+        return CreateNew(name, new ProfileData());
+    }
+
+    public ProfileData CreateNew(string name, ProfileData source)
+    {
         if (name.Equals("Default", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Cannot create profile named 'Default'.");
-        var p = new ProfileData { Name = name };
+        var p = source.Clone();
+        p.Name = name;
         Save(p);
         return p;
     }
