@@ -7,6 +7,7 @@ namespace SteamXBox.Gui.Services;
 public sealed class CoreProcessService : IDisposable
 {
     private Process? _coreProcess;
+    private int _runningPid;
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
 
@@ -56,33 +57,46 @@ public sealed class CoreProcessService : IDisposable
                 CreateNoWindow = true,
             };
 
-            _coreProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            _coreProcess = process;
 
-            _coreProcess.OutputDataReceived += (_, e) =>
+            var pid = 0;
+
+            process.OutputDataReceived += (_, e) =>
             {
                 if (e.Data != null)
                     OutputReceived?.Invoke(e.Data);
             };
 
-            _coreProcess.ErrorDataReceived += (_, e) =>
+            process.ErrorDataReceived += (_, e) =>
             {
                 if (e.Data != null)
                     OutputReceived?.Invoke($"[ERR] {e.Data}");
             };
 
-            _coreProcess.Exited += (_, _) =>
+            process.Exited += (_, _) =>
             {
-                var code = _coreProcess?.ExitCode ?? -1;
-                OutputReceived?.Invoke($"[INFO] Core arrêté (code {code})");
-                ProcessExited?.Invoke(code);
+                int code = -1;
+                try { code = process.ExitCode; } catch { }
+                if (pid != 0 && pid == _runningPid)
+                {
+                    OutputReceived?.Invoke($"[INFO] Core arrêté (code {code})");
+                    ProcessExited?.Invoke(code);
+                }
+                else
+                {
+                    OutputReceived?.Invoke($"[INFO] Core arrêté (code {code}) — ignoré (processus suivant déjà démarré)");
+                }
             };
 
             try
             {
-                _coreProcess.Start();
-                _coreProcess.BeginOutputReadLine();
-                _coreProcess.BeginErrorReadLine();
-                OutputReceived?.Invoke($"[INFO] Core démarré (PID {_coreProcess.Id})");
+                process.Start();
+                pid = process.Id;
+                _runningPid = pid;
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                OutputReceived?.Invoke($"[INFO] Core démarré (PID {pid})");
                 return true;
             }
             catch (Exception ex)
@@ -122,6 +136,7 @@ public sealed class CoreProcessService : IDisposable
             }
             finally
             {
+                _runningPid = 0;
                 _coreProcess?.Dispose();
                 _coreProcess = null;
             }
