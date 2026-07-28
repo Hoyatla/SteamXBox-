@@ -20,8 +20,12 @@ public partial class MainWindow : Window
             Icon = new BitmapImage(iconUri);
         }
         catch { }
-        _views = [HomeView, ProfileView, XboxView, SettingsView, LogView, DebugView];
+
+        ProfileView.DataContext = new ProfileViewModel();
+        SettingsView.DataContext = new SettingsViewModel();
         DebugView.DataContext = App.DebugVm;
+
+        _views = [HomeView, ProfileView, XboxView, SettingsView, LogView, DebugView];
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)

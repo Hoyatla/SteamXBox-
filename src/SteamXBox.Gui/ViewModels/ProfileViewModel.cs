@@ -21,9 +21,9 @@ public partial class ProfileViewModel : ObservableObject
     public string[] AvailableModes { get; } = ["Profile", "Xbox360"];
     public string[] AvailableSwitchButtons { get; } = ["quick-access", "steam", "steam-or-quick-access"];
 
-    public ProfileViewModel(ProfileService service)
+    public ProfileViewModel()
     {
-        _service = service;
+        _service = App.ProfileSvc;
     }
 
     [RelayCommand]
