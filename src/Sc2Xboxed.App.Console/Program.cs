@@ -41,6 +41,51 @@ await RunXbox360LiveAsync(new[]
     "quick-access"
 }, null);
 
+static void LogHidEnumeration(Action<string> dlog)
+{
+    dlog("--- HID Enumeration Start ---");
+    try
+    {
+        var allValve = HidSharp.DeviceList.Local
+            .GetHidDevices(SteamHidConstants.ValveVendorId)
+            .ToArray();
+        dlog($"Total Valve HID devices: {allValve.Length}");
+
+        foreach (var device in allValve)
+        {
+            int inputLen = 0, outputLen = 0, featureLen = 0;
+            string inputErr = "", outputErr = "", featureErr = "";
+            try { inputLen = device.GetMaxInputReportLength(); } catch (Exception ex) { inputErr = $"{ex.GetType().Name}:{ex.Message}"; }
+            try { outputLen = device.GetMaxOutputReportLength(); } catch (Exception ex) { outputErr = $"{ex.GetType().Name}:{ex.Message}"; }
+            try { featureLen = device.GetMaxFeatureReportLength(); } catch (Exception ex) { featureErr = $"{ex.GetType().Name}:{ex.Message}"; }
+
+            bool canOpen = false;
+            string openErr = "";
+            try
+            {
+                if (device.TryOpen(out var s)) { canOpen = true; s.Dispose(); }
+                else { openErr = "TryOpen=false"; }
+            }
+            catch (Exception ex) { openErr = $"{ex.GetType().Name}:{ex.Message}"; }
+
+            bool knownProduct = SteamHidConstants.IsKnownSteamControllerProduct(device.ProductID);
+            bool isControllerState = inputLen >= 54 && outputLen > 0 && featureLen > 0;
+
+            dlog($"  PID=0x{device.ProductID:X4} known={knownProduct} input={inputLen}{(inputErr != "" ? $" ERR({inputErr})" : "")} output={outputLen}{(outputErr != "" ? $" ERR({outputErr})" : "")} feature={featureLen}{(featureErr != "" ? $" ERR({featureErr})" : "")} canOpen={canOpen}{(openErr != "" ? $" ERR({openErr})" : "")} isControllerState={isControllerState} path={device.DevicePath}");
+        }
+
+        var discovery = new SteamHidDiscovery();
+        var preferred = discovery.FindPreferredControllerDevice();
+        dlog($"FindPreferredControllerDevice result: {(preferred is null ? "NULL" : $"PID=0x{preferred.ProductID:X4} path={preferred.DevicePath}")}");
+    }
+    catch (Exception ex)
+    {
+        dlog($"HID enumeration EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+        dlog(ex.StackTrace ?? "");
+    }
+    dlog("--- HID Enumeration End ---");
+}
+
 static void RunMappingSanityCheck()
 {
     var mapper = new DefaultSteamControllerMapper();
@@ -288,12 +333,14 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         try
         {
             DLog("Opening HID device...");
+            LogHidEnumeration(DLog);
             source = new TritonSteamControllerSource(
-                new SteamHidDiscovery(),
+                new SteamHidDiscovery(DLog),
                 new TritonInputReportParser(),
                 readTimeoutMs: 20,
                 manageNativeLayer: true,
-                initialNativeLayerEnabled: modeSwitcher.WantsNativeLayer);
+                initialNativeLayerEnabled: modeSwitcher.WantsNativeLayer,
+                log: DLog);
             DLog($"HID device opened. nativeLayer={modeSwitcher.WantsNativeLayer}");
 
             await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))

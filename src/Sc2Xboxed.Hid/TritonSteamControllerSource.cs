@@ -24,7 +24,8 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
             new TritonInputReportParser(),
             readTimeoutMs: 20,
             manageNativeLayer: true,
-            initialNativeLayerEnabled: false)
+            initialNativeLayerEnabled: false,
+            log: null)
     {
     }
 
@@ -33,7 +34,8 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
         TritonInputReportParser parser,
         int readTimeoutMs,
         bool manageNativeLayer,
-        bool initialNativeLayerEnabled)
+        bool initialNativeLayerEnabled,
+        Action<string>? log = null)
     {
         _discovery = discovery;
         _parser = parser;

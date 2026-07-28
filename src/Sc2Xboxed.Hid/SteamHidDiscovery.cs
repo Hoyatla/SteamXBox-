@@ -4,6 +4,17 @@ namespace Sc2Xboxed.Hid;
 
 public sealed class SteamHidDiscovery
 {
+    private readonly Action<string>? _log;
+
+    public SteamHidDiscovery() : this(null) { }
+
+    public SteamHidDiscovery(Action<string>? log)
+    {
+        _log = log;
+    }
+
+    private void Log(string msg) => _log?.Invoke($"[Discovery] {msg}");
+
     public IReadOnlyList<SteamHidDeviceInfo> ListValveDevices()
     {
         return DeviceList.Local
@@ -17,15 +28,29 @@ public sealed class SteamHidDiscovery
 
     public HidDevice? FindPreferredControllerDevice()
     {
-        var candidates = DeviceList.Local
+        var allValve = DeviceList.Local
             .GetHidDevices(SteamHidConstants.ValveVendorId)
-            .Where(device => SteamHidConstants.IsKnownSteamControllerProduct(device.ProductID))
-            .Select(device => new HidDeviceCandidate(
-                device,
-                SafeInt(device.GetMaxInputReportLength),
-                SafeInt(device.GetMaxOutputReportLength),
-                SafeInt(device.GetMaxFeatureReportLength),
-                CanOpen(device)))
+            .ToArray();
+        Log($"FindPreferred: {allValve.Length} total Valve HID devices");
+
+        var candidates = allValve
+            .Where(device =>
+            {
+                bool known = SteamHidConstants.IsKnownSteamControllerProduct(device.ProductID);
+                if (!known) Log($"  Skipping PID=0x{device.ProductID:X4} (not a known product)");
+                return known;
+            })
+            .Select(device =>
+            {
+                var c = new HidDeviceCandidate(
+                    device,
+                    SafeInt(device.GetMaxInputReportLength),
+                    SafeInt(device.GetMaxOutputReportLength),
+                    SafeInt(device.GetMaxFeatureReportLength),
+                    CanOpen(device));
+                Log($"  Candidate PID=0x{device.ProductID:X4} input={c.InputReportLength} output={c.OutputReportLength} feature={c.FeatureReportLength} canOpen={c.CanOpen} isControllerState={c.IsControllerStateInterface}");
+                return c;
+            })
             .ToArray();
 
         var preferred = candidates
@@ -41,7 +66,12 @@ public sealed class SteamHidDiscovery
             .FirstOrDefault();
 
         if (preferred is not null)
+        {
+            Log($"  Preferred: PID=0x{preferred.ProductID:X4} path={preferred.DevicePath}");
             return preferred;
+        }
+
+        Log("  No candidate passed IsControllerStateInterface filter. Falling back...");
 
         return candidates
             .OrderByDescending(candidate => candidate.CanOpen)
