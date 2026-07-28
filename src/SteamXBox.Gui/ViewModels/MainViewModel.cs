@@ -45,10 +45,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
             });
         };
 
-        _core.ProcessExited += _ =>
+        _core.ProcessExited += code =>
         {
             App.Current.Dispatcher.BeginInvoke(() =>
             {
+                if (_core.IsRunning)
+                {
+                    LogText += $"[{DateTime.Now:HH:mm:ss}] [WARN] Stale ProcessExited ignored (core is still running)\n";
+                    return;
+                }
+                LogText += $"[{DateTime.Now:HH:mm:ss}] [INFO] Core arrêté (code {code})\n";
                 IsCoreRunning = false;
                 StatusText = "Arrêté";
                 App.DebugVm?.UpdateCoreStatus(false);
