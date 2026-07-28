@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -104,6 +105,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void StartCore()
     {
         if (_core.IsRunning) return;
+
+        // Tue tous les Core.exe orphelins (quel que soit le chemin)
+        foreach (var p in Process.GetProcessesByName("SteamXBox.Core"))
+        {
+            try { p.Kill(entireProcessTree: true); p.WaitForExit(3000); } catch { }
+        }
+
         var profile = SelectedProfile ?? new ProfileData();
         var corePath = _core.GetCorePath();
         LogText += $"[{DateTime.Now:HH:mm:ss}] [INFO] Démarrage Core: {corePath} (exists={File.Exists(corePath)})\n";
