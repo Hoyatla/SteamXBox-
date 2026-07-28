@@ -84,7 +84,7 @@
             <StackPanel>
                 <TextBlock Text="À propos" FontSize="16" FontWeight="SemiBold"
                            Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-                <TextBlock Text="SteamXBox v2.1" FontSize="14"
+                <TextBlock Text="SteamXBox v2.3" FontSize="14"
                            Foreground="{StaticResource TextPrimaryBrush}"/>
                 <TextBlock Text="Steam Controller → Xbox 360 Virtual Gamepad Bridge"
                            FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>

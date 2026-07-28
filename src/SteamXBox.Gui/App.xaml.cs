@@ -6,6 +6,7 @@ namespace SteamXBox.Gui;
 public partial class App : Application
 {
     public static MainViewModel MainVm { get; private set; } = null!;
+    public static DebugViewModel DebugVm { get; private set; } = null!;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -15,6 +16,7 @@ public partial class App : Application
         profileService.LoadAll();
 
         MainVm = new MainViewModel();
+        DebugVm = new DebugViewModel();
     }
 
     protected override void OnExit(ExitEventArgs e)

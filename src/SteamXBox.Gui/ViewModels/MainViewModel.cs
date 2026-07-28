@@ -51,6 +51,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 IsCoreRunning = false;
                 StatusText = "Arrêté";
+                App.DebugVm?.UpdateCoreStatus(false);
             });
         };
 
@@ -60,6 +61,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 IsDeviceConnected = dev.IsConnected;
                 DeviceName = dev.IsConnected ? dev.DisplayName : "Aucun device";
+                App.DebugVm?.UpdateDeviceStatus(dev.IsConnected, DeviceName);
 
                 if (AutoStart && dev.IsConnected && !_wasDeviceConnected && !IsCoreRunning)
                     StartCore();
@@ -100,6 +102,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsCoreRunning = true;
         StatusText = $"En cours ({profile.Mode})";
         CurrentMode = profile.Mode;
+        App.DebugVm?.UpdateCoreStatus(true);
     }
 
     [RelayCommand]
@@ -108,6 +111,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _core.Stop();
         IsCoreRunning = false;
         StatusText = "Arrêté";
+        App.DebugVm?.UpdateCoreStatus(false);
     }
 
     [RelayCommand]
@@ -128,7 +132,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
             CurrentMode = value.Mode;
             _settings.Settings.LastActiveProfile = value.Name;
             _settings.Save();
+            if (IsCoreRunning)
+                StatusText = $"En cours ({value.Mode})";
         }
+    }
+
+    partial void OnCurrentModeChanged(string value)
+    {
+        App.DebugVm?.UpdateDriverStatus(true, true);
+        if (IsCoreRunning)
+            StatusText = $"En cours ({value})";
     }
 
     partial void OnAutoStartChanged(bool value)

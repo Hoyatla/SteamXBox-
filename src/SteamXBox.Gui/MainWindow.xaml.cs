@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using SteamXBox.Gui.Views;
+using SteamXBox.Gui.ViewModels;
 
 namespace SteamXBox.Gui;
 
@@ -19,7 +20,8 @@ public partial class MainWindow : Window
             Icon = new BitmapImage(iconUri);
         }
         catch { }
-        _views = [HomeView, ProfileView, SettingsView, LogView];
+        _views = [HomeView, ProfileView, XboxView, SettingsView, LogView, DebugView];
+        DebugView.DataContext = App.DebugVm;
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)

@@ -84,9 +84,13 @@
                                 Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
                         <Button Content="📋  Profils" Tag="1" Click="Nav_Click"
                                 Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="⚙  Paramètres" Tag="2" Click="Nav_Click"
+                        <Button Content="🎮  Xbox" Tag="2" Click="Nav_Click"
                                 Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="📄  Log" Tag="3" Click="Nav_Click"
+                        <Button Content="⚙  Paramètres" Tag="3" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                        <Button Content="📄  Logs" Tag="4" Click="Nav_Click"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                        <Button Content="🔧  Debug" Tag="5" Click="Nav_Click"
                                 Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
                     </StackPanel>
                 </DockPanel>
@@ -95,8 +99,10 @@
             <Grid Grid.Column="1">
                 <views:HomeView x:Name="HomeView" Margin="24"/>
                 <views:ProfileView x:Name="ProfileView" Margin="24" Visibility="Collapsed"/>
+                <views:XboxView x:Name="XboxView" Margin="24" Visibility="Collapsed"/>
                 <views:SettingsView x:Name="SettingsView" Margin="24" Visibility="Collapsed"/>
                 <views:LogView x:Name="LogView" Margin="24" Visibility="Collapsed"/>
+                <views:DebugView x:Name="DebugView" Margin="24" Visibility="Collapsed"/>
             </Grid>
         </Grid>
     </Grid>
