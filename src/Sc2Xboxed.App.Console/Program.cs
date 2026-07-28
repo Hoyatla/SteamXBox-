@@ -438,14 +438,14 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             {
                                 try
                                 {
-                                    using var closeHandle = EventWaitHandle.OpenExisting("SteamXBox_OskClose");
-                                    closeHandle.Set();
+                                    var closeSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-close.signal");
+                                    File.WriteAllText(closeSignalPath, DateTime.UtcNow.Ticks.ToString());
                                     signaled = true;
-                                    DLog("OSK close event signaled.");
+                                    DLog($"OSK close signal file written: {closeSignalPath}");
                                 }
                                 catch (Exception ex)
                                 {
-                                    DLog($"OSK close event not found ({ex.GetType().Name}), falling back to Kill.");
+                                    DLog($"OSK close signal file write failed ({ex.GetType().Name}): {ex.Message}");
                                 }
                             }
 
@@ -529,14 +529,38 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         if (cancellation.Token.IsCancellationRequested)
             break;
 
-        DLog("Waiting 5s for controller to reset after disconnect...");
+        DLog("Waiting 10s for controller to reset after disconnect...");
         Console.WriteLine("Waiting for controller to reset...");
-        try { await Task.Delay(5000, cancellation.Token); }
+        try { await Task.Delay(10000, cancellation.Token); }
         catch (OperationCanceledException) { break; }
 
         bool found = false;
-        for (int retry = 0; retry < 5; retry++)
+        for (int retry = 0; retry < 10; retry++)
         {
+            DLog($"Reconnection attempt {retry + 1}/10 - enumerating all Valve HID devices...");
+
+            try
+            {
+                var allValve = HidSharp.DeviceList.Local
+                    .GetHidDevices(SteamHidConstants.ValveVendorId)
+                    .ToArray();
+                DLog($"  Visible Valve HID devices: {allValve.Length}");
+                foreach (var dev in allValve)
+                {
+                    int inLen = 0, outLen = 0, featLen = 0;
+                    bool canOpen = false;
+                    try { inLen = dev.GetMaxInputReportLength(); } catch { }
+                    try { outLen = dev.GetMaxOutputReportLength(); } catch { }
+                    try { featLen = dev.GetMaxFeatureReportLength(); } catch { }
+                    try { if (dev.TryOpen(out var s)) { canOpen = true; s.Dispose(); } } catch { }
+                    DLog($"    PID=0x{dev.ProductID:X4} in={inLen} out={outLen} feat={featLen} canOpen={canOpen} path={dev.DevicePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                DLog($"  Enumeration error: {ex.GetType().Name}: {ex.Message}");
+            }
+
             try
             {
                 var probeDiscovery = new SteamHidDiscovery(DLog);
@@ -548,16 +572,16 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     found = true;
                     break;
                 }
-                DLog($"Controller not found on attempt {retry + 1}/5.");
+                DLog($"Controller not found on attempt {retry + 1}/10.");
             }
             catch (Exception ex)
             {
-                DLog($"Controller discovery error on attempt {retry + 1}/5: {ex.GetType().Name}: {ex.Message}");
+                DLog($"Controller discovery error on attempt {retry + 1}/10: {ex.GetType().Name}: {ex.Message}");
             }
 
-            if (retry < 4)
+            if (retry < 9)
             {
-                int delay = 1000 * (retry + 1);
+                int delay = 2000 * (retry + 1);
                 DLog($"Retrying in {delay}ms...");
                 try { await Task.Delay(delay, cancellation.Token); }
                 catch (OperationCanceledException) { break; }
@@ -566,7 +590,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
         if (!found)
         {
-            DLog("Controller disconnected after 5 retries. Exiting.");
+            DLog("Controller disconnected after 10 retries. Exiting.");
             Console.WriteLine("Controller disconnected. Exiting.");
             break;
         }

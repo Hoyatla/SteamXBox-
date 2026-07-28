@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using SteamXBox.Gui.Views;
 
 namespace SteamXBox.Gui;
@@ -12,6 +13,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute);
+            Icon = new BitmapImage(iconUri);
+        }
+        catch { }
         _views = [HomeView, ProfileView, SettingsView, LogView];
     }
 

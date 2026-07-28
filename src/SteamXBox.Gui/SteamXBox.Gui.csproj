@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>SteamXBox</AssemblyName>
     <RootNamespace>SteamXBox.Gui</RootNamespace>
-    <ApplicationIcon>..\..\SteamXBox.ico</ApplicationIcon>
+    <ApplicationIcon>SteamXBox.ico</ApplicationIcon>
     <Product>SteamXBox</Product>
     <AssemblyTitle>SteamXBox GUI</AssemblyTitle>
     <Description>SteamXBox - Steam Controller to Xbox 360 bridge GUI.</Description>
@@ -26,6 +26,11 @@
   <ItemGroup>
     <None Remove="Resources\paypal-support.gif" />
     <Resource Include="Resources\paypal-support.gif" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\app.ico" />
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
   <ItemGroup>

@@ -57,35 +57,35 @@ public static class Program
         var cts = new CancellationTokenSource();
         form.FormClosing += (_, _) => cts.Cancel();
 
-        EventWaitHandle? closeEvent = null;
-        try
-        {
-            closeEvent = new EventWaitHandle(false, EventResetMode.ManualReset, "SteamXBox_OskClose");
-            Log("Close event handle created.");
+        var closeSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-close.signal");
+        try { if (File.Exists(closeSignalPath)) File.Delete(closeSignalPath); } catch { }
+        Log($"Close signal path: {closeSignalPath}");
 
-            var closeWatcher = new Thread(() =>
+        var closeWatcher = new Thread(() =>
+        {
+            while (!cts.Token.IsCancellationRequested)
             {
-                while (!cts.Token.IsCancellationRequested)
+                try
                 {
-                    if (closeEvent.WaitOne(TimeSpan.FromSeconds(5)))
+                    if (File.Exists(closeSignalPath))
                     {
-                        Log("Close event signaled, shutting down overlay.");
+                        File.Delete(closeSignalPath);
+                        Log("Close signal file detected, shutting down overlay.");
                         try { form.Invoke(form.Close); }
                         catch { try { form.Close(); } catch { } }
                         return;
                     }
                 }
-            })
-            {
-                IsBackground = true,
-                Name = "OskCloseWatcher"
-            };
-            closeWatcher.Start();
-        }
-        catch (Exception ex)
+                catch { }
+                Thread.Sleep(300);
+            }
+        })
         {
-            Log($"Failed to create close event handle: {ex.Message}");
-        }
+            IsBackground = true,
+            Name = "OskCloseWatcher"
+        };
+        closeWatcher.Start();
+        Log("Close watcher started (file-based signal).");
 
         var reader = new PadInputReader();
         var haptics = new HapticFeedback();
@@ -110,7 +110,6 @@ public static class Program
         reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         haptics.DisposeAsync().AsTask().GetAwaiter().GetResult();
         bgThread.Join(3000);
-        closeEvent?.Dispose();
         Log("Overlay stopped.");
     }
 
