@@ -6,8 +6,6 @@ namespace SteamXBox.Gui.Models;
 
 public sealed class ProfileData
 {
-    [JsonIgnore]
-    public bool IsActive { get; set; }
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = "Default";

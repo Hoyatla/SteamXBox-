@@ -111,7 +111,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         Process.Start(new ProcessStartInfo
         {
-            FileName = "https://github.com/ViGEm/HidHide/releases",
+            FileName = "https://github.com/nefarius/HidHide/releases/tag/v1.5.230.0",
             UseShellExecute = true,
         });
     }
@@ -128,7 +128,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         Process.Start(new ProcessStartInfo
         {
-            FileName = "https://github.com/ViGEm/ViGEmBus/releases",
+            FileName = "https://github.com/nefarius/ViGEmBus/releases/tag/v1.21.442.0",
             UseShellExecute = true,
         });
     }

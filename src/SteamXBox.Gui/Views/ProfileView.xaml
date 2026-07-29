@@ -7,6 +7,39 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Converters:InvertedBoolToVisibilityConverter x:Key="InvertedBoolToVis"/>
+        <Style x:Key="ProfileListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="{StaticResource BgLightBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}" Margin="{TemplateBinding Margin}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Cursor="{TemplateBinding Cursor}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding Name}" Value="Default">
+                    <Setter Property="Background" Value="#FF222233"/>
+                </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Name}" Value="Default"/>
+                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -19,57 +52,39 @@
         <StackPanel Grid.Column="0" Margin="0,0,16,0">
             <TextBlock Text="Profils" Style="{StaticResource HeaderText}" Margin="0,0,0,12"/>
 
-            <ItemsControl ItemsSource="{Binding Profiles}">
-                <ItemsControl.ItemTemplate>
+            <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfileItem}"
+                     ItemContainerStyle="{StaticResource ProfileListItemStyle}"
+                     Background="Transparent" BorderThickness="0" FocusVisualStyle="{x:Null}">
+                <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border CornerRadius="6" Padding="12,8" Margin="0,0,0,4" Cursor="Hand">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{StaticResource BgLightBrush}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Name}" Value="Default">
-                                            <Setter Property="Background" Value="#FF222233"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
-                            <Border.InputBindings>
-                                <MouseBinding MouseAction="LeftClick"
-                                              Command="{Binding DataContext.StartEditingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                              CommandParameter="{Binding}"/>
-                            </Border.InputBindings>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Margin="0,0,6,0" FontSize="13"
-                                           Text="🔒" Visibility="Collapsed">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Name}" Value="Default">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <TextBlock Grid.Column="1" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimaryBrush}"
-                                           Text="{Binding Name}"/>
-                                <TextBlock Grid.Column="2" Text="{Binding Mode}" FontSize="11"
-                                           Foreground="{StaticResource TextDimBrush}"/>
-                            </Grid>
-                        </Border>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Margin="0,0,6,0" FontSize="13"
+                                       Text="🔒" Visibility="Collapsed">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Name}" Value="Default">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Grid.Column="1" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Text="{Binding Name}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Mode}" FontSize="11"
+                                       Foreground="{StaticResource TextDimBrush}"/>
+                        </Grid>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ListBox.ItemTemplate>
+            </ListBox>
 
             <Separator Background="{StaticResource BorderBrush}" Margin="0,12"/>
 
@@ -192,11 +207,7 @@
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Bouton de switch" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                                      SelectedItem="{Binding ActiveEdit.SwitchButton}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="quick-access"/>
-                                <ComboBoxItem Content="steam"/>
-                                <ComboBoxItem Content="steam-or-quick-access"/>
-                            </ComboBox>
+                                      ItemsSource="{Binding SwitchButtonOptions}" SelectedItem="{Binding ActiveEdit.SwitchButton}" Margin="0,4,12,4"/>
 
                             <TextBlock Grid.Row="0" Grid.Column="2" Text="Dead zone stick" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
@@ -261,28 +272,17 @@
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Pad droit" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      SelectedValue="{Binding ActiveEdit.Motions[RightPad]}">
-                                <ComboBoxItem Content="Trackball"/>
-                                <ComboBoxItem Content="Scroll"/>
-                                <ComboBoxItem Content="None"/>
-                            </ComboBox>
+                                      ItemsSource="{Binding RightPadOptions}" SelectedItem="{Binding MotionRightPad}"/>
 
                             <TextBlock Grid.Row="0" Grid.Column="2" Text="Pad gauche" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      SelectedValue="{Binding ActiveEdit.Motions[LeftPad]}">
-                                <ComboBoxItem Content="Scroll"/>
-                                <ComboBoxItem Content="Trackball"/>
-                                <ComboBoxItem Content="None"/>
-                            </ComboBox>
+                                      ItemsSource="{Binding LeftPadOptions}" SelectedItem="{Binding MotionLeftPad}"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Stick gauche" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      SelectedValue="{Binding ActiveEdit.Motions[LeftStick]}">
-                                <ComboBoxItem Content="ArrowKeys"/>
-                                <ComboBoxItem Content="None"/>
-                            </ComboBox>
+                                      ItemsSource="{Binding LeftStickOptions}" SelectedItem="{Binding MotionLeftStick}"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -319,147 +319,93 @@
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="L4" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="PrintScreen"/>
-                                <ComboBoxItem Content="Win+G"/>
-                                <ComboBoxItem Content="Win+R"/>
-                                <ComboBoxItem Content="Alt+F4"/>
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonL4}"/>
 
                             <TextBlock Grid.Row="0" Grid.Column="2" Text="R4" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="PrintScreen"/>
-                                <ComboBoxItem Content="Win+G"/>
-                                <ComboBoxItem Content="Win+R"/>
-                                <ComboBoxItem Content="Alt+F4"/>
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonR4}"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="L5" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="PrintScreen"/>
-                                <ComboBoxItem Content="Win+G"/>
-                                <ComboBoxItem Content="Win+R"/>
-                                <ComboBoxItem Content="Alt+F4"/>
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonL5}"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="2" Text="R5" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="1" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="PrintScreen"/>
-                                <ComboBoxItem Content="Win+G"/>
-                                <ComboBoxItem Content="Win+R"/>
-                                <ComboBoxItem Content="Alt+F4"/>
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="1" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonR5}"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="LB" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="2" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Alt+Tab"/>
-                                <ComboBoxItem Content="Win+Tab"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="2" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding BumperOptions}" SelectedItem="{Binding ButtonLBumper}"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="2" Text="RB" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="2" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="Alt+Tab"/>
-                                <ComboBoxItem Content="Win+Tab"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="2" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding BumperOptions}" SelectedItem="{Binding ButtonRBumper}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="A" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="3" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Enter"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="3" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding AOptions}" SelectedItem="{Binding ButtonA}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="2" Text="B" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="3" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="OSK Toggle"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="3" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding BOptions}" SelectedItem="{Binding ButtonB}"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="X" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="4" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Alt+←"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="4" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding XOptions}" SelectedItem="{Binding ButtonX}"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="2" Text="Y" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="4" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="Alt+→"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="4" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding YOptions}" SelectedItem="{Binding ButtonY}"/>
 
                             <TextBlock Grid.Row="5" Grid.Column="0" Text="L3 (stick)" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="5" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Enter"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="5" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding L3Options}" SelectedItem="{Binding ButtonL3}"/>
 
                             <TextBlock Grid.Row="5" Grid.Column="2" Text="R3 (stick)" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="5" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="5" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding R3Options}" SelectedItem="{Binding ButtonR3}"/>
 
                             <TextBlock Grid.Row="6" Grid.Column="0" Text="Menu" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="6" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Win"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="6" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding MenuOptions}" SelectedItem="{Binding ButtonMenu}"/>
 
                             <TextBlock Grid.Row="6" Grid.Column="2" Text="View" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="6" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="Win+D"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="6" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding ViewOptions}" SelectedItem="{Binding ButtonView}"/>
 
                             <TextBlock Grid.Row="7" Grid.Column="0" Text="DPad ↑" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="VolumeUp"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding DPadUpOptions}" SelectedItem="{Binding ButtonDPadUp}"/>
 
                             <TextBlock Grid.Row="7" Grid.Column="2" Text="DPad ↓" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="7" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="VolumeDown"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="7" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding DPadDownOptions}" SelectedItem="{Binding ButtonDPadDown}"/>
 
                             <TextBlock Grid.Row="8" Grid.Column="0" Text="DPad ←" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="8" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                                <ComboBoxItem Content="Back"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="8" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding DPadLeftOptions}" SelectedItem="{Binding ButtonDPadLeft}"/>
 
                             <TextBlock Grid.Row="8" Grid.Column="2" Text="DPad →" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="8" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                                <ComboBoxItem Content="Forward"/>
-                                <ComboBoxItem Content="Aucun"/>
-                            </ComboBox>
+                            <ComboBox Grid.Row="8" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding DPadRightOptions}" SelectedItem="{Binding ButtonDPadRight}"/>
                         </Grid>
                     </StackPanel>
                 </Border>
