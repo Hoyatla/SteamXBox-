@@ -19,6 +19,15 @@ public sealed class ProfileData
     [JsonPropertyName("rightPadSensitivity")]
     public double RightPadSensitivity { get; set; } = 900.0;
 
+    [JsonPropertyName("leftPadSensitivity")]
+    public double LeftPadSensitivity { get; set; } = 600.0;
+
+    [JsonPropertyName("leftPadDeadZone")]
+    public double LeftPadDeadZone { get; set; } = 0.002;
+
+    [JsonPropertyName("rightPadDeadZone")]
+    public double RightPadDeadZone { get; set; } = 0.002;
+
     [JsonPropertyName("leftPadInvertVertical")]
     public bool LeftPadInvertVertical { get; set; } = false;
 
@@ -110,6 +119,9 @@ public sealed class ProfileData
             Mode = Mode,
             SwitchButton = SwitchButton,
             RightPadSensitivity = RightPadSensitivity,
+            LeftPadSensitivity = LeftPadSensitivity,
+            LeftPadDeadZone = LeftPadDeadZone,
+            RightPadDeadZone = RightPadDeadZone,
             LeftPadInvertVertical = LeftPadInvertVertical,
             RightPadInvertX = RightPadInvertX,
             RightPadInvertY = RightPadInvertY,

@@ -199,51 +199,16 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Bouton de switch" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                                      ItemsSource="{Binding SwitchButtonOptions}" SelectedItem="{Binding ActiveEdit.SwitchButton}" Margin="0,4,12,4"/>
+                                      ItemsSource="{Binding AvailableModes}" SelectedItem="{Binding ActiveEdit.Mode}" Margin="0,4,12,4"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Dead zone stick" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Vibrations" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource TextBoxDark}"
-                                     Text="{Binding ActiveEdit.StickDeadZone, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,4"/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Sensibilité pad droit" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource TextBoxDark}"
-                                     Text="{Binding ActiveEdit.RightPadSensitivity, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,4"/>
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Sensibilité pad gauche" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource TextBoxDark}"
-                                     Text="600" Margin="0,4,12,4"/>
-
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="Dead zone pad" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource TextBoxDark}"
-                                     Text="0.002" Margin="0,4,0,4"/>
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Inversion" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,4,12,4">
-                                <CheckBox Content="Pad droit X" IsChecked="{Binding ActiveEdit.RightPadInvertX}"
-                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,8,0"/>
-                                <CheckBox Content="Pad droit Y" IsChecked="{Binding ActiveEdit.RightPadInvertY}"
-                                          Style="{StaticResource ToggleSwitch}"/>
-                            </StackPanel>
-                            <CheckBox Grid.Row="3" Grid.Column="3" Content="Pad gauche vertical"
-                                      IsChecked="{Binding ActiveEdit.LeftPadInvertVertical}"
-                                      Style="{StaticResource ToggleSwitch}" Margin="0,4,0,4"/>
-
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Vibrations" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,4,12,4">
+                            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,4,12,4">
                                 <CheckBox Content="Activer" IsChecked="True" Style="{StaticResource ToggleSwitch}"/>
                             </StackPanel>
                         </Grid>
@@ -267,6 +232,9 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Pad droit" VerticalAlignment="Center"
@@ -283,6 +251,47 @@
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
                                       ItemsSource="{Binding LeftStickOptions}" SelectedItem="{Binding MotionLeftStick}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Sensibilité pad droit" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
+                                     Text="{Binding ActiveEdit.RightPadSensitivity, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Sensibilité pad gauche" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
+                                     Text="{Binding ActiveEdit.LeftPadSensitivity, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="Dead zone stick gauche" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
+                                     Text="{Binding ActiveEdit.StickDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Dead zone stick droite" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
+                                     Text="{Binding ActiveEdit.XboxStickDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="Dead zone pad droit" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="3" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
+                                     Text="{Binding ActiveEdit.RightPadDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Dead zone pad gauche" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
+                                     Text="{Binding ActiveEdit.LeftPadDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="Inversion" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="3" Orientation="Horizontal" Margin="0,4,0,4">
+                                <CheckBox Content="Pad droit X" IsChecked="{Binding ActiveEdit.RightPadInvertX}"
+                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,8,0"/>
+                                <CheckBox Content="Pad droit Y" IsChecked="{Binding ActiveEdit.RightPadInvertY}"
+                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,8,0"/>
+                                <CheckBox Content="Pad gauche Y" IsChecked="{Binding ActiveEdit.LeftPadInvertVertical}"
+                                          Style="{StaticResource ToggleSwitch}"/>
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
                 </Border>

@@ -83,7 +83,6 @@ public partial class ProfileViewModel : ObservableObject
 
     // ComboBox options
     public string[] AvailableModes { get; } = ["Profile", "Xbox360"];
-    public string[] SwitchButtonOptions { get; } = ["quick-access", "steam", "steam-or-quick-access"];
     public string[] RightPadOptions { get; } = ["Trackball", "Scroll", "None"];
     public string[] LeftPadOptions { get; } = ["Scroll", "Trackball", "None"];
     public string[] LeftStickOptions { get; } = ["ArrowKeys", "None"];
