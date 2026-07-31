@@ -17,19 +17,23 @@ public sealed class ProfileData
     public string SwitchButton { get; set; } = "quick-access";
 
     [JsonPropertyName("rightPadSensitivity")]
-    public double RightPadSensitivity { get; set; } = 900.0;
+    public double RightPadSensitivity { get; set; } = 380.0;
 
+    /// <summary>
+    /// Wheel units per pad unit for left pad scrolling. A full pad swipe spans 2.0 units, so 10
+    /// gives about 20 notches per swipe. The old 600 default was roughly 60x too fast.
+    /// </summary>
     [JsonPropertyName("leftPadSensitivity")]
-    public double LeftPadSensitivity { get; set; } = 600.0;
+    public double LeftPadSensitivity { get; set; } = 4.8;
 
     [JsonPropertyName("leftPadDeadZone")]
     public double LeftPadDeadZone { get; set; } = 0.002;
 
     [JsonPropertyName("rightPadDeadZone")]
-    public double RightPadDeadZone { get; set; } = 0.002;
+    public double RightPadDeadZone { get; set; } = 0.00015;
 
     [JsonPropertyName("leftPadInvertVertical")]
-    public bool LeftPadInvertVertical { get; set; } = false;
+    public bool LeftPadInvertVertical { get; set; } = true;
 
     [JsonPropertyName("rightPadInvertX")]
     public bool RightPadInvertX { get; set; } = false;
@@ -37,11 +41,65 @@ public sealed class ProfileData
     [JsonPropertyName("rightPadInvertY")]
     public bool RightPadInvertY { get; set; } = true;
 
+    // ---- Motion behaviour ----
+
+    /// <summary>Acceleration exponent for the right pad. 1.0 is linear, i.e. disabled.</summary>
+    [JsonPropertyName("rightPadAcceleration")]
+    public double RightPadAcceleration { get; set; } = 2.0;
+
+    /// <summary>Acceleration exponent for left pad scrolling. 1.0 is linear.</summary>
+    [JsonPropertyName("leftPadAcceleration")]
+    public double LeftPadAcceleration { get; set; } = 1.5;
+
+    /// <summary>Cursor speed while the finger rests at the pad edge, in pixels per second. 0 is off.</summary>
+    [JsonPropertyName("rightPadEdgeSpeed")]
+    public double RightPadEdgeSpeed { get; set; } = 750.0;
+
+    /// <summary>Gain floor for slow gestures. 0.25 means four times the pointing precision.</summary>
+    [JsonPropertyName("finePrecision")]
+    public double FinePrecision { get; set; } = 0.10;
+
+
+    /// <summary>Travel a gesture needs, in pixels, before releasing it may throw the cursor.</summary>
+    [JsonPropertyName("minThrowTravel")]
+    public double MinThrowTravel { get; set; } = 70.0;
+
+
+
+    /// <summary>Inertia decay per second. Lower glides longer.</summary>
+    [JsonPropertyName("rightPadInertia")]
+    public double RightPadInertia { get; set; } = 2.0;
+
+    [JsonPropertyName("leftPadInertia")]
+    public double LeftPadInertia { get; set; } = 2.0;
+
+    // ---- Per-pad haptics ----
+    // Force and rate of the vibration only. Motion output is unaffected by these.
+
+    /// <summary>Left pad vibration strength, 0-1. 0 disables it.</summary>
+    [JsonPropertyName("leftPadHapticForce")]
+    public double LeftPadHapticForce { get; set; } = 0.5;
+
+    /// <summary>Left pad vibration rate, 0-1. Higher means pulses closer together.</summary>
+    [JsonPropertyName("leftPadHapticFrequency")]
+    public double LeftPadHapticFrequency { get; set; } = 0.5;
+
+    /// <summary>Right pad vibration strength, 0-1. 0 disables it.</summary>
+    [JsonPropertyName("rightPadHapticForce")]
+    public double RightPadHapticForce { get; set; } = 0.5;
+
+    /// <summary>Right pad vibration rate, 0-1. Higher means pulses closer together.</summary>
+    [JsonPropertyName("rightPadHapticFrequency")]
+    public double RightPadHapticFrequency { get; set; } = 0.5;
+
+    [JsonPropertyName("leftPadHorizontalScroll")]
+    public bool LeftPadHorizontalScroll { get; set; }
+
     [JsonPropertyName("stickDeadZone")]
-    public double StickDeadZone { get; set; } = 0.5;
+    public double StickDeadZone { get; set; } = 0.06;
 
     [JsonPropertyName("xboxStickDeadZone")]
-    public double XboxStickDeadZone { get; set; } = 0.08;
+    public double XboxStickDeadZone { get; set; } = 0.018;
 
     [JsonPropertyName("motions")]
     public Dictionary<string, string> Motions { get; set; } = new()
@@ -125,6 +183,18 @@ public sealed class ProfileData
             LeftPadInvertVertical = LeftPadInvertVertical,
             RightPadInvertX = RightPadInvertX,
             RightPadInvertY = RightPadInvertY,
+            RightPadAcceleration = RightPadAcceleration,
+            LeftPadAcceleration = LeftPadAcceleration,
+            RightPadEdgeSpeed = RightPadEdgeSpeed,
+            FinePrecision = FinePrecision,
+            MinThrowTravel = MinThrowTravel,
+            RightPadInertia = RightPadInertia,
+            LeftPadInertia = LeftPadInertia,
+            LeftPadHapticForce = LeftPadHapticForce,
+            LeftPadHapticFrequency = LeftPadHapticFrequency,
+            RightPadHapticForce = RightPadHapticForce,
+            RightPadHapticFrequency = RightPadHapticFrequency,
+            LeftPadHorizontalScroll = LeftPadHorizontalScroll,
             StickDeadZone = StickDeadZone,
             XboxStickDeadZone = XboxStickDeadZone,
             Motions = new Dictionary<string, string>(Motions),

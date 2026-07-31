@@ -30,74 +30,267 @@ public sealed class ProfileMapper
 	private bool _prevMenu;
 	private bool _prevView;
 
+	private readonly Sc2XboxedProfileSettings _settings = Sc2XboxedProfileSettings.Default;
 	private readonly RightTouchpadTrackballMapper _rightTrackball;
 	private readonly LeftTouchpadScrollMapper _leftScroll;
 	private readonly RightTouchpadTrackballMapper _leftTrackball;
+	private readonly LeftTouchpadScrollMapper _rightScroll;
 	private readonly SmoothedTouchpadInput _rightPadSmooth = new();
 	private readonly double _stickDeadZone;
 
 	private bool _leftPadWasOskMode;
 	private bool _firstFrame = true;
+	private double _mouseRemainderX;
+	private double _mouseRemainderY;
 
 	public bool CursorMoved { get; private set; }
 	public bool Scrolled { get; private set; }
 	public bool PadClicked { get; private set; }
+
+	/// <summary>
+	/// Whole wheel notches emitted this frame. Drives the scroll detent haptic, which needs a count
+	/// rather than a boolean so a fast flick does not feel identical to a single notch.
+	/// </summary>
+	public int WheelNotches { get; private set; }
+
+	/// <summary>Whole pixels actually sent to the OS this frame, for diagnostics.</summary>
+	public int EmittedPixelsX { get; private set; }
+
+	/// <summary>Whole pixels actually sent to the OS this frame, for diagnostics.</summary>
+	public int EmittedPixelsY { get; private set; }
+
 	public bool OskToggleRequested { get; private set; }
 	public bool OskActive { get; set; }
+
+	/// <summary>
+	/// True when the overlay is in daisywheel mode, where ABXY select characters instead of running
+	/// their desktop bindings. Set by the host when it launches the overlay.
+	/// </summary>
+	public bool DaisywheelActive { get; set; }
+
+	/// <summary>Resolved settings this mapper is running with, for the haptic layer to consult.</summary>
+	public Sc2XboxedProfileSettings Settings => _settings;
 
 	public ProfileMapper() : this(Sc2XboxedProfileSettings.Default) { }
 
 	public ProfileMapper(Sc2XboxedProfileSettings settings)
 	{
+		_settings = settings;
 		_stickDeadZone = settings.StickDeadZone;
 		_rightTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
 		_leftScroll = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
-		_leftTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
+
+		// Its own settings, not the right pad's: sharing them meant the left pad silently inherited
+		// the right pad's sensitivity and invert flags.
+		_leftTrackball = new RightTouchpadTrackballMapper(settings.LeftPadTrackball);
+		_rightScroll = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
 	}
 
 	public static Sc2XboxedProfileSettings LoadFromProfilesDirectory(string profileName)
+	{
+		return LoadDetailed(profileName).Settings;
+	}
+
+	/// <summary>
+	/// Resolves a profile and records where every value came from, so a diagnostic dump can show a
+	/// key that was absent and silently defaulted.
+	/// </summary>
+	public static ProfileLoadResult LoadDetailed(string profileName)
 	{
 		var profilesDir = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
 			"SteamXBox", "profiles");
 		var filePath = Path.Combine(profilesDir, $"{profileName}.json");
+		var defaults = Sc2XboxedProfileSettings.Default;
 
 		if (!File.Exists(filePath))
-			return Sc2XboxedProfileSettings.Default;
+		{
+			return new ProfileLoadResult(defaults, filePath, FileFound: false, Error: null, Values: []);
+		}
+
+		var origins = new List<ProfileValueOrigin>();
 
 		try
 		{
 			var json = File.ReadAllText(filePath);
-			var doc = JsonDocument.Parse(json);
+			using var doc = JsonDocument.Parse(json);
 			var root = doc.RootElement;
 
-			double sens = root.TryGetProperty("rightPadSensitivity", out var s) ? s.GetDouble() : 900.0;
-			bool invertY = root.TryGetProperty("rightPadInvertY", out var iy) ? iy.GetBoolean() : true;
-			bool invertX = root.TryGetProperty("rightPadInvertX", out var ix) && ix.GetBoolean();
-			double deadzone = root.TryGetProperty("stickDeadZone", out var dz) ? dz.GetDouble() : 0.5;
-			double gamepadDeadzone = root.TryGetProperty("xboxStickDeadZone", out var gdz) ? gdz.GetDouble() : 0.08;
-			bool leftInvert = root.TryGetProperty("leftPadInvertVertical", out var li) ? li.GetBoolean() : true;
+			double sens = ReadDouble(root, "rightPadSensitivity", 900.0, origins);
+			bool invertY = ReadBool(root, "rightPadInvertY", true, origins);
+			bool invertX = ReadBool(root, "rightPadInvertX", false, origins);
+			double deadzone = ReadDouble(root, "stickDeadZone", 0.5, origins);
+			double gamepadDeadzone = ReadDouble(root, "xboxStickDeadZone", 0.08, origins);
+			bool leftInvert = ReadBool(root, "leftPadInvertVertical", true, origins);
+			double leftSens = ReadDouble(root, "leftPadSensitivity", defaults.LeftPadScroll.WheelDeltaPerPadUnit, origins);
 
-			return Sc2XboxedProfileSettings.Default with
+			// A full pad swipe spans 2.0 units, so this caps a gesture at ~120 notches. The GUI used to
+			// default this field to 600, which produced over 1200 notches per second and made scrolling
+			// behave like an on/off switch. Clamped rather than obeyed, and recorded so it is visible.
+			const double MaxSaneWheelDeltaPerPadUnit = 60.0;
+			if (leftSens > MaxSaneWheelDeltaPerPadUnit)
+			{
+				origins.Add(new ProfileValueOrigin(
+					"leftPadSensitivity(clamped)",
+					$"{leftSens:0.##} -> {MaxSaneWheelDeltaPerPadUnit:0.##} (unusable above this)",
+					FromFile: false));
+				leftSens = MaxSaneWheelDeltaPerPadUnit;
+			}
+			double rightPadDeadZone = ReadDouble(root, "rightPadDeadZone", defaults.RightPadTrackball.MotionDeadZone, origins);
+			double leftPadDeadZone = ReadDouble(root, "leftPadDeadZone", defaults.LeftPadScroll.MotionDeadZone, origins);
+
+			// The "motions" section was written by the editor and read by nobody, so all three
+			// dropdowns were decorative and the behaviour was hardcoded.
+			var rightPadMode = ReadPadMode(root, "RightPad", defaults.RightPadMode, origins);
+			var leftPadMode = ReadPadMode(root, "LeftPad", defaults.LeftPadMode, origins);
+			var leftStickMode = ReadStickMode(root, "LeftStick", defaults.LeftStickMode, origins);
+
+			double rightAccel = ReadDouble(root, "rightPadAcceleration", defaults.RightPadTrackball.AccelerationExponent, origins);
+			double leftAccel = ReadDouble(root, "leftPadAcceleration", defaults.LeftPadScroll.AccelerationExponent, origins);
+			double edgeSpeed = ReadDouble(root, "rightPadEdgeSpeed", defaults.RightPadTrackball.EdgeSpeedPixelsPerSecond, origins);
+			double finePrecision = ReadDouble(root, "finePrecision", defaults.RightPadTrackball.MinAccelerationGain, origins);
+			double minThrowTravel = ReadDouble(root, "minThrowTravel", defaults.RightPadTrackball.MinThrowTravelPixels, origins);
+			double finePrecisionTravel = ReadDouble(root, "finePrecisionTravel", defaults.RightPadTrackball.FinePrecisionTravel, origins);
+			double touchActivation = ReadDouble(root, "touchActivation", defaults.RightPadTrackball.TouchActivationTravel, origins);
+			double rightInertia = ReadDouble(root, "rightPadInertia", defaults.RightPadTrackball.InertiaDecayPerSecond, origins);
+			double leftInertia = ReadDouble(root, "leftPadInertia", defaults.LeftPadScroll.InertiaDecayPerSecond, origins);
+			bool horizontalScroll = ReadBool(root, "leftPadHorizontalScroll", defaults.LeftPadScroll.HorizontalEnabled, origins);
+
+			double leftHapticForce = ReadDouble(root, "leftPadHapticForce", defaults.LeftPadHaptics.Force, origins);
+			double leftHapticFreq = ReadDouble(root, "leftPadHapticFrequency", defaults.LeftPadHaptics.Frequency, origins);
+			double rightHapticForce = ReadDouble(root, "rightPadHapticForce", defaults.RightPadHaptics.Force, origins);
+			double rightHapticFreq = ReadDouble(root, "rightPadHapticFrequency", defaults.RightPadHaptics.Frequency, origins);
+
+			var settings = defaults with
 			{
 				StickDeadZone = deadzone,
 				GamepadStickDeadZone = gamepadDeadzone,
-				RightPadTrackball = RightTouchpadTrackballSettings.Default with
+				RightPadMode = rightPadMode,
+				LeftPadMode = leftPadMode,
+				LeftStickMode = leftStickMode,
+				LeftPadHaptics = new PadHapticSettings { Force = leftHapticForce, Frequency = leftHapticFreq },
+				RightPadHaptics = new PadHapticSettings { Force = rightHapticForce, Frequency = rightHapticFreq },
+				RightPadTrackball = defaults.RightPadTrackball with
 				{
 					PixelsPerPadUnit = sens,
+					MotionDeadZone = rightPadDeadZone,
 					InvertY = invertY,
 					InvertX = invertX,
+					AccelerationExponent = rightAccel,
+					EdgeSpeedPixelsPerSecond = edgeSpeed,
+					InertiaDecayPerSecond = rightInertia,
 				},
-				LeftPadScroll = LeftTouchpadScrollSettings.Default with
+				LeftPadTrackball = defaults.LeftPadTrackball with
 				{
+					PixelsPerPadUnit = leftSens * 20.0, // scroll units are far smaller than pixels
+					MotionDeadZone = leftPadDeadZone,
+					InvertY = leftInvert,
+					AccelerationExponent = rightAccel,
+					MinAccelerationGain = finePrecision,
+					FinePrecisionTravel = finePrecisionTravel,
+					MinThrowTravelPixels = minThrowTravel,
+					TouchActivationTravel = touchActivation,
+					InertiaDecayPerSecond = rightInertia,
+				},
+				// Built from the profile defaults, not LeftTouchpadScrollSettings.Default: the latter
+				// carries a 600 wheel-units-per-pad-unit value that is 60x the tuned default, so
+				// loading any profile used to make scrolling wildly fast.
+				LeftPadScroll = defaults.LeftPadScroll with
+				{
+					WheelDeltaPerPadUnit = leftSens,
+					MotionDeadZone = leftPadDeadZone,
 					InvertVertical = leftInvert,
+					AccelerationExponent = leftAccel,
+					HorizontalEnabled = horizontalScroll,
+					InertiaDecayPerSecond = leftInertia,
 				},
 			};
+
+			return new ProfileLoadResult(settings, filePath, FileFound: true, Error: null, Values: origins);
 		}
-		catch
+		catch (Exception exception)
 		{
-			return Sc2XboxedProfileSettings.Default;
+			return new ProfileLoadResult(
+				defaults,
+				filePath,
+				FileFound: true,
+				Error: $"{exception.GetType().Name}: {exception.Message}",
+				Values: origins);
 		}
+	}
+
+	/// <summary>
+	/// Reads one entry of the profile's "motions" object. The editor writes display strings, so the
+	/// mapping is explicit rather than an Enum.Parse on user-facing text.
+	/// </summary>
+	private static PadMotionMode ReadPadMode(JsonElement root, string key, PadMotionMode fallback, List<ProfileValueOrigin> origins)
+	{
+		var raw = ReadMotionString(root, key);
+		var parsed = raw?.Trim().ToLowerInvariant() switch
+		{
+			"trackball" => PadMotionMode.Trackball,
+			"scroll" => PadMotionMode.Scroll,
+			"none" or "aucun" => PadMotionMode.None,
+			_ => (PadMotionMode?)null,
+		};
+
+		origins.Add(new ProfileValueOrigin($"motions.{key}", (parsed ?? fallback).ToString(), parsed is not null));
+		return parsed ?? fallback;
+	}
+
+	private static StickMotionMode ReadStickMode(JsonElement root, string key, StickMotionMode fallback, List<ProfileValueOrigin> origins)
+	{
+		var raw = ReadMotionString(root, key);
+		var parsed = raw?.Trim().ToLowerInvariant() switch
+		{
+			"arrowkeys" => StickMotionMode.ArrowKeys,
+			"none" or "aucun" => StickMotionMode.None,
+			_ => (StickMotionMode?)null,
+		};
+
+		origins.Add(new ProfileValueOrigin($"motions.{key}", (parsed ?? fallback).ToString(), parsed is not null));
+		return parsed ?? fallback;
+	}
+
+	private static string? ReadMotionString(JsonElement root, string key)
+	{
+		if (root.TryGetProperty("motions", out var motions) &&
+			motions.ValueKind == JsonValueKind.Object &&
+			motions.TryGetProperty(key, out var value) &&
+			value.ValueKind == JsonValueKind.String)
+		{
+			return value.GetString();
+		}
+
+		return null;
+	}
+
+	private static double ReadDouble(JsonElement root, string key, double fallback, List<ProfileValueOrigin> origins)
+	{
+		if (root.TryGetProperty(key, out var element) &&
+			element.ValueKind == JsonValueKind.Number &&
+			element.TryGetDouble(out var value))
+		{
+			origins.Add(new ProfileValueOrigin(key, value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), FromFile: true));
+			return value;
+		}
+
+		origins.Add(new ProfileValueOrigin(key, fallback.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), FromFile: false));
+		return fallback;
+	}
+
+	private static bool ReadBool(JsonElement root, string key, bool fallback, List<ProfileValueOrigin> origins)
+	{
+		if (root.TryGetProperty(key, out var element) &&
+			(element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
+		{
+			var value = element.GetBoolean();
+			origins.Add(new ProfileValueOrigin(key, value.ToString(), FromFile: true));
+			return value;
+		}
+
+		origins.Add(new ProfileValueOrigin(key, fallback.ToString(), FromFile: false));
+		return fallback;
 	}
 
 	public void Reset()
@@ -130,6 +323,8 @@ public sealed class ProfileMapper
 		_leftTrackball.Reset();
 		_rightPadSmooth.Reset();
 		_leftPadWasOskMode = false;
+		_mouseRemainderX = 0.0;
+		_mouseRemainderY = 0.0;
 	}
 
 	public void Map(SteamControllerState state)
@@ -139,6 +334,9 @@ public sealed class ProfileMapper
 		CursorMoved = false;
 		Scrolled = false;
 		PadClicked = false;
+		WheelNotches = 0;
+		EmittedPixelsX = 0;
+		EmittedPixelsY = 0;
 		OskToggleRequested = false;
 
 		if (_firstFrame)
@@ -178,14 +376,20 @@ public sealed class ProfileMapper
 		if (!OskActive)
 		{
 			var rightSmooth = _rightPadSmooth.Update(state.RightPad);
-			var rightFrame = _rightTrackball.Update(state.Timestamp, rightSmooth);
+			var rightFrame = MapPad(_settings.RightPadMode, state.Timestamp, rightSmooth, _rightTrackball, _rightScroll);
 			ApplyMouseFrame(rightFrame);
 			CursorMoved = rightSmooth.IsTouched && rightFrame.HasMouseMotion && (Math.Abs(rightFrame.DeltaX) > 2.0 || Math.Abs(rightFrame.DeltaY) > 2.0);
-			HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed, () => { InputHelper.MouseLeftDown(); PadClicked = true; }, () => InputHelper.MouseLeftUp());
+			// Button down on press and up on release, so holding drags: resizing a window or selecting
+			// text needs the button to stay down while the finger moves. Emitting a complete click on
+			// release instead made both impossible.
+			HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed,
+				() => { InputHelper.MouseLeftDown(); PadClicked = true; },
+				() => InputHelper.MouseLeftUp());
 
-			var leftFrame = MapLeftPad(state.Timestamp, state.LeftPad);
+			var leftFrame = MapPad(_settings.LeftPadMode, state.Timestamp, state.LeftPad, _leftTrackball, _leftScroll);
 			ApplyMouseFrame(leftFrame);
 			Scrolled = leftFrame.HasWheel;
+			WheelNotches = Math.Abs(leftFrame.WheelDelta) + Math.Abs(leftFrame.HorizontalWheelDelta);
 			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => InputHelper.MouseMiddleDown(), () => InputHelper.MouseMiddleUp());
 		}
 		else
@@ -195,6 +399,8 @@ public sealed class ProfileMapper
 			_leftPadWasOskMode = InputHelper.IsOskRunning();
 		}
 
+		// Each of these is skipped when the profile assigns it to the precision hold, so a button
+		// cannot both modify sensitivity and fire a shortcut.
 		HandleEdge(ref _prevLB, state.Buttons.HasFlag(SteamControllerButtons.LeftBumper),
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_TAB }),
 			() => { });
@@ -224,17 +430,28 @@ public sealed class ProfileMapper
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_F4 }),
 			() => { });
 
+		// While the daisywheel is up, ABXY pick characters in the overlay and must not fire their
+		// desktop bindings. Edges are still tracked so a button held across the transition does not
+		// trigger on release.
+		bool daisywheelTyping = OskActive && DaisywheelActive;
+
 		HandleEdge(ref _prevX, state.Buttons.HasFlag(SteamControllerButtons.X),
-			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_LEFT }),
-			() => { });
+			() =>
+			{
+				if (!daisywheelTyping)
+					InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_LEFT });
+			}, () => { });
 		HandleEdge(ref _prevY, state.Buttons.HasFlag(SteamControllerButtons.Y),
-			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_RIGHT }),
-			() => { });
+			() =>
+			{
+				if (!daisywheelTyping)
+					InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_RIGHT });
+			}, () => { });
 
 		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A),
 			() =>
 			{
-				if (OskActive)
+				if (OskActive && !daisywheelTyping)
 				{
 					OskToggleRequested = true;
 				}
@@ -242,12 +459,24 @@ public sealed class ProfileMapper
 		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B),
 			() =>
 			{
+				if (daisywheelTyping)
+				{
+					return;
+				}
+
 				OskToggleRequested = true;
 				System.Diagnostics.Debug.WriteLine($"[ProfileMapper] B pressed → OskToggleRequested=true, OskActive={OskActive}");
 			}, () => { });
 
 		HandleEdge(ref _prevMenu, state.Buttons.HasFlag(SteamControllerButtons.Menu),
-			() => InputHelper.KeyTap(0x5B), () => { });
+			() =>
+			{
+				// Menu is the way out of the daisywheel, since B is a character there.
+				if (daisywheelTyping)
+					OskToggleRequested = true;
+				else
+					InputHelper.KeyTap(0x5B);
+			}, () => { });
 		HandleEdge(ref _prevView, state.Buttons.HasFlag(SteamControllerButtons.View),
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, 0x44 }),
 			() => { });
@@ -257,39 +486,89 @@ public sealed class ProfileMapper
 		HandleEdge(ref _prevR3, state.Buttons.HasFlag(SteamControllerButtons.RightStick),
 			() => { }, () => { });
 
-		MapLeftStickArrows(state.LeftStick);
+		if (_settings.LeftStickMode == StickMotionMode.ArrowKeys)
+		{
+			MapLeftStickArrows(state.LeftStick);
+		}
 	}
 
-	private MouseOutputFrame MapLeftPad(TimeSpan timestamp, TouchpadSample pad)
+	/// <summary>Routes a pad to whatever its profile says it drives.</summary>
+	/// <remarks>
+	/// This replaces a hardcoded assignment plus a mode switch keyed on
+	/// <c>InputHelper.IsOskRunning()</c>, which matched a process named "osk" — Windows' own
+	/// on-screen keyboard, never this project's overlay. The left pad therefore kept scrolling while
+	/// the overlay was open, and flipped to trackball if the user happened to open the Windows one.
+	/// </remarks>
+	private static MouseOutputFrame MapPad(
+		PadMotionMode mode,
+		TimeSpan timestamp,
+		TouchpadSample pad,
+		RightTouchpadTrackballMapper trackball,
+		LeftTouchpadScrollMapper scroll)
 	{
-		bool oskNow = InputHelper.IsOskRunning();
-
-		if (oskNow && !_leftPadWasOskMode)
+		switch (mode)
 		{
-			_leftScroll.Reset();
-			_leftTrackball.Reset();
-			_leftPadWasOskMode = true;
-		}
-		else if (!oskNow && _leftPadWasOskMode)
-		{
-			_leftTrackball.Reset();
-			_leftScroll.Reset();
-			_leftPadWasOskMode = false;
-		}
+			case PadMotionMode.Trackball:
+				return trackball.Update(timestamp, pad);
 
-		if (oskNow)
-			return _leftTrackball.Update(timestamp, pad);
+			case PadMotionMode.Scroll:
+				return scroll.Update(timestamp, pad);
 
-		return _leftScroll.Update(pad);
+			default:
+				// Keep both mappers fed so a mid-session mode change does not start from a stale
+				// position and jump the cursor.
+				trackball.Reset();
+				scroll.Reset();
+				return MouseOutputFrame.Empty;
+		}
 	}
 
-	private static void ApplyMouseFrame(MouseOutputFrame frame)
+	private static SteamControllerButtons PrecisionButtonFlag(PrecisionButton button) => button switch
+	{
+		PrecisionButton.L4 => SteamControllerButtons.L4,
+		PrecisionButton.R4 => SteamControllerButtons.R4,
+		PrecisionButton.L5 => SteamControllerButtons.L5,
+		PrecisionButton.R5 => SteamControllerButtons.R5,
+		PrecisionButton.LeftBumper => SteamControllerButtons.LeftBumper,
+		PrecisionButton.RightBumper => SteamControllerButtons.RightBumper,
+		_ => SteamControllerButtons.None,
+	};
+
+	/// <summary>
+	/// Sends a mouse frame, carrying the sub-pixel remainder across frames.
+	/// </summary>
+	/// <remarks>
+	/// SendInput only takes whole pixels. Truncating each frame independently discarded the
+	/// fraction every time, so at HID report rate a slow, deliberate drag produced deltas below one
+	/// pixel and the cursor did not move at all — fine pointing was impossible, and faster movement
+	/// was biased short. Keeping the remainder makes the emitted motion match the finger.
+	/// </remarks>
+	private void ApplyMouseFrame(MouseOutputFrame frame)
 	{
 		if (frame.HasMouseMotion)
-			InputHelper.MouseMoveRelative((int)frame.DeltaX, (int)frame.DeltaY);
+		{
+			_mouseRemainderX += frame.DeltaX;
+			_mouseRemainderY += frame.DeltaY;
+
+			// Truncation toward zero keeps the remainder's sign, so this is direction-neutral.
+			var stepX = (int)_mouseRemainderX;
+			var stepY = (int)_mouseRemainderY;
+			_mouseRemainderX -= stepX;
+			_mouseRemainderY -= stepY;
+
+			if (stepX != 0 || stepY != 0)
+			{
+				InputHelper.MouseMoveRelative(stepX, stepY);
+				EmittedPixelsX += stepX;
+				EmittedPixelsY += stepY;
+			}
+		}
 
 		if (frame.HasWheel)
 			InputHelper.MouseWheel(frame.WheelDelta);
+
+		if (frame.HasHorizontalWheel)
+			InputHelper.MouseHorizontalWheel(frame.HorizontalWheelDelta);
 	}
 
 	private void MapLeftStickArrows(NormalizedStick stick)

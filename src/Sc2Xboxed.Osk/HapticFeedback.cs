@@ -1,36 +1,59 @@
 using Sc2Xboxed.Core.Haptics;
-using Sc2Xboxed.Hid;
+using Sc2Xboxed.Core.Input;
 
 namespace Sc2Xboxed.Osk;
 
+/// <summary>
+/// Overlay keyboard haptics. Requests are forwarded to the core process, which owns the only
+/// HID stream that writes haptics: a second stream here would interleave with game rumble and
+/// corrupt reports. Every method returns immediately so typing latency never depends on HID.
+/// </summary>
 public sealed class HapticFeedback : IAsyncDisposable
 {
-    private readonly TritonHapticSink _sink = new();
+    private readonly HapticRequestSender _sender;
 
-    public async ValueTask PulseRightAsync()
+    public HapticFeedback(Action<string>? log = null)
     {
-        try
+        _sender = new HapticRequestSender(log);
+        _sender.Start();
+    }
+
+    /// <summary>Light tick emitted when the highlighted key changes.</summary>
+    public void Hover(HapticActuator actuator)
+    {
+        var settings = Program.Settings;
+        if (!settings.HoverHaptics || !settings.HapticsEnabled)
         {
-            await _sink.SubmitAsync(
-                new HapticOutputFrame(new[] { HapticCommand.Tick(HapticActuator.RightTrackpad) }),
-                CancellationToken.None).ConfigureAwait(false);
+            return;
         }
-        catch { }
+
+        _sender.Submit(new HapticCommand(
+            actuator,
+            HapticType.Tick,
+            GainDb: 0,
+            PulseWidthUs: settings.HoverPulseUs));
     }
 
-    public async ValueTask PulseLeftAsync()
+    /// <summary>
+    /// Firmer click emitted when a key is actually sent. Strength is per pad, so each thumb can be
+    /// tuned separately or silenced without affecting the other.
+    /// </summary>
+    public void Press(HapticActuator actuator)
     {
-        try
+        var isLeftPad = actuator == HapticActuator.LeftTrackpad || actuator == HapticActuator.LeftRumble;
+        var pulse = Program.Settings.ClickPulseUsFor(isLeftPad);
+
+        if (pulse == 0)
         {
-            await _sink.SubmitAsync(
-                new HapticOutputFrame(new[] { HapticCommand.Tick(HapticActuator.LeftTrackpad) }),
-                CancellationToken.None).ConfigureAwait(false);
+            return;
         }
-        catch { }
+
+        _sender.Submit(new HapticCommand(
+            actuator,
+            HapticType.Click,
+            GainDb: 0,
+            PulseWidthUs: pulse));
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _sink.DisposeAsync().ConfigureAwait(false);
-    }
+    public ValueTask DisposeAsync() => _sender.DisposeAsync();
 }

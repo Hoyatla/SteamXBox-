@@ -1,6 +1,7 @@
 <UserControl x:Class="SteamXBox.Gui.Views.ProfileView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
              xmlns:vm="clr-namespace:SteamXBox.Gui.ViewModels"
              xmlns:Converters="clr-namespace:SteamXBox.Gui.Converters">
 
@@ -50,7 +51,7 @@
 
         <!-- Left: profile list -->
         <StackPanel Grid.Column="0" Margin="0,0,16,0">
-            <TextBlock Text="Profils" Style="{StaticResource HeaderText}" Margin="0,0,0,12"/>
+            <TextBlock Text="{loc:T Text='Profils'}" Style="{StaticResource HeaderText}" Margin="0,0,0,12"/>
 
             <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfileItem}"
                      ItemContainerStyle="{StaticResource ProfileListItemStyle}"
@@ -64,7 +65,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Margin="0,0,6,0" FontSize="13"
-                                       Text="🔒" Visibility="Collapsed">
+                                       Text="{loc:T Text='🔒'}" Visibility="Collapsed">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -105,7 +106,7 @@
         <Border Grid.Column="1" Style="{StaticResource CardBorder}"
                 Visibility="{Binding IsEditing, Converter={StaticResource InvertedBoolToVis}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="Sélectionnez un profil pour l'éditer"
+                <TextBlock Text="{loc:T Text='Sélectionnez un profil pour l\'éditer'}"
                            Foreground="{StaticResource TextDimBrush}" FontSize="14"
                            HorizontalAlignment="Center"/>
             </StackPanel>
@@ -121,40 +122,43 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0">
-                    <TextBlock Text="Profil par défaut" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="{loc:T Text='Profil par défaut'}" FontSize="18" FontWeight="Bold"
                                Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"
                                Margin="0,0,0,8"/>
-                    <TextBlock Text="Le profil « Default » est le profil d'usine. Il n'est pas modifiable."
+                    <TextBlock Text="{loc:T Text='Le profil « Default » porte les réglages de référence. Il n\'est pas modifiable, mais peut être restauré.'}"
                                FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"
                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
-                    <Button Content="🔄  Restaurer les paramètres d'usine" Command="{Binding ResetToFactoryDefaultsCommand}"
-                            Style="{StaticResource SecondaryButton}" Padding="16,8" HorizontalAlignment="Center"
+                    <Button Content="{loc:T Text='🔄  Restaurer les paramètres par défaut'}" Command="{Binding ResetToFactoryDefaultsCommand}"
+                            Style="{StaticResource PrimaryButton}" Padding="16,8" HorizontalAlignment="Center"
                             Margin="0,0,0,16"/>
-                    <TextBlock Text="Valeurs d'usine" FontSize="14" FontWeight="SemiBold"
+                    <TextBlock Text="{loc:T Text='Valeurs par défaut'}" FontSize="14" FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
                 </StackPanel>
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel TextElement.Foreground="{StaticResource TextSecondaryBrush}" TextElement.FontSize="12">
-                        <TextBlock Text="Mouvements :" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBlock Text="  Pad droit → Trackball (sensibilité 900 px/unité)"/>
-                        <TextBlock Text="  Pad gauche → Scroll (molette 10 px/pas)"/>
-                        <TextBlock Text="  Stick gauche → Flèches directionnelles"/>
-                        <TextBlock Text="  Inversion Y pad droit : Activée"/>
-                        <TextBlock Text="  Inversion X pad droit : Désactivée"/>
-                        <TextBlock Text="  Inversion verticale pad gauche : Activée"/>
-                        <TextBlock Text="  Dead zone stick : 0.5 (50%)"/>
-                        <TextBlock Text="  Dead zone stick Xbox : 0.08 (8%)"/>
+                        <TextBlock Text="{loc:T Text='Mouvements :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:T Text='Pad gauche → Scroll (4.8 crans/unité, dead zone 0.002)'}"/>
+                        <TextBlock Text="{loc:T Text='Pad droit → Trackball (380 px/unité, dead zone 0.00015)'}"/>
+                        <TextBlock Text="{loc:T Text='Stick gauche → Flèches directionnelles'}"/>
+                        <TextBlock Text="{loc:T Text='Inversion : pad gauche Y, pad droit Y'}"/>
+                        <TextBlock Text="{loc:T Text='Dead zone stick gauche : 0.06    stick droite : 0.018'}"/>
                         <TextBlock Text=" " Margin="0,8,0,0"/>
-                        <TextBlock Text="Boutons :" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBlock Text="  L4 → PrintScreen    R4 → Win+G"/>
-                        <TextBlock Text="  L5 → Win+R          R5 → Alt+F4"/>
-                        <TextBlock Text="  LB → Alt+Tab        RB → Win+Tab"/>
-                        <TextBlock Text="  A → OSK Toggle      B → OSK Toggle"/>
-                        <TextBlock Text="  X → Alt+←           Y → Alt+→"/>
-                        <TextBlock Text="  L3 → Enter          R3 → Aucun"/>
-                        <TextBlock Text="  Menu → Win          View → Win+D"/>
-                        <TextBlock Text="  DPad ↑ → Volume+    DPad ↓ → Volume-"/>
-                        <TextBlock Text="  DPad ← → Back       DPad → → Forward"/>
+                        <TextBlock Text="{loc:T Text='Comportement :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:T Text='Accélération : gauche 1.5, droite 2.0'}"/>
+                        <TextBlock Text="{loc:T Text='Inertie : gauche et droite 2.0 (glisse longue)'}"/>
+                        <TextBlock Text="{loc:T Text='Précision fine : 0.10    Seuil de lancer : 70 px'}"/>
+                        <TextBlock Text="{loc:T Text='Continuation en bord : 750 px/s'}"/>
+                        <TextBlock Text=" " Margin="0,8,0,0"/>
+                        <TextBlock Text="{loc:T Text='Boutons :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:T Text='L4 → PrintScreen    R4 → Win+G'}"/>
+                        <TextBlock Text="{loc:T Text='L5 → Win+R          R5 → Alt+F4'}"/>
+                        <TextBlock Text="{loc:T Text='LB → Alt+Tab        RB → Win+Tab'}"/>
+                        <TextBlock Text="{loc:T Text='A → OSK Toggle      B → OSK Toggle'}"/>
+                        <TextBlock Text="{loc:T Text='X → Alt+←           Y → Alt+→'}"/>
+                        <TextBlock Text="{loc:T Text='L3 → Enter          R3 → Aucun'}"/>
+                        <TextBlock Text="{loc:T Text='Menu → Win          View → Win+D'}"/>
+                        <TextBlock Text="{loc:T Text='DPad ↑ → Volume+    DPad ↓ → Volume-'}"/>
+                        <TextBlock Text="{loc:T Text='DPad ← → Back       DPad → → Forward'}"/>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -174,26 +178,33 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="Sauvegarder" Command="{Binding SaveProfileCommand}"
+                    <Button Grid.Column="0" Content="{loc:T Text='Sauvegarder'}" Command="{Binding SaveProfileCommand}"
                             Style="{StaticResource PrimaryButton}" Margin="0,0,4,0" Height="36" FontSize="13"/>
-                    <Button Grid.Column="1" Content="Annuler" Command="{Binding CancelEditCommand}"
+                    <Button Grid.Column="1" Content="{loc:T Text='Appliquer'}" Command="{Binding ApplyProfileCommand}"
                             Style="{StaticResource SecondaryButton}" Margin="4,0" Height="36" FontSize="13"/>
-                    <Button Grid.Column="2" Content="Supprimer" Command="{Binding DeleteActiveProfileCommand}"
+                    <Button Grid.Column="2" Content="{loc:T Text='Supprimer'}" Command="{Binding DeleteActiveProfileCommand}"
                             CommandParameter="{Binding ActiveEdit}"
                             Style="{StaticResource DangerButton}" Margin="4,0,0,0" Height="36" FontSize="13"/>
                 </Grid>
 
-                <!-- Paramètres généraux -->
+                <!-- The "Paramètres généraux" card lived here and held only a Profile/Xbox360 mode
+                     picker, which duplicated what the tabs already express. Removed rather than
+                     reworked: the stored value is still used when launching the core. -->
+
+                <!-- Overlay Keyboard -->
                 <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Text="Paramètres généraux" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                        <TextBlock Text="{loc:T Text='Overlay Keyboard'}" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:T Text='Ces réglages s\'appliquent au clavier virtuel, pas au bureau Windows.'}"
+                                   FontSize="11" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,12"
+                                   TextWrapping="Wrap"/>
 
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="140"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="140"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -201,24 +212,59 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Mode de saisie'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                                      ItemsSource="{Binding AvailableModes}" SelectedItem="{Binding ActiveEdit.Mode}" Margin="0,4,12,4"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding OskTypingModes}"
+                                      DisplayMemberPath="Display"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding OskMode}"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Vibrations" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='Intensité vibrations'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,4,12,4">
-                                <CheckBox Content="Activer" IsChecked="True" Style="{StaticResource ToggleSwitch}"/>
-                            </StackPanel>
+                            <DockPanel Grid.Row="0" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding OskHapticIntensityDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding OskHapticIntensity}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Force clic pad gauche'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding OskLeftClickForceDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding OskLeftClickForce}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='Force clic pad droit'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="1" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding OskRightClickForceDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding OskRightClickForce}"/>
+                            </DockPanel>
                         </Grid>
+
+                        <Separator Background="{StaticResource BorderBrush}" Margin="0,12"/>
+
+                        <CheckBox Content="{loc:T Text='Vibrer au survol des touches'}"
+                                  IsChecked="{Binding OskHoverHaptics}"
+                                  Style="{StaticResource ToggleSwitch}"/>
+                        <TextBlock Text="{loc:T Text='Un tic à chaque touche franchie, pour taper sans regarder l\'overlay.'}"
+                                   FontSize="11" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+
+                        <CheckBox Content="{loc:T Text='Valider au relâchement du clic'}"
+                                  IsChecked="{Binding OskValidateOnRelease}"
+                                  Style="{StaticResource ToggleSwitch}"/>
+                        <TextBlock Text="{loc:T Text='Permet de repositionner le doigt en maintenant le clic avant de valider.'}"
+                                   FontSize="11" Foreground="{StaticResource TextDimBrush}"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Mouvements -->
                 <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Text="Mouvements" FontSize="14" FontWeight="SemiBold"
+                        <TextBlock Text="{loc:T Text='Mouvements'}" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
 
                         <Grid>
@@ -235,71 +281,230 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Pad droit" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding RightPadOptions}" SelectedItem="{Binding MotionRightPad}"/>
+                            <!-- Left column: left pad and left stick. Right column: right pad and right
+                                 stick. Counterparts sit on the same row so they can be compared. -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='GAUCHE'}" FontWeight="SemiBold" FontSize="11"
+                                       Margin="0,0,0,4" Foreground="{StaticResource TextDimBrush}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='DROITE'}" FontWeight="SemiBold" FontSize="11"
+                                       Margin="0,0,0,4" Foreground="{StaticResource TextDimBrush}"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Pad gauche" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding LeftPadOptions}" SelectedItem="{Binding MotionLeftPad}"/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Stick gauche" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Pad gauche'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding LeftStickOptions}" SelectedItem="{Binding MotionLeftStick}"/>
+                                      ItemsSource="{Binding LeftPadOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionLeftPad}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Sensibilité pad droit" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='Pad droit'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
-                                     Text="{Binding ActiveEdit.RightPadSensitivity, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox Grid.Row="1" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding RightPadOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionRightPad}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Sensibilité pad gauche" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T Text='Sensibilité pad'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
-                                     Text="{Binding ActiveEdit.LeftPadSensitivity, UpdateSourceTrigger=PropertyChanged}"/>
+                            <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadSensitivityDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadSensitivityPercent}"/>
+                            </DockPanel>
 
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="Dead zone stick gauche" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{loc:T Text='Sensibilité pad'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
-                                     Text="{Binding ActiveEdit.StickDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+                            <DockPanel Grid.Row="2" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadSensitivityDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadSensitivityPercent}"/>
+                            </DockPanel>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Dead zone stick droite" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:T Text='Dead zone pad'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
-                                     Text="{Binding ActiveEdit.XboxStickDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+                            <DockPanel Grid.Row="3" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadDeadZoneDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadDeadZonePercent}"/>
+                            </DockPanel>
 
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="Dead zone pad droit" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{loc:T Text='Dead zone pad'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="3" Grid.Column="3" Style="{StaticResource TextBoxDark}" Margin="0,4,0,4"
-                                     Text="{Binding ActiveEdit.RightPadDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
+                            <DockPanel Grid.Row="3" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadDeadZoneDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadDeadZonePercent}"/>
+                            </DockPanel>
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Dead zone pad gauche" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:T Text='Inversion pad'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource TextBoxDark}" Margin="0,4,12,4"
-                                     Text="{Binding ActiveEdit.LeftPadDeadZone, UpdateSourceTrigger=PropertyChanged}"/>
-
-                            <TextBlock Grid.Row="4" Grid.Column="2" Text="Inversion" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <StackPanel Grid.Row="4" Grid.Column="3" Orientation="Horizontal" Margin="0,4,0,4">
-                                <CheckBox Content="Pad droit X" IsChecked="{Binding ActiveEdit.RightPadInvertX}"
-                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,8,0"/>
-                                <CheckBox Content="Pad droit Y" IsChecked="{Binding ActiveEdit.RightPadInvertY}"
-                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,8,0"/>
-                                <CheckBox Content="Pad gauche Y" IsChecked="{Binding ActiveEdit.LeftPadInvertVertical}"
+                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,4,12,4">
+                                <CheckBox Content="Y" IsChecked="{Binding ActiveEdit.LeftPadInvertVertical}"
                                           Style="{StaticResource ToggleSwitch}"/>
                             </StackPanel>
+
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="{loc:T Text='Inversion pad'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="3" Orientation="Horizontal" Margin="0,4,0,4">
+                                <CheckBox Content="X" IsChecked="{Binding ActiveEdit.RightPadInvertX}"
+                                          Style="{StaticResource ToggleSwitch}" Margin="0,0,10,0"/>
+                                <CheckBox Content="Y" IsChecked="{Binding ActiveEdit.RightPadInvertY}"
+                                          Style="{StaticResource ToggleSwitch}"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:T Text='Stick gauche'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
+                                      ItemsSource="{Binding LeftStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionLeftStick}"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Dead zone stick'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding StickDeadZoneDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickDeadZonePercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="6" Grid.Column="2" Text="{loc:T Text='Dead zone stick'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="6" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding XboxStickDeadZoneDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickDeadZonePercent}"/>
+                            </DockPanel>
+
                         </Grid>
+
+                        <Separator Background="{StaticResource BorderBrush}" Margin="0,12"/>
+
+                        <TextBlock Text="{loc:T Text='Comportement'}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='GAUCHE'}" FontWeight="SemiBold" FontSize="11"
+                                       Margin="0,0,0,4" Foreground="{StaticResource TextDimBrush}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='DROITE'}" FontWeight="SemiBold" FontSize="11"
+                                       Margin="0,0,0,4" Foreground="{StaticResource TextDimBrush}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Accélération'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadAccelerationDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadAccelerationPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='Accélération'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="1" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadAccelerationDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadAccelerationPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T Text='Inertie'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadInertiaDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadInertiaPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{loc:T Text='Inertie'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="2" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadInertiaDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadInertiaPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:T Text='Scroll horizontal'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <CheckBox Grid.Row="3" Grid.Column="1" Content="{loc:T Text='Activer'}" Margin="0,4,12,4"
+                                      IsChecked="{Binding LeftPadHorizontalScroll}"
+                                      Style="{StaticResource ToggleSwitch}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{loc:T Text='Précision fine'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="3" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding FinePrecisionDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding FinePrecisionPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="{loc:T Text='Continuation en bord'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="4" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadEdgeSpeedDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadEdgeSpeedPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:T Text='Seuil de lancer'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding MinThrowTravelDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding MinThrowTravelPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:T Text='Force vibration'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="5" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadHapticForceDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadHapticForcePercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="{loc:T Text='Force vibration'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="5" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadHapticForceDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadHapticForcePercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Fréquence vibration'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,12,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding LeftPadHapticFrequencyDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftPadHapticFrequencyPercent}"/>
+                            </DockPanel>
+
+                            <TextBlock Grid.Row="6" Grid.Column="2" Text="{loc:T Text='Fréquence vibration'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="6" Grid.Column="3" Margin="0,4,0,4">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding RightPadHapticFrequencyDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightPadHapticFrequencyPercent}"/>
+                            </DockPanel>
+
+                        </Grid>
+
+                        <TextBlock Text="{loc:T Text='Précision fine : force de la réduction sur un petit geste. Portée précision : distance sur laquelle elle s\'applique avant de revenir à la normale. Seuil de lancer : en dessous, relâcher ne projette pas le curseur. Anti-frôlement : distance qu\'un nouveau contact doit parcourir avant d\'agir.'}"
+                                   FontSize="11" Foreground="{StaticResource TextDimBrush}" Margin="0,8,0,0"
+                                   TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Boutons -->
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
-                        <TextBlock Text="Boutons" FontSize="14" FontWeight="SemiBold"
+                        <TextBlock Text="{loc:T Text='Boutons'}" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
 
                         <Grid>
@@ -326,95 +531,95 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="L4" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='L4'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonL4}"/>
+                                      ItemsSource="{Binding RearButtonOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonL4}"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="R4" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='R4'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonR4}"/>
+                                      ItemsSource="{Binding RearButtonOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonR4}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="L5" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='L5'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonL5}"/>
+                                      ItemsSource="{Binding RearButtonOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonL5}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="R5" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='R5'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="1" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding RearButtonOptions}" SelectedItem="{Binding ButtonR5}"/>
+                                      ItemsSource="{Binding RearButtonOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonR5}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="LB" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T Text='LB'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="2" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding BumperOptions}" SelectedItem="{Binding ButtonLBumper}"/>
+                                      ItemsSource="{Binding BumperOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonLBumper}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="RB" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{loc:T Text='RB'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="2" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding BumperOptions}" SelectedItem="{Binding ButtonRBumper}"/>
+                                      ItemsSource="{Binding BumperOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonRBumper}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="A" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="3" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding AOptions}" SelectedItem="{Binding ButtonA}"/>
+                                      ItemsSource="{Binding AOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonA}"/>
 
                             <TextBlock Grid.Row="3" Grid.Column="2" Text="B" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="3" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding BOptions}" SelectedItem="{Binding ButtonB}"/>
+                                      ItemsSource="{Binding BOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonB}"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="X" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="4" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding XOptions}" SelectedItem="{Binding ButtonX}"/>
+                                      ItemsSource="{Binding XOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonX}"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="2" Text="Y" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="4" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding YOptions}" SelectedItem="{Binding ButtonY}"/>
+                                      ItemsSource="{Binding YOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonY}"/>
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="L3 (stick)" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:T Text='L3 (stick)'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="5" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding L3Options}" SelectedItem="{Binding ButtonL3}"/>
+                                      ItemsSource="{Binding L3Options}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonL3}"/>
 
-                            <TextBlock Grid.Row="5" Grid.Column="2" Text="R3 (stick)" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="{loc:T Text='R3 (stick)'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="5" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding R3Options}" SelectedItem="{Binding ButtonR3}"/>
+                                      ItemsSource="{Binding R3Options}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonR3}"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Menu" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Menu'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="6" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding MenuOptions}" SelectedItem="{Binding ButtonMenu}"/>
+                                      ItemsSource="{Binding MenuOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonMenu}"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="2" Text="View" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="6" Grid.Column="2" Text="{loc:T Text='View'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="6" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding ViewOptions}" SelectedItem="{Binding ButtonView}"/>
+                                      ItemsSource="{Binding ViewOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonView}"/>
 
-                            <TextBlock Grid.Row="7" Grid.Column="0" Text="DPad ↑" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:T Text='DPad ↑'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="7" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding DPadUpOptions}" SelectedItem="{Binding ButtonDPadUp}"/>
+                                      ItemsSource="{Binding DPadUpOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonDPadUp}"/>
 
-                            <TextBlock Grid.Row="7" Grid.Column="2" Text="DPad ↓" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="7" Grid.Column="2" Text="{loc:T Text='DPad ↓'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="7" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding DPadDownOptions}" SelectedItem="{Binding ButtonDPadDown}"/>
+                                      ItemsSource="{Binding DPadDownOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonDPadDown}"/>
 
-                            <TextBlock Grid.Row="8" Grid.Column="0" Text="DPad ←" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:T Text='DPad ←'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="8" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
-                                      ItemsSource="{Binding DPadLeftOptions}" SelectedItem="{Binding ButtonDPadLeft}"/>
+                                      ItemsSource="{Binding DPadLeftOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonDPadLeft}"/>
 
-                            <TextBlock Grid.Row="8" Grid.Column="2" Text="DPad →" FontWeight="SemiBold"
+                            <TextBlock Grid.Row="8" Grid.Column="2" Text="{loc:T Text='DPad →'}" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="8" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
-                                      ItemsSource="{Binding DPadRightOptions}" SelectedItem="{Binding ButtonDPadRight}"/>
+                                      ItemsSource="{Binding DPadRightOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding ButtonDPadRight}"/>
                         </Grid>
                     </StackPanel>
                 </Border>

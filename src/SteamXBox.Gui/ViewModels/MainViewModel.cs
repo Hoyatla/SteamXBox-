@@ -6,6 +6,8 @@ using CommunityToolkit.Mvvm.Input;
 using SteamXBox.Gui.Models;
 using SteamXBox.Gui.Services;
 
+using SteamXBox.Gui.Localization;
+
 namespace SteamXBox.Gui.ViewModels;
 
 public partial class MainViewModel : ObservableObject, IDisposable
@@ -19,7 +21,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isDeviceConnected;
     [ObservableProperty] private string _deviceName = "Recherche...";
     [ObservableProperty] private string _currentMode = "Profile";
-    [ObservableProperty] private string _statusText = "Arrêté";
+    [ObservableProperty] private string _statusText = Strings.Current["Arrêté"];
     [ObservableProperty] private ProfileData? _selectedProfile;
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private int _selectedTabIndex;
@@ -56,9 +58,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     LogText += $"[{DateTime.Now:HH:mm:ss}] [WARN] Stale ProcessExited ignored (core is still running)\n";
                     return;
                 }
-                LogText += $"[{DateTime.Now:HH:mm:ss}] [INFO] Core arrêté (code {code})\n";
+                LogText += Strings.Current.Format("[{0}] [INFO] Core arrêté (code {1})\n", DateTime.Now.ToString("HH:mm:ss"), code);
                 IsCoreRunning = false;
-                StatusText = "Arrêté";
+                StatusText = Strings.Current["Arrêté"];
                 App.DebugVm?.UpdateCoreStatus(false);
             });
         };
@@ -68,7 +70,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             App.Current.Dispatcher.BeginInvoke(() =>
             {
                 IsDeviceConnected = dev.IsConnected;
-                DeviceName = dev.IsConnected ? dev.DisplayName : "Aucun device";
+                DeviceName = dev.IsConnected ? dev.DisplayName : Strings.Current["Aucun device"];
                 App.DebugVm?.UpdateDeviceStatus(dev.IsConnected, DeviceName);
 
                 if (AutoStart && dev.IsConnected && !_wasDeviceConnected && !IsCoreRunning)
@@ -113,16 +115,34 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         var profile = SelectedProfile ?? new ProfileData();
+
+        // Core resolves the profile by name from disk and silently falls back to built-in defaults
+        // when the file is absent. Without this, launching with a profile that was never saved makes
+        // every value in the editor inert at runtime, with no feedback anywhere.
+        if (!File.Exists(profile.FilePath))
+        {
+            try
+            {
+                profile.Save();
+                LogText += Strings.Current.Format("[{0}] [INFO] Profil '{1}' écrit sur disque avant démarrage\n", DateTime.Now.ToString("HH:mm:ss"), profile.Name);
+            }
+            catch (Exception ex)
+            {
+                LogText += Strings.Current.Format("[{0}] [ERROR] Impossible d'écrire le profil '{1}' : {2}\n", DateTime.Now.ToString("HH:mm:ss"), profile.Name, ex.Message);
+            }
+        }
+
         var corePath = _core.GetCorePath();
-        LogText += $"[{DateTime.Now:HH:mm:ss}] [INFO] Démarrage Core: {corePath} (exists={File.Exists(corePath)})\n";
+        LogText += Strings.Current.Format("[{0}] [INFO] Démarrage Core : {1} (exists={2})\n", DateTime.Now.ToString("HH:mm:ss"), corePath, File.Exists(corePath));
+        LogText += Strings.Current.Format("[{0}] [INFO] Profil actif : {1} ({2})\n", DateTime.Now.ToString("HH:mm:ss"), profile.Name, profile.FilePath);
         if (!_core.Start(profile))
         {
-            LogText += $"[{DateTime.Now:HH:mm:ss}] [ERROR] Échec du démarrage de Core\n";
-            StatusText = "Erreur au démarrage";
+            LogText += Strings.Current.Format("[{0}] [ERROR] Échec du démarrage de Core\n", DateTime.Now.ToString("HH:mm:ss"));
+            StatusText = Strings.Current["Erreur au démarrage"];
             return;
         }
         IsCoreRunning = true;
-        StatusText = $"En cours ({profile.Mode})";
+        StatusText = Strings.Current.Format("En cours ({0})", profile.Mode);
         CurrentMode = profile.Mode;
         App.DebugVm?.UpdateCoreStatus(true);
     }
@@ -132,7 +152,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         _core.Stop();
         IsCoreRunning = false;
-        StatusText = "Arrêté";
+        StatusText = Strings.Current["Arrêté"];
         App.DebugVm?.UpdateCoreStatus(false);
     }
 
@@ -155,7 +175,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _settings.Settings.LastActiveProfile = value.Name;
             _settings.Save();
             if (IsCoreRunning)
-                StatusText = $"En cours ({value.Mode})";
+                StatusText = Strings.Current.Format("En cours ({0})", value.Mode);
         }
     }
 
@@ -163,7 +183,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         App.DebugVm?.UpdateDriverStatus(true, true);
         if (IsCoreRunning)
-            StatusText = $"En cours ({value})";
+            StatusText = Strings.Current.Format("En cours ({0})", value);
     }
 
     partial void OnAutoStartChanged(bool value)

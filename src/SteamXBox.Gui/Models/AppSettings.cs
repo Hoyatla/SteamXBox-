@@ -16,8 +16,23 @@ public sealed class AppSettings
     [JsonPropertyName("lastActiveProfile")]
     public string LastActiveProfile { get; set; } = "Default";
 
-    [JsonPropertyName("tabWindowStates")]
-    public TabWindowState[] TabWindowStates { get; set; } = new TabWindowState[6];
+    /// <summary>Interface language. Defaults to following the Windows display language.</summary>
+    [JsonPropertyName("language")]
+    public Localization.AppLanguage Language { get; set; } = Localization.AppLanguage.System;
+
+    /// <summary>
+    /// Launch SteamXBox when Windows starts, via the per-user Run key. Distinct from
+    /// <see cref="AutoStart"/>, which only starts the core once the controller is detected.
+    /// </summary>
+    [JsonPropertyName("startWithWindows")]
+    public bool StartWithWindows { get; set; }
+
+    /// <summary>
+    /// Window size remembered per tab, indexed by tab order. Size only: the window position is left
+    /// alone so it never reappears off-screen or jumps between monitors.
+    /// </summary>
+    [JsonPropertyName("tabSizes")]
+    public TabSize[] TabSizes { get; set; } = [];
 
     public static string SettingsDirectory =>
         System.IO.Path.Combine(
@@ -28,20 +43,15 @@ public sealed class AppSettings
         System.IO.Path.Combine(SettingsDirectory, "settings.json");
 }
 
-public sealed class TabWindowState
+/// <summary>Remembered window size for one tab.</summary>
+public sealed class TabSize
 {
     [JsonPropertyName("width")]
-    public double Width { get; set; } = 900;
+    public double Width { get; set; }
 
     [JsonPropertyName("height")]
-    public double Height { get; set; } = 620;
+    public double Height { get; set; }
 
-    [JsonPropertyName("left")]
-    public double Left { get; set; } = double.NaN;
-
-    [JsonPropertyName("top")]
-    public double Top { get; set; } = double.NaN;
-
-    [JsonPropertyName("windowState")]
-    public string WindowState { get; set; } = "Normal";
+    [JsonIgnore]
+    public bool IsUsable => Width > 200 && Height > 200;
 }

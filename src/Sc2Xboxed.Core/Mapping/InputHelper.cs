@@ -19,6 +19,7 @@ public static class InputHelper
 	private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
 	private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
 	private const uint MOUSEEVENTF_WHEEL = 0x0800;
+	private const uint MOUSEEVENTF_HWHEEL = 0x01000;
 	private const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
 	private const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
 
@@ -256,6 +257,24 @@ public static class InputHelper
 			Union = new INPUTUNION
 			{
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_MIDDLEUP }
+			}
+		};
+		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+	}
+
+	/// <summary>Horizontal wheel, used for side-scrolling from the left pad's X axis.</summary>
+	public static void MouseHorizontalWheel(int delta)
+	{
+		INPUT input = new INPUT
+		{
+			Type = INPUT_MOUSE,
+			Union = new INPUTUNION
+			{
+				Mouse = new MOUSEINPUT
+				{
+					MouseData = unchecked((uint)(delta * WHEEL_DELTA)),
+					DwFlags = MOUSEEVENTF_HWHEEL
+				}
 			}
 		};
 		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());

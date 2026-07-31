@@ -87,7 +87,13 @@ public sealed class DefaultSteamControllerMapperTests
                 PixelsPerPadUnit = 1000.0,
                 MotionDeadZone = 0.0,
                 InertiaDecayPerSecond = 4.0,
-                StopSpeedPixelsPerSecond = 0.1
+                StopSpeedPixelsPerSecond = 0.1,
+
+                // This checks that inertia is wired through the mapper at all, so the gating that
+                // normally suppresses a throw this short is switched off here on purpose.
+                MinThrowTravelPixels = 0.0,
+                TouchActivationTravel = 0.0,
+                FinePrecisionTravel = 0.0,
             }
         });
 

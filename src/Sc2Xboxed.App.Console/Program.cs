@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Sc2Xboxed.Core.Diagnostics;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Haptics;
 using Sc2Xboxed.Core.Mapping;
+using Sc2Xboxed.Core.Osk;
 using Sc2Xboxed.Core.Output;
 using Sc2Xboxed.Core.Runtime;
 using HidSharp;
@@ -155,6 +157,12 @@ static async Task RunCommandAsync(string[] args, Action<string>? debugLog = null
         case "hid-diag":
             RunHidDiagnostic();
             return;
+        case "diag":
+            RunDiagnosticReport(args);
+            return;
+        case "haptic-sides":
+            RunHapticSideSweep();
+            return;
         default:
             PrintUsage();
             return;
@@ -243,23 +251,131 @@ static async Task RunHapticTestAsync(string[] args)
     Console.WriteLine("Sent trackpad haptic click test reports.");
 }
 
+/// <summary>
+/// Stands SteamXBox down for as long as Steam owns the controller, then restores everything.
+/// Returns false when cancelled, which means the caller should exit rather than reclaim.
+/// </summary>
+static async Task<bool> WaitWhileSteamOwnsAsync(
+    SteamPresenceWatcher watcher,
+    ViGEmXbox360Sink gamepad,
+    TritonHapticSink haptics,
+    Action<string> log,
+    CancellationToken cancellationToken)
+{
+    log("Releasing the controller to Steam.");
+
+    // Mute before dropping the stream so a queued overlay tick cannot reopen the device.
+    haptics.Muted = true;
+    haptics.Reset();
+
+    StopOskOverlay(log);
+
+    try
+    {
+        await gamepad.DisconnectAsync().ConfigureAwait(false);
+        log("Virtual Xbox 360 controller unplugged.");
+    }
+    catch (Exception exception)
+    {
+        log($"Unplugging the virtual pad failed: {exception.GetType().Name}: {exception.Message}");
+    }
+
+    Console.WriteLine("Steam owns the controller. Standing by...");
+
+    while (true)
+    {
+        try
+        {
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (watcher.Poll(DateTimeOffset.UtcNow) && watcher.Owner == ControllerOwner.SteamXBox)
+        {
+            break;
+        }
+    }
+
+    haptics.Muted = false;
+
+    try
+    {
+        await gamepad.ConnectAsync(cancellationToken).ConfigureAwait(false);
+        log("Virtual Xbox 360 controller replugged.");
+    }
+    catch (OperationCanceledException)
+    {
+        return false;
+    }
+    catch (Exception exception)
+    {
+        log($"Replugging the virtual pad failed: {exception.GetType().Name}: {exception.Message}");
+    }
+
+    return true;
+}
+
+/// <summary>Asks the overlay keyboard process to close, if it is running.</summary>
+static void StopOskOverlay(Action<string> log)
+{
+    try
+    {
+        var closeSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-close.signal");
+        File.WriteAllText(closeSignalPath, DateTime.UtcNow.Ticks.ToString());
+
+        // Same insurance as the toggle path: never leave a latched SHIFT behind.
+        InputHelper.KeyUp(0xA0);
+
+        log("OSK close signal written.");
+    }
+    catch (Exception exception)
+    {
+        log($"OSK close signal failed: {exception.GetType().Name}: {exception.Message}");
+    }
+}
+
 static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = null)
 {
     var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-debug.log");
-    StreamWriter? logFile = debugLog is not null ? null : new StreamWriter(logPath, append: false) { AutoFlush = true };
-    var DLog = debugLog ?? ((string msg) =>
-    {
-        var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
-        logFile!.WriteLine(line);
-    });
 
-    DLog($"=== SteamXBox started ===");
-    DLog($"Args: {string.Join(" ", args)}");
-    DLog($"Log file: {logPath}");
+    using var log = new DiagnosticLog(
+        logPath,
+        level: ReadLogLevel(args),
+        categories: ReadLogCategories(args),
+        alsoConsole: args.Contains("--debug", StringComparer.OrdinalIgnoreCase));
+
+    // Existing call sites log free-form strings; route them to Info/Mapping.
+    var DLog = debugLog ?? ((string msg) => log.Info(LogCategory.Mapping, msg));
+
+    var counters = new RuntimeCounters();
+    var frameBuffer = new FrameRingBuffer();
+
+    // Dumps the frames leading up to an event, which is why per-frame logging can stay off.
+    void DumpFrameContext(string reason)
+    {
+        var frames = frameBuffer.Drain();
+        if (frames.Count == 0)
+        {
+            return;
+        }
+
+        log.WriteBlock(
+            LogLevel.Info,
+            LogCategory.Frame,
+            $"last {frames.Count} frames before: {reason}",
+            frames);
+    }
+
+    log.Info(LogCategory.Session, "=== SteamXBox session start ===");
+    log.WriteBlock(LogLevel.Info, LogCategory.Session, "identity", SessionReport.Identity(args));
+    log.Info(LogCategory.Session, $"log file       : {logPath} (level={log.Level}, categories={log.Categories})");
 
     if (args.Contains("--restart", StringComparer.OrdinalIgnoreCase))
     {
-        DLog("Stopping other instances...");
+        log.Info(LogCategory.Session, "Stopping other instances...");
         StopOtherInstances(waitForExit: true);
     }
 
@@ -272,17 +388,28 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         switchButtons,
         TimeSpan.FromMilliseconds(350));
     var profileName = ReadOptionValue(args, "--profile");
-    var loadedSettings = !string.IsNullOrEmpty(profileName)
-        ? ProfileMapper.LoadFromProfilesDirectory(profileName)
-        : null;
-    if (loadedSettings is not null)
+    Sc2XboxedProfileSettings? loadedSettings = null;
+
+    if (!string.IsNullOrEmpty(profileName))
     {
-        DLog($"Loaded profile '{profileName}': trackSens={loadedSettings.RightPadTrackball.PixelsPerPadUnit}, invertY={loadedSettings.RightPadTrackball.InvertY}, deadzone={loadedSettings.StickDeadZone}, gamepadDeadzone={loadedSettings.GamepadStickDeadZone}");
+        var profileResult = ProfileMapper.LoadDetailed(profileName);
+        loadedSettings = profileResult.Settings;
+        log.WriteBlock(LogLevel.Info, LogCategory.Session, "profile", SessionReport.Profile(profileName, profileResult));
     }
+
+    var effectiveSettings = loadedSettings ?? Sc2XboxedProfileSettings.Default;
+    log.WriteBlock(LogLevel.Info, LogCategory.Session, "effective settings", SessionReport.EffectiveSettings(effectiveSettings));
+    log.WriteBlock(LogLevel.Info, LogCategory.Session, "overlay keyboard", SessionReport.OverlayKeyboard(OskSettings.Load()));
+
     var profileMapper = loadedSettings is not null ? new ProfileMapper(loadedSettings) : new ProfileMapper();
+
+    // Applying settings must not require a restart, so the profile file is watched and reloaded live.
+    using var profileWatcher = string.IsNullOrEmpty(profileName)
+        ? null
+        : new ProfileFileWatcher(profileName, message => log.Warn(LogCategory.Session, message));
     var padSender = new PadDataSender();
     padSender.Start();
-    DLog("PadData pipe server started (SteamXBox_OskPad).");
+    log.Info(LogCategory.Pipe, "PadData pipe server started (SteamXBox_OskPad).");
     var seconds = ReadSecondsOption(args);
     if (seconds is { } durationSeconds)
     {
@@ -301,9 +428,35 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
     var mapper = loadedSettings is not null ? new DefaultSteamControllerMapper(loadedSettings) : new DefaultSteamControllerMapper();
 
+    // Rebuilds both mappers from disk, carrying over the overlay state so a reload cannot strand the
+    // keyboard open with nothing driving it.
+    void ReloadProfile()
+    {
+        if (string.IsNullOrEmpty(profileName)) return;
+
+        var reloaded = ProfileMapper.LoadDetailed(profileName);
+        var wasOskActive = profileMapper.OskActive;
+        var wasDaisywheel = profileMapper.DaisywheelActive;
+
+        profileMapper = new ProfileMapper(reloaded.Settings)
+        {
+            OskActive = wasOskActive,
+            DaisywheelActive = wasDaisywheel,
+        };
+        mapper = new DefaultSteamControllerMapper(reloaded.Settings);
+
+        log.Info(LogCategory.Session, $"*** PROFILE RELOADED from {reloaded.FilePath} ***");
+        log.WriteBlock(LogLevel.Info, LogCategory.Session, "effective settings (reloaded)",
+            SessionReport.EffectiveSettings(reloaded.Settings));
+        Console.WriteLine("Profile reloaded.");
+    }
+
     DLog("Creating ViGEm virtual gamepad...");
     await using var gamepad = new ViGEmXbox360Sink();
-    await using var haptics = new TritonHapticSink();
+    await using var haptics = new TritonHapticSink(
+        new SteamHidDiscovery(),
+        new TritonHapticReportBuilder(),
+        message => log.Info(LogCategory.Haptics, message));
     var rumbleMapper = new XboxRumbleToSteamHapticsMapper();
 
     gamepad.RumbleReceived += (_, rumble) =>
@@ -322,6 +475,35 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         });
     };
 
+    // The overlay keyboard process asks for haptics over a pipe rather than opening its own
+    // HID stream, so this sink stays the single writer for the device.
+    await using var hapticRequests = new HapticRequestReceiver(
+        async (command, token) =>
+        {
+            counters.OverlayHapticRequest();
+
+            if (log.IsEnabled(LogLevel.Debug, LogCategory.Haptics))
+            {
+                log.Debug(LogCategory.Haptics,
+                    $"overlay request: {command.Actuator} {command.Type} pulse={command.PulseWidthUs}us gain={command.GainDb}");
+            }
+
+            try
+            {
+                await haptics.SubmitAsync(new HapticOutputFrame(new[] { command }), token)
+                    .ConfigureAwait(false);
+                counters.HapticSubmitted();
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
+            {
+                counters.HapticDropped();
+                log.Warn(LogCategory.Haptics, $"Overlay haptic dropped: {exception.Message}");
+            }
+        },
+        message => log.Debug(LogCategory.Pipe, message));
+    hapticRequests.Start();
+    log.Info(LogCategory.Pipe, "Haptic request pipe server started (SteamXBox_OskHaptic).");
+
     await gamepad.ConnectAsync(cancellation.Token);
     DLog("Virtual Xbox 360 controller connected.");
     Console.WriteLine("Virtual Xbox 360 controller connected.");
@@ -331,13 +513,49 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     Console.WriteLine($"Mode switch button(s): {switchButtons}");
     Console.WriteLine("Press Ctrl+C to stop.");
 
-    var frameCount = 0;
     var lastStatus = DateTimeOffset.UtcNow;
-    var lastHapticTime = DateTimeOffset.MinValue;
-    const double HapticIntervalMs = 30;
+    var lastScrollTick = DateTimeOffset.MinValue;
+
+    /// <summary>Cursor travel accumulated since the last motion tick, in pixels.</summary>
+    var cursorTravel = 0.0;
+
+    // Ownership arbitration: Steam and SteamXBox cannot drive the controller at the same time.
+    var steamWatcher = new SteamPresenceWatcher();
+    var autoModeSwitch = !args.Contains("--no-auto-mode", StringComparer.OrdinalIgnoreCase);
+    var foregroundArbiter = autoModeSwitch && OperatingSystem.IsWindows()
+        ? new ForegroundModeArbiter()
+        : null;
+    DLog($"Automatic foreground mode switching: {autoModeSwitch}");
+
+    // If Steam is already up when we start, stand down before touching the device at all.
+    steamWatcher.Poll(DateTimeOffset.UtcNow);
+    if (steamWatcher.Owner == ControllerOwner.Steam)
+    {
+        DLog("Steam already running at startup; standing down.");
+        Console.WriteLine("Steam is running: SteamXBox is standing by.");
+        haptics.Muted = true;
+    }
 
     while (!cancellation.Token.IsCancellationRequested)
     {
+        // While Steam owns the controller SteamXBox holds nothing open: no HID stream, no virtual
+        // pad, no haptics. Wait here until Steam goes away.
+        if (steamWatcher.Owner == ControllerOwner.Steam)
+        {
+            profileMapper.OskActive = false;
+            profileMapper.DaisywheelActive = false;
+            profileMapper.Reset();
+            mapper.ResetTransientState();
+
+            if (!await WaitWhileSteamOwnsAsync(steamWatcher, gamepad, haptics, DLog, cancellation.Token))
+            {
+                break;
+            }
+
+            DLog("Steam gone; reclaiming the controller.");
+            Console.WriteLine("Steam closed: SteamXBox is taking over.");
+        }
+
         TritonSteamControllerSource? source = null;
         try
         {
@@ -348,17 +566,32 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 new TritonInputReportParser(),
                 readTimeoutMs: 20,
                 manageNativeLayer: true,
-                initialNativeLayerEnabled: modeSwitcher.WantsNativeLayer,
+                initialNativeLayerEnabled: false,
                 log: DLog);
-            DLog($"HID device opened. nativeLayer={modeSwitcher.WantsNativeLayer}");
+            DLog("HID device opened.");
 
             await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
             {
-                DLog($"Frame: btn={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} t={state.LeftPad.IsTouched} c={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} t={state.RightPad.IsTouched} c={state.RightPad.IsPressed})");
+                // Always cheap: the ring buffer keeps context in memory and is only written to the log
+                // when an event asks for it. The unconditional per-frame write this replaces produced
+                // megabytes per minute and buried everything else.
+                frameBuffer.Add(state);
+                counters.Frame(
+                    state.RightPad.IsTouched || state.RightPad.IsPressed,
+                    state.LeftPad.IsTouched || state.LeftPad.IsPressed);
+
+                if (log.IsEnabled(LogLevel.Trace, LogCategory.Frame))
+                {
+                    log.Trace(LogCategory.Frame,
+                        $"btn={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} t={state.LeftPad.IsTouched} c={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} t={state.RightPad.IsTouched} c={state.RightPad.IsPressed})");
+                }
 
                 if (enableModeSwitch && modeSwitcher.Update(state))
                 {
-                    DLog($"*** MODE SWITCH -> {modeSwitcher.CurrentMode} ***");
+                    // An explicit toggle beats automatic switching for the app in front.
+                    foregroundArbiter?.SuspendForForegroundApp();
+                    DumpFrameContext($"manual mode switch -> {modeSwitcher.CurrentMode}");
+                    log.Info(LogCategory.Mode, $"*** MODE SWITCH -> {modeSwitcher.CurrentMode} (manual) ***");
                     mapper.ResetTransientState();
                     profileMapper.Reset();
                     await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
@@ -368,37 +601,72 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 if (modeSwitcher.SteamLaunchRequested)
                 {
                     DLog("*** Steam launch requested ***");
+                    // Hand over before Steam is observable: the process takes seconds to appear and
+                    // SteamXBox must not still be writing to the device meanwhile.
+                    steamWatcher.HandOverToSteam(DateTimeOffset.UtcNow);
                     InputHelper.LaunchSteam();
-                    await source.SetNativeLayerEnabledAsync(true);
-                    Console.WriteLine("Steam launched, controller returned to native mode.");
+                    Console.WriteLine("Launching Steam, controller handed over.");
+                    break;
                 }
-                else if (modeSwitcher.SteamKillRequested)
+
+                if (modeSwitcher.SteamKillRequested)
                 {
                     DLog("*** Steam kill requested ***");
-                    InputHelper.KillProcess("steam");
+                    InputHelper.KillProcess(SteamPresenceWatcher.SteamProcessName);
+                    steamWatcher.TakeOwnership();
                     DLog("Steam killed. Breaking source loop for fresh reconnection...");
                     Console.WriteLine("Steam killed, reconnecting controller...");
                     break;
                 }
-                else if (modeSwitcher.WantsNativeLayer)
+
+                if (profileWatcher?.TryConsumeChange() == true)
                 {
-                    await source.SetNativeLayerEnabledAsync(true);
+                    ReloadProfile();
                 }
 
-                if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile && !modeSwitcher.WantsNativeLayer)
+                // Steam may also have been started from outside SteamXBox entirely.
+                if (steamWatcher.Poll(DateTimeOffset.UtcNow) && steamWatcher.Owner == ControllerOwner.Steam)
+                {
+                    DumpFrameContext("Steam detected, handing over");
+                    log.Info(LogCategory.Owner, "*** Steam detected; handing the controller over ***");
+                    Console.WriteLine("Steam detected: handing the controller over.");
+                    break;
+                }
+
+                // Desktop versus game, the way Steam swaps its desktop and per-game configs.
+                if (foregroundArbiter?.Poll() is { } suggestedMode && suggestedMode != modeSwitcher.CurrentMode)
+                {
+                    DumpFrameContext($"auto mode switch -> {suggestedMode}");
+                    log.Info(LogCategory.Mode, $"*** AUTO MODE -> {suggestedMode} (foreground={foregroundArbiter.LastForegroundProcess}) ***");
+                    modeSwitcher.SetMode(suggestedMode);
+                    mapper.ResetTransientState();
+                    profileMapper.Reset();
+                    await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    Console.WriteLine($"Mode switched to {suggestedMode} ({foregroundArbiter.LastForegroundProcess}).");
+                }
+
+                if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile)
                 {
                     var mappedState = modeSwitcher.ConsumeButton(state);
                     profileMapper.Map(mappedState);
 
+                    if (profileMapper.EmittedPixelsX != 0 || profileMapper.EmittedPixelsY != 0)
+                        counters.MouseMotion(profileMapper.EmittedPixelsX, profileMapper.EmittedPixelsY);
+                    if (profileMapper.WheelNotches > 0)
+                        counters.Wheel(profileMapper.WheelNotches);
+                    if (profileMapper.PadClicked)
+                        counters.PadClick();
+
                     if (profileMapper.OskActive)
-                        padSender.SendPadState(state.RightPad, state.LeftPad);
+                        padSender.SendPadState(state.RightPad, state.LeftPad, state.Buttons);
 
                     await source.SetNativeLayerEnabledAsync(false);
                     await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
 
                     if (profileMapper.OskToggleRequested)
                     {
-                        DLog($"OSK toggle requested. OskActive={profileMapper.OskActive}");
+                        DumpFrameContext($"OSK toggle (currently active={profileMapper.OskActive})");
+                        log.Info(LogCategory.Osk, $"OSK toggle requested. OskActive={profileMapper.OskActive}");
 
                         if (!profileMapper.OskActive)
                         {
@@ -426,6 +694,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                         var proc = Process.Start(psi);
                                         DLog($"OSK overlay launched: PID={proc?.Id}");
                                         profileMapper.OskActive = true;
+
+                                        // The overlay reads the same settings file; mirror the mode
+                                        // here so ABXY stop running their desktop bindings.
+                                        var oskMode = OskSettings.Load().TypingMode;
+                                        profileMapper.DaisywheelActive = oskMode == OskTypingMode.Daisywheel;
+                                        DLog($"OSK typing mode: {oskMode}");
                                     }
                                     catch (Exception ex)
                                     {
@@ -466,33 +740,86 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             }
 
                             profileMapper.OskActive = false;
-                            DLog("OSK overlay stopped.");
+                            profileMapper.DaisywheelActive = false;
+
+                            // Insurance for the kill path, where the overlay gets no chance to release
+                            // a latched SHIFT itself and would leave the physical keyboard uppercase.
+                            InputHelper.KeyUp(0xA0);
+
+                            log.Info(LogCategory.Osk, "OSK overlay stopped.");
                         }
                     }
 
                     var hapticNow = DateTimeOffset.UtcNow;
-                    bool shouldPulse = (hapticNow - lastHapticTime).TotalMilliseconds >= HapticIntervalMs;
-                    if (shouldPulse)
+                    var cmds = new List<HapticCommand>();
+
+                    // Force and rate come from the profile, per pad. They are read only here, after
+                    // the motion frame has already been produced and sent, so tuning the feel of the
+                    // feedback can never change the cursor or the scrolling itself.
+                    var rightHaptics = profileMapper.Settings.RightPadHaptics;
+                    var leftHaptics = profileMapper.Settings.LeftPadHaptics;
+
+                    // Pointer motion feedback is quantised by distance travelled, not by elapsed time.
+                    // Ticking every 30 ms while the cursor moved produced a continuous buzz; one tick
+                    // per N pixels of travel gives a texture that scales with the gesture instead.
+                    if (rightHaptics.Enabled)
                     {
-                        var cmds = new List<HapticCommand>();
-                        if (profileMapper.CursorMoved)
-                            cmds.Add(new HapticCommand(HapticActuator.RightTrackpad, HapticType.Tick, -12));
-                        if (profileMapper.Scrolled)
-                            cmds.Add(new HapticCommand(HapticActuator.LeftTrackpad, HapticType.Tick, -12));
-                        if (profileMapper.PadClicked)
-                            cmds.Add(new HapticCommand(HapticActuator.RightTrackpad, HapticType.Click, -8));
-                        if (cmds.Count > 0)
+                        cursorTravel += Math.Abs(profileMapper.EmittedPixelsX) + Math.Abs(profileMapper.EmittedPixelsY);
+                        if (cursorTravel >= rightHaptics.TravelPerTickPixels)
                         {
-                            try
+                            cursorTravel %= rightHaptics.TravelPerTickPixels;
+                            cmds.Add(new HapticCommand(
+                                HapticActuator.RightTrackpad, HapticType.Tick, 0,
+                                PulseWidthUs: rightHaptics.PulseWidthUs));
+                        }
+
+                        // Never throttled: a click that gets swallowed feels like a missed input.
+                        if (profileMapper.PadClicked)
+                            cmds.Add(new HapticCommand(
+                                HapticActuator.RightTrackpad, HapticType.Click, 0,
+                                PulseWidthUs: (ushort)Math.Min(ushort.MaxValue, rightHaptics.PulseWidthUs * 1.6)));
+                    }
+
+                    // One detent per scroll burst. A tick per notch would be hundreds per second at
+                    // speed, so the rate is capped and the pulse widens with the notch count to keep
+                    // a fast flick distinguishable from a single notch.
+                    if (leftHaptics.Enabled &&
+                        profileMapper.WheelNotches > 0 &&
+                        (hapticNow - lastScrollTick).TotalMilliseconds >= leftHaptics.DetentIntervalMs)
+                    {
+                        var width = (ushort)Math.Clamp(
+                            leftHaptics.PulseWidthUs + profileMapper.WheelNotches * 20,
+                            leftHaptics.PulseWidthUs,
+                            leftHaptics.PulseWidthUs * 2);
+                        cmds.Add(new HapticCommand(
+                            HapticActuator.LeftTrackpad, HapticType.Tick, 0, PulseWidthUs: width));
+                        lastScrollTick = hapticNow;
+                    }
+
+                    if (cmds.Count > 0)
+                    {
+                        // Counting here as well as in the overlay path: instrumenting only one of the
+                        // two made the log read "haptics sent=0" while commands were being submitted,
+                        // which is worse than no counter at all.
+                        try
+                        {
+                            await haptics.SubmitAsync(new HapticOutputFrame(cmds), CancellationToken.None);
+                            counters.HapticSubmitted();
+
+                            if (log.IsEnabled(LogLevel.Debug, LogCategory.Haptics))
                             {
-                                await haptics.SubmitAsync(new HapticOutputFrame(cmds), CancellationToken.None);
-                                lastHapticTime = hapticNow;
+                                log.Debug(LogCategory.Haptics,
+                                    $"submitted {cmds.Count}: {string.Join(", ", cmds.Select(c => $"{c.Actuator}/{c.Type}/{c.PulseWidthUs}us"))} deviceOpen={haptics.IsDeviceOpen}");
                             }
-                            catch { }
+                        }
+                        catch (Exception exception)
+                        {
+                            counters.HapticDropped();
+                            log.Warn(LogCategory.Haptics, $"haptic submit failed: {exception.GetType().Name}: {exception.Message}");
                         }
                     }
                 }
-                else if (!modeSwitcher.WantsNativeLayer)
+                else
                 {
                     var mappedState = enableModeSwitch ? modeSwitcher.ConsumeButton(state) : state;
                     var output = mapper.Map(mappedState);
@@ -500,14 +827,17 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     await gamepad.SubmitAsync(output.Gamepad, cancellation.Token);
                 }
 
-                frameCount++;
-
                 var now = DateTimeOffset.UtcNow;
-                if (now - lastStatus >= TimeSpan.FromSeconds(1))
+                var sinceStatus = now - lastStatus;
+                if (sinceStatus >= TimeSpan.FromSeconds(1))
                 {
-                    Console.WriteLine(
-                        $"frames={frameCount} mode={modeSwitcher.CurrentMode} native={modeSwitcher.WantsNativeLayer}");
-                    frameCount = 0;
+                    var summary = counters.DrainToLine(
+                        sinceStatus,
+                        modeSwitcher.CurrentMode.ToString(),
+                        steamWatcher.Owner.ToString());
+
+                    log.Info(LogCategory.Counters, summary);
+                    Console.WriteLine(summary);
                     lastStatus = now;
                 }
             }
@@ -536,6 +866,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
         if (cancellation.Token.IsCancellationRequested)
             break;
+
+        // Handing over to Steam is a deliberate release, not a disconnect: skip the reset delay and
+        // the device scan, and go straight back to the stand-down wait at the top of the loop.
+        if (steamWatcher.Owner == ControllerOwner.Steam)
+            continue;
 
         DLog("Waiting 10s for controller to reset after disconnect...");
         Console.WriteLine("Waiting for controller to reset...");
@@ -606,11 +941,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         DLog("Reconnection successful, resuming main loop.");
     }
 
-    DLog("Virtual Xbox 360 controller disconnected.");
+    log.Info(LogCategory.Session, "Virtual Xbox 360 controller disconnected.");
     Console.WriteLine("Virtual Xbox 360 controller disconnected.");
     await padSender.DisposeAsync();
-    DLog("PadSender disposed.");
-    logFile?.Dispose();
+    log.Info(LogCategory.Session, "=== SteamXBox session end ===");
+    // The log is disposed by its using declaration.
 }
 
 static ControllerOutputMode ReadInitialOutputMode(string[] args)
@@ -623,6 +958,219 @@ static ControllerOutputMode ReadInitialOutputMode(string[] args)
         "profile" => ControllerOutputMode.Profile,
         _ => ControllerOutputMode.Profile
     };
+}
+
+/// <summary>
+/// Pulses each candidate side byte in turn, announcing it, so the operator can say which pad
+/// actually buzzed. Settles the side mapping by observation instead of by assumption.
+/// </summary>
+static void RunHapticSideSweep()
+{
+    Console.WriteLine("Haptic side sweep.");
+    Console.WriteLine("Hold the controller and note which pad vibrates for each announced value.");
+    Console.WriteLine();
+
+    var discovery = new SteamHidDiscovery();
+    var device = discovery.FindPreferredControllerDevice();
+    if (device is null)
+    {
+        Console.WriteLine("No controller found.");
+        return;
+    }
+
+    if (!device.TryOpen(out var stream))
+    {
+        Console.WriteLine("Could not open the controller. Stop SteamXBox first, it holds the device.");
+        return;
+    }
+
+    using (stream)
+    {
+        stream.WriteTimeout = 250;
+        var reportLength = Math.Max(8, device.GetMaxOutputReportLength());
+        var builder = new TritonHapticReportBuilder();
+
+        foreach (byte side in new byte[] { 0x00, 0x01, 0x02, 0x03 })
+        {
+            Console.WriteLine($"  side = 0x{side:X2} ... (3 pulses)");
+
+            for (var i = 0; i < 3; i++)
+            {
+                try
+                {
+                    stream.Write(builder.BuildRawSidePulse(side, onUs: 600, reportLength));
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"    write failed: {exception.GetType().Name}: {exception.Message}");
+                    break;
+                }
+
+                Thread.Sleep(250);
+            }
+
+            Thread.Sleep(1200);
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Report which side value hit the LEFT pad and which hit the RIGHT pad.");
+}
+
+/// <summary>
+/// One-shot diagnostic report: identity of all three executables, drivers, HID state, resolved
+/// settings and running processes. Written to stdout and to a file so it can be pasted whole.
+/// </summary>
+static void RunDiagnosticReport(string[] args)
+{
+    var lines = new List<string>();
+    void Section(string title)
+    {
+        lines.Add("");
+        lines.Add($"=== {title} ===");
+    }
+
+    lines.Add("SteamXBox diagnostic report");
+    Section("identity (this process)");
+    lines.AddRange(SessionReport.Identity(args));
+
+    Section("executables next to this one");
+    foreach (var name in new[] { "SteamXBox.exe", "SteamXBox.Core.exe", "Sc2Xboxed.Osk.exe" })
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, name);
+        if (File.Exists(path))
+        {
+            var info = new FileInfo(path);
+            var version = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileVersion ?? "?";
+            lines.Add($"{name,-22} v{version,-10} {info.Length,12:N0} bytes  {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+        }
+        else
+        {
+            lines.Add($"{name,-22} MISSING  <-- the GUI and core launch each other from this directory");
+        }
+    }
+
+    Section("profile");
+    var profileName = ReadOptionValue(args, "--profile") ?? "Default";
+    var profileResult = ProfileMapper.LoadDetailed(profileName);
+    lines.AddRange(SessionReport.Profile(profileName, profileResult));
+
+    Section("effective settings");
+    lines.AddRange(SessionReport.EffectiveSettings(profileResult.Settings));
+
+    Section("overlay keyboard settings");
+    lines.AddRange(SessionReport.OverlayKeyboard(OskSettings.Load()));
+
+    Section("processes");
+    foreach (var name in new[] { "steam", "SteamXBox", "SteamXBox.Core", "Sc2Xboxed.Osk" })
+    {
+        var found = System.Diagnostics.Process.GetProcessesByName(name);
+        try
+        {
+            lines.Add($"{name,-22} {(found.Length == 0 ? "not running" : $"{found.Length} instance(s): {string.Join(", ", found.Select(p => p.Id))}")}");
+        }
+        finally
+        {
+            foreach (var process in found) { try { process.Dispose(); } catch { } }
+        }
+    }
+
+    Section("HID (Valve devices)");
+    try
+    {
+        var devices = HidSharp.DeviceList.Local.GetHidDevices(SteamHidConstants.ValveVendorId).ToArray();
+        lines.Add($"total Valve HID interfaces: {devices.Length}");
+        foreach (var device in devices)
+        {
+            int input = 0, output = 0, feature = 0;
+            bool canOpen = false;
+            try { input = device.GetMaxInputReportLength(); } catch { }
+            try { output = device.GetMaxOutputReportLength(); } catch { }
+            try { feature = device.GetMaxFeatureReportLength(); } catch { }
+            try { if (device.TryOpen(out var stream)) { canOpen = true; stream.Dispose(); } } catch { }
+            lines.Add($"  PID=0x{device.ProductID:X4} in={input} out={output} feat={feature} canOpen={canOpen}");
+        }
+
+        var preferred = new SteamHidDiscovery().FindPreferredControllerDevice();
+        lines.Add($"preferred controller: {(preferred is null ? "NONE FOUND" : $"PID=0x{preferred.ProductID:X4}")}");
+    }
+    catch (Exception exception)
+    {
+        lines.Add($"HID enumeration failed: {exception.GetType().Name}: {exception.Message}");
+    }
+
+    Section("log files");
+    foreach (var name in new[] { "steamxbox-debug.log", "steamxbox-debug.log.1", "steamxbox-osk-debug.log" })
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, name);
+        lines.Add(File.Exists(path)
+            ? $"{name,-28} {new FileInfo(path).Length,12:N0} bytes  {new FileInfo(path).LastWriteTime:yyyy-MM-dd HH:mm:ss}"
+            : $"{name,-28} absent");
+    }
+
+    var report = string.Join(Environment.NewLine, lines);
+    Console.WriteLine(report);
+
+    try
+    {
+        var outputPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-diag.txt");
+        File.WriteAllText(outputPath, report);
+        Console.WriteLine();
+        Console.WriteLine($"Report written to: {outputPath}");
+    }
+    catch (Exception exception)
+    {
+        Console.WriteLine($"Could not write the report file: {exception.Message}");
+    }
+}
+
+/// <summary>
+/// Reads --log-level. Defaults to Debug so a normal run captures decisions, and to Trace when
+/// --debug is passed so the Frame category has something to emit.
+/// </summary>
+static LogLevel ReadLogLevel(string[] args)
+{
+    var value = ReadOptionValue(args, "--log-level");
+    if (value is not null && Enum.TryParse<LogLevel>(value, ignoreCase: true, out var parsed))
+    {
+        return parsed;
+    }
+
+    return args.Contains("--debug", StringComparer.OrdinalIgnoreCase) ? LogLevel.Trace : LogLevel.Debug;
+}
+
+/// <summary>
+/// Reads --log-categories as a comma-separated list, or "all". Frame tracing is opt-in because it
+/// costs roughly 200 lines per second.
+/// </summary>
+static LogCategory ReadLogCategories(string[] args)
+{
+    var value = ReadOptionValue(args, "--log-categories");
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        return LogCategory.Default;
+    }
+
+    if (string.Equals(value, "all", StringComparison.OrdinalIgnoreCase))
+    {
+        return LogCategory.All;
+    }
+
+    var result = LogCategory.None;
+    foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        if (Enum.TryParse<LogCategory>(token, ignoreCase: true, out var category))
+        {
+            result |= category;
+        }
+        else
+        {
+            Console.WriteLine($"Unknown log category '{token}'. Valid: {string.Join(", ", Enum.GetNames<LogCategory>())}");
+        }
+    }
+
+    // Session is always useful; never let a filter hide the identity header.
+    return result == LogCategory.None ? LogCategory.Default : result | LogCategory.Session;
 }
 
 static SteamControllerButtons ReadModeSwitchButtons(string[] args)
@@ -890,13 +1438,19 @@ static void PrintUsage()
     Console.WriteLine("  hid-list       List Valve HID interfaces visible to HidSharp.");
     Console.WriteLine("  hid-probe      Capture raw input reports for 3 seconds.");
     Console.WriteLine("  hid-diag       Diagnostic: compare ListValveDevices vs FindPreferredControllerDevice.");
+    Console.WriteLine("  haptic-sides   Pulse each side byte in turn to identify which one drives which pad.");
+    Console.WriteLine("  diag           Full report: binary versions, drivers, HID, resolved settings,");
+    Console.WriteLine("                 running processes. Writes steamxbox-diag.txt. Add --profile NAME.");
     Console.WriteLine("  haptic-test    Send low-power Steam Controller 2026 trackpad haptic reports; requires --yes.");
     Console.WriteLine("  xbox-run       Stream Steam Controller input to a virtual Xbox 360 controller.");
     Console.WriteLine("                Options: --seconds N, --no-haptics, --restart");
     Console.WriteLine("                         --start-mode xbox360|profile");
     Console.WriteLine("                         --no-mode-switch");
+    Console.WriteLine("                         --no-auto-mode  Disable foreground-based Profile/Xbox360 switching");
     Console.WriteLine("                         --switch-button steam|quick-access|steam-or-quick-access");
-    Console.WriteLine("                         --debug  Log all activity to console + steamxbox-debug.log");
+    Console.WriteLine("                         --debug  Mirror the log to the console and enable frame tracing");
+    Console.WriteLine("                         --log-level error|warn|info|debug|trace");
+    Console.WriteLine("                         --log-categories all | hid,mapping,haptics,osk,owner,mode,pipe,frame,counters");
     Console.WriteLine("  stop           Kill other running SteamXBox instances from the same executable path.");
     Console.WriteLine("  hidhide-setup  Register SteamXBox with HidHide and cloak Valve physical HID devices.");
     Console.WriteLine("  hidhide-status Print HidHide state.");

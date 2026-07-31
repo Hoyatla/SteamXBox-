@@ -3,7 +3,7 @@
 ; Compile: iscc SteamXBox_Full_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "3.0"
+#define MyAppVersion "3.1"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -37,10 +37,16 @@ UninstallDisplayIcon={app}\SteamXBox.ico
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[CustomMessages]
+french.InstallViGEmBus=Installer ViGEmBus (bus virtuel manette Xbox/DS4)
+english.InstallViGEmBus=Install ViGEmBus (virtual Xbox/DS4 gamepad bus)
+french.InstallHidHide=Installer HidHide (masque les manettes physiques)
+english.InstallHidHide=Install HidHide (hides physical controllers)
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
-Name: "vigembus"; Description: "Installer ViGEmBus (bus virtuel manette Xbox/DS4)"
-Name: "hidhide"; Description: "Installer HidHide (masque manettes physiques)"
+Name: "vigembus"; Description: "{cm:InstallViGEmBus}"
+Name: "hidhide"; Description: "{cm:InstallHidHide}"
 
 [Files]
 ; SteamXBox executables (self-contained single-file)

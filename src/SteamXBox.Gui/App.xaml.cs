@@ -14,6 +14,18 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Before any window is built, so the first render is already in the right language.
+        try
+        {
+            var settings = new SettingsService();
+            settings.Load();
+            Localization.Strings.Current.Apply(settings.Settings.Language);
+        }
+        catch
+        {
+            Localization.Strings.Current.Apply(Localization.AppLanguage.System);
+        }
+
         ProfileSvc = new ProfileService();
         ProfileSvc.LoadAll();
 

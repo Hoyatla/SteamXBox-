@@ -4,7 +4,12 @@ using System.Runtime.InteropServices;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Sc2Xboxed.Core.Diagnostics;
+using Sc2Xboxed.Core.Mapping;
+using Sc2Xboxed.Core.Osk;
 using SteamXBox.Gui.Services;
+
+using SteamXBox.Gui.Localization;
 
 namespace SteamXBox.Gui.ViewModels;
 
@@ -17,9 +22,9 @@ public partial class DebugViewModel : ObservableObject
     [ObservableProperty] private string _osVersion = "";
     [ObservableProperty] private string _dotNetVersion = "";
     [ObservableProperty] private string _deviceName = "";
-    [ObservableProperty] private string _coreStatus = "Arrêté";
-    [ObservableProperty] private string _vigEmStatus = "Inconnu";
-    [ObservableProperty] private string _hidHideStatus = "Inconnu";
+    [ObservableProperty] private string _coreStatus = Strings.Current["Arrêté"];
+    [ObservableProperty] private string _vigEmStatus = Strings.Current["Inconnu"];
+    [ObservableProperty] private string _hidHideStatus = Strings.Current["Inconnu"];
 
     public string DebugLogTail
     {
@@ -39,6 +44,13 @@ public partial class DebugViewModel : ObservableObject
         LoadLogTail();
     }
 
+    /// <summary>
+    /// Read from the assembly rather than typed into the view, which is how the Debug tab ended up
+    /// claiming v2.3 while v3.0 was shipping.
+    /// </summary>
+    public static string AppVersion =>
+        "v" + (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "?");
+
     public void RefreshSystemInfo()
     {
         OsVersion = RuntimeInformation.OSDescription;
@@ -48,18 +60,18 @@ public partial class DebugViewModel : ObservableObject
 
     public void UpdateDeviceStatus(bool connected, string name)
     {
-        DeviceName = connected ? name : "Aucun device";
+        DeviceName = connected ? name : Strings.Current["Aucun device"];
     }
 
     public void UpdateCoreStatus(bool running)
     {
-        CoreStatus = running ? "En cours" : "Arrêté";
+        CoreStatus = running ? Strings.Current["En cours"] : Strings.Current["Arrêté"];
     }
 
     public void UpdateDriverStatus(bool vigem, bool hidhide)
     {
-        VigEmStatus = vigem ? "Installé" : "Non installé";
-        HidHideStatus = hidhide ? "Installé" : "Non installé";
+        VigEmStatus = vigem ? Strings.Current["Installé"] : Strings.Current["Non installé"];
+        HidHideStatus = hidhide ? Strings.Current["Installé"] : Strings.Current["Non installé"];
     }
 
     public void LoadLogTail()
@@ -75,12 +87,12 @@ public partial class DebugViewModel : ObservableObject
             }
             else
             {
-                DebugLogTail = "Aucun fichier de log trouvé.";
+                DebugLogTail = Strings.Current["Aucun fichier de log trouvé."];
             }
         }
         catch (Exception ex)
         {
-            DebugLogTail = $"Erreur lecture log: {ex.Message}";
+            DebugLogTail = Strings.Current.Format("Erreur lecture log : {0}", ex.Message);
         }
     }
 
@@ -88,14 +100,61 @@ public partial class DebugViewModel : ObservableObject
     {
         var sb = new StringBuilder();
         sb.AppendLine("=== SteamXBox Debug Report ===");
-        sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sb.AppendLine($"Version: v2.3");
+        sb.AppendLine($"Date: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}");
         sb.AppendLine($"OS: {OsVersion}");
         sb.AppendLine($".NET: {DotNetVersion}");
         sb.AppendLine($"Device: {DeviceName}");
         sb.AppendLine($"Core: {CoreStatus}");
         sb.AppendLine($"ViGEmBus: {VigEmStatus}");
         sb.AppendLine($"HidHide: {HidHideStatus}");
+        sb.AppendLine();
+
+        // Read from the assemblies instead of a hardcoded string: the previous report claimed v2.3
+        // while v3.0 was shipping, which makes every bug report it produced untrustworthy.
+        sb.AppendLine("=== Binaries ===");
+        foreach (var name in new[] { "SteamXBox.exe", "SteamXBox.Core.exe", "Sc2Xboxed.Osk.exe" })
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, name);
+            if (File.Exists(path))
+            {
+                var info = new FileInfo(path);
+                var version = FileVersionInfo.GetVersionInfo(path).FileVersion ?? "?";
+                sb.AppendLine($"{name,-22} v{version,-10} {info.Length,12:N0} bytes  {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+            }
+            else
+            {
+                sb.AppendLine($"{name,-22} MISSING");
+            }
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("=== Overlay keyboard settings ===");
+        try
+        {
+            foreach (var line in SessionReport.OverlayKeyboard(OskSettings.Load()))
+                sb.AppendLine(line);
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"Error: {ex.Message}");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("=== Effective mapping settings ===");
+        try
+        {
+            var active = _settings.Settings.LastActiveProfile;
+            var resolved = ProfileMapper.LoadDetailed(active);
+            foreach (var line in SessionReport.Profile(active, resolved))
+                sb.AppendLine(line);
+            sb.AppendLine();
+            foreach (var line in SessionReport.EffectiveSettings(resolved.Settings))
+                sb.AppendLine(line);
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"Error: {ex.Message}");
+        }
         sb.AppendLine();
 
         sb.AppendLine("=== Last 200 log lines ===");

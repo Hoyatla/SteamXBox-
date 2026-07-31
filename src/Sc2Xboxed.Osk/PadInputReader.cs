@@ -30,19 +30,17 @@ public sealed class PadInputReader : IAsyncDisposable
             }
         }
 
-        var buffer = new byte[36];
+        var buffer = new byte[PadDataSender.FrameSize];
         while (!cancellationToken.IsCancellationRequested)
         {
-            int bytesRead;
             try
             {
-                bytesRead = await _pipe!.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                // Byte-mode pipes can split a frame; a partial read must not desynchronize the stream.
+                await _pipe!.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { yield break; }
+            catch (EndOfStreamException) { yield break; }
             catch (IOException) { yield break; }
-
-            if (bytesRead == 0) yield break;
-            if (bytesRead < 36) continue;
 
             int offset = 0;
             var rightX = ReadDouble(buffer, ref offset);
@@ -55,12 +53,14 @@ public sealed class PadInputReader : IAsyncDisposable
             bool leftTouched = buffer[offset++] != 0;
             bool leftPressed = buffer[offset++] != 0;
 
+            var buttons = (SteamControllerButtons)ReadUInt64(buffer, ref offset);
+
             var right = new TouchpadSample(rightTouched, rightX, rightY, 0.0, rightPressed);
             var left = new TouchpadSample(leftTouched, leftX, leftY, 0.0, leftPressed);
 
             yield return new SteamControllerState(
                 TimeSpan.FromMilliseconds(Environment.TickCount64),
-                SteamControllerButtons.None,
+                buttons,
                 NormalizedStick.Center,
                 NormalizedStick.Center,
                 0.0,
@@ -73,6 +73,13 @@ public sealed class PadInputReader : IAsyncDisposable
     private static double ReadDouble(byte[] buffer, ref int offset)
     {
         double value = BitConverter.ToDouble(buffer, offset);
+        offset += 8;
+        return value;
+    }
+
+    private static ulong ReadUInt64(byte[] buffer, ref int offset)
+    {
+        ulong value = BitConverter.ToUInt64(buffer, offset);
         offset += 8;
         return value;
     }

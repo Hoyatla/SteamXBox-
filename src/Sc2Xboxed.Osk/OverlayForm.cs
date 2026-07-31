@@ -23,7 +23,10 @@ public sealed class OverlayForm : Form
     private KeyDef? _flashingKey;
     private DateTime _flashEnd;
     private bool _symActive;
-    private bool _shiftHeld;
+    private ShiftMode _shift;
+    private bool _daisywheel;
+    private int? _activePetal;
+    private KeyDef? _flashingSlot;
     private readonly object _lock = new();
     private readonly System.Windows.Forms.Timer _topMostTimer;
 
@@ -90,8 +93,15 @@ public sealed class OverlayForm : Form
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(TransparencyKey);
 
-            DrawKeyboard(g);
-            DrawCursors(g);
+            if (_daisywheel)
+            {
+                DrawDaisywheel(g);
+            }
+            else
+            {
+                DrawKeyboard(g);
+                DrawCursors(g);
+            }
         }
         catch (Exception ex)
         {
@@ -138,6 +148,8 @@ public sealed class OverlayForm : Form
                     fill = highlightBrush;
                 else if (sym && key.Action == SpecialAction.Sym)
                     fill = highlightBrush;
+                else if (_shift != ShiftMode.Off && key.Action == SpecialAction.Shift)
+                    fill = highlightBrush;
                 else
                     fill = keyBrush;
 
@@ -155,7 +167,18 @@ public sealed class OverlayForm : Form
                 else
                 {
                     var font = key.Action != SpecialAction.None ? specialFont : normalFont;
-                    g.DrawString(key.Label, font, textBrush, rect, sf);
+
+                    // The shift key states its own mode, phone-style: one capital, or locked.
+                    var label = key.Action == SpecialAction.Shift
+                        ? _shift switch
+                        {
+                            ShiftMode.OneShot => "MAJ ↑",
+                            ShiftMode.Locked => "MAJ 🔒",
+                            _ => key.Label,
+                        }
+                        : key.Label;
+
+                    g.DrawString(label, font, textBrush, rect, sf);
 
                     if (key.Action == SpecialAction.None)
                     {
@@ -167,6 +190,135 @@ public sealed class OverlayForm : Form
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Draws the eight petals as a ring centred low on the screen, each showing its four characters
+    /// tagged with the button that picks them.
+    /// </summary>
+    private void DrawDaisywheel(Graphics g)
+    {
+        // Slot colours follow the Xbox face buttons so the mapping is readable at a glance.
+        Color[] slotColors =
+        [
+            Color.FromArgb(0xFF, 0x5C, 0xC0, 0x5C), // A - green
+            Color.FromArgb(0xFF, 0xE0, 0x5C, 0x5C), // B - red
+            Color.FromArgb(0xFF, 0x5C, 0x9C, 0xE0), // X - blue
+            Color.FromArgb(0xFF, 0xE0, 0xC8, 0x5C), // Y - yellow
+        ];
+
+        using var petalBrush = new SolidBrush(Color.FromArgb(0xB0, 0x18, 0x18, 0x24));
+        using var activePetalBrush = new SolidBrush(Color.FromArgb(0xD8, 0x20, 0x38, 0x60));
+        using var borderPen = new Pen(Color.FromArgb(0x70, 0x80, 0x80, 0x90), 1.5f);
+        using var activeBorderPen = new Pen(Color.FromArgb(0xFF, 0x40, 0x80, 0xFF), 2.5f);
+        using var hubBrush = new SolidBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x18));
+        using var slotFont = new Font("Segoe UI", 20, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var specialFont = new Font("Segoe UI", 11, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var tagFont = new Font("Segoe UI", 9, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var hubFont = new Font("Segoe UI", 13, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var flashBrush = new SolidBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
+        using var dimBrush = new SolidBrush(Color.FromArgb(0xA0, 0xB0, 0xB0, 0xC0));
+        using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+
+        float centerX = _screenW / 2f;
+        float centerY = _screenH - 250f;
+        float ringRadius = 165f;
+        float petalRadius = 62f;
+
+        lock (_lock)
+        {
+            bool symbols = _symActive;
+
+            g.FillEllipse(hubBrush, centerX - 46, centerY - 46, 92, 92);
+            g.DrawEllipse(borderPen, centerX - 46, centerY - 46, 92, 92);
+            g.DrawString(
+                _shift == ShiftMode.Locked ? "MAJ" : _shift == ShiftMode.OneShot ? "Maj" : (symbols ? "SYM" : "abc"),
+                hubFont,
+                _shift != ShiftMode.Off || symbols ? flashBrush : dimBrush,
+                new RectangleF(centerX - 46, centerY - 46, 92, 92),
+                sf);
+
+            // Exit hint under the hub. B is a character key in this mode, so the way out is not the
+            // one muscle memory expects, and nothing else on screen says so. Drawn between the hub
+            // and the south petal, which starts at centerY + 103.
+            g.DrawString(
+                "Menu = quitter   ·   clic pad = MAJ",
+                tagFont,
+                dimBrush,
+                new RectangleF(centerX - 150, centerY + 56, 300, 16),
+                sf);
+
+            for (int petal = 0; petal < DaisywheelLayout.Petals; petal++)
+            {
+                var slots = DaisywheelLayout.Petal(petal, symbols);
+                if (slots is null) continue;
+
+                // Petal 0 sits north and indices advance clockwise.
+                double angle = (90.0 - petal * 45.0) * Math.PI / 180.0;
+                float px = centerX + (float)(Math.Cos(angle) * ringRadius);
+                float py = centerY - (float)(Math.Sin(angle) * ringRadius);
+
+                bool active = _activePetal == petal;
+                g.FillEllipse(active ? activePetalBrush : petalBrush,
+                    px - petalRadius, py - petalRadius, petalRadius * 2, petalRadius * 2);
+                g.DrawEllipse(active ? activeBorderPen : borderPen,
+                    px - petalRadius, py - petalRadius, petalRadius * 2, petalRadius * 2);
+
+                // The four slots are laid out as a small cross inside the petal, in ABXY order.
+                (float dx, float dy)[] slotOffsets =
+                [
+                    (0f, 30f),   // A - bottom
+                    (30f, 0f),   // B - right
+                    (-30f, 0f),  // X - left
+                    (0f, -30f),  // Y - top
+                ];
+
+                for (int slot = 0; slot < slots.Length; slot++)
+                {
+                    var key = slots[slot];
+                    var (dx, dy) = slotOffsets[slot];
+                    var cell = new RectangleF(px + dx - 26, py + dy - 15, 52, 30);
+
+                    bool flashing = ReferenceEquals(key, _flashingSlot) && DateTime.UtcNow < _flashEnd;
+                    using var brush = new SolidBrush(flashing ? Color.White : slotColors[slot]);
+
+                    string label = key.Action == SpecialAction.None
+                        ? (_shift != ShiftMode.Off ? key.ShiftedChar : key.NormalChar).ToString()
+                        : key.Label;
+
+                    g.DrawString(label, key.Action == SpecialAction.None ? slotFont : specialFont, brush, cell, sf);
+
+                    if (active)
+                    {
+                        var tag = new RectangleF(px + dx - 26, py + dy + 11, 52, 12);
+                        g.DrawString(DaisywheelLayout.SlotNames[slot], tagFont, dimBrush, tag, sf);
+                    }
+                }
+            }
+        }
+    }
+
+    public void SetTypingMode(bool daisywheel)
+    { lock (_lock) _daisywheel = daisywheel; Invalidate(); }
+
+    public void SetActivePetal(int? petal)
+    { lock (_lock) _activePetal = petal; Invalidate(); }
+
+    /// <summary>Flashes a daisywheel slot white to acknowledge the keypress.</summary>
+    public void FlashSlot(KeyDef? key)
+    {
+        if (key is null) return;
+        lock (_lock)
+        {
+            _flashingSlot = key;
+            _flashEnd = DateTime.UtcNow.AddMilliseconds(120);
+        }
+        Invalidate();
+        _ = Task.Delay(150).ContinueWith(_ =>
+        {
+            lock (_lock) _flashingSlot = null;
+            try { BeginInvoke(Invalidate); } catch { }
+        });
     }
 
     private void DrawCursors(Graphics g)
@@ -208,8 +360,8 @@ public sealed class OverlayForm : Form
     public void HighlightLeftKey(KeyDef? key)
     { lock (_lock) _highlightedLeftKey = key; Invalidate(); }
 
-    public void SetModifierState(bool shift, bool sym)
-    { lock (_lock) { _shiftHeld = shift; _symActive = sym; } Invalidate(); }
+    public void SetModifierState(ShiftMode shift, bool sym)
+    { lock (_lock) { _shift = shift; _symActive = sym; } Invalidate(); }
 
     public void FlashKey(KeyDef? key)
     {

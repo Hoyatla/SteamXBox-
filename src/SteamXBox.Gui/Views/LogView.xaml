@@ -1,6 +1,7 @@
 <UserControl x:Class="SteamXBox.Gui.Views.LogView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
              xmlns:vm="clr-namespace:SteamXBox.Gui.ViewModels">
 
     <Grid>
@@ -15,8 +16,8 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Text="Log" Style="{StaticResource HeaderText}" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Content="Effacer" Command="{Binding ClearLogCommand}"
+            <TextBlock Text="{loc:T Text='Log'}" Style="{StaticResource HeaderText}" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="{loc:T Text='Effacer'}" Command="{Binding ClearLogCommand}"
                     Style="{StaticResource SecondaryButton}" Padding="12,6"/>
         </Grid>
 
@@ -35,9 +36,9 @@
 
         <TextBlock Grid.Row="2" FontSize="11" Foreground="{StaticResource TextDimBrush}"
                    Margin="0,6,0,0" TextWrapping="Wrap">
-            <Run Text="Core: "/>
+            <Run Text="{loc:T Text='Core:'}"/>
             <Run Text="{Binding IsCoreRunning, Mode=OneWay}"/>
-            <Run Text="  |  Device: "/>
+            <Run Text="{loc:T Text='|  Device:'}"/>
             <Run Text="{Binding DeviceName, Mode=OneWay}"/>
         </TextBlock>
     </Grid>

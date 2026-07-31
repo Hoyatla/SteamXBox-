@@ -39,7 +39,7 @@ public sealed class DefaultSteamControllerMapper
             ToThumbAxis(ApplyDeadZone(state.RightStick.Y)));
 
         var mouse = _leftPad
-            .Update(state.LeftPad)
+            .Update(state.Timestamp, state.LeftPad)
             .Add(_rightPad.Update(state.Timestamp, state.RightPad));
 
         return new ControllerOutputFrame(

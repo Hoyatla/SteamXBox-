@@ -2,6 +2,22 @@ namespace Sc2Xboxed.Osk;
 
 public enum SpecialAction { None, Shift, Backspace, Enter, Space, Tab, Sym }
 
+/// <summary>
+/// Shift behaviour, following the phone convention: one press capitalises the next character only,
+/// a second press locks capitals until pressed again.
+/// </summary>
+/// <remarks>
+/// The state picks the shifted character directly instead of holding the physical Shift key down.
+/// Holding it meant that closing the overlay while shift was latched left the whole system stuck in
+/// uppercase.
+/// </remarks>
+public enum ShiftMode
+{
+    Off,
+    OneShot,
+    Locked,
+}
+
 public sealed class KeyDef
 {
     public int Row { get; }
@@ -25,6 +41,55 @@ public static class KeyboardLayout
 {
     public const int Rows = 5;
     public const int MaxCols = 11;
+
+    /// <summary>
+    /// Column shared by both pads: 6 / Z / H / N on the detected layouts. The left pad owns columns
+    /// 0 to this one, the right pad this one to the last, so each thumb covers its own half of the
+    /// board and neither has to cross the whole width.
+    /// </summary>
+    public const int SharedColumn = 5;
+
+    /// <summary>The last row holds the editing keys and stays reachable from both pads.</summary>
+    public static bool IsSpecialRow(int row) => row == Rows - 1;
+
+    /// <summary>
+    /// Maps a pad's horizontal position to a column within that pad's zone.
+    /// </summary>
+    public static int ColumnFor(double padX, bool isLeftPad, int row)
+    {
+        var normalized = Math.Clamp((padX + 1.0) / 2.0, 0.0, 1.0);
+
+        // Space, Enter, Backspace, Shift and Sym must stay under either thumb, so the special row is
+        // not split: both pads span its full width.
+        if (IsSpecialRow(row))
+        {
+            return Math.Clamp((int)(normalized * MaxCols), 0, MaxCols - 1);
+        }
+
+        if (isLeftPad)
+        {
+            var span = SharedColumn + 1;
+            return Math.Clamp((int)(normalized * span), 0, SharedColumn);
+        }
+
+        var rightSpan = MaxCols - SharedColumn;
+        return Math.Clamp(SharedColumn + (int)(normalized * rightSpan), SharedColumn, MaxCols - 1);
+    }
+
+    /// <summary>Horizontal centre of a pad's zone, in pixels, for drawing its cursor.</summary>
+    public static double CursorXFor(double padX, bool isLeftPad, int row, double keyWidth)
+    {
+        var normalized = Math.Clamp((padX + 1.0) / 2.0, 0.0, 1.0);
+
+        if (IsSpecialRow(row))
+        {
+            return normalized * keyWidth * MaxCols;
+        }
+
+        return isLeftPad
+            ? normalized * keyWidth * (SharedColumn + 1)
+            : keyWidth * SharedColumn + normalized * keyWidth * (MaxCols - SharedColumn);
+    }
 
     private static IReadOnlyList<KeyDef>? _detected;
 

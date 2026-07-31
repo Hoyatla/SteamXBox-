@@ -44,9 +44,15 @@ public sealed class PadDataSender : IAsyncDisposable
         }
     }
 
-    public void SendPadState(TouchpadSample rightPad, TouchpadSample leftPad)
+    /// <summary>
+    /// Fixed frame size: two touchpad samples plus the button mask. The overlay needs the buttons
+    /// for daisywheel typing, where ABXY pick the character.
+    /// </summary>
+    public const int FrameSize = 44;
+
+    public void SendPadState(TouchpadSample rightPad, TouchpadSample leftPad, SteamControllerButtons buttons)
     {
-        var buffer = new byte[36];
+        var buffer = new byte[FrameSize];
         var span = buffer.AsSpan();
         int offset = 0;
 
@@ -59,6 +65,8 @@ public sealed class PadDataSender : IAsyncDisposable
         WriteDouble(span, ref offset, leftPad.Y);
         span[offset++] = (byte)(leftPad.IsTouched ? 1 : 0);
         span[offset++] = (byte)(leftPad.IsPressed ? 1 : 0);
+
+        WriteUInt64(span, ref offset, (ulong)buttons);
 
         lock (_lock)
         {
@@ -79,6 +87,12 @@ public sealed class PadDataSender : IAsyncDisposable
     }
 
     private static void WriteDouble(Span<byte> span, ref int offset, double value)
+    {
+        BitConverter.TryWriteBytes(span.Slice(offset, 8), value);
+        offset += 8;
+    }
+
+    private static void WriteUInt64(Span<byte> span, ref int offset, ulong value)
     {
         BitConverter.TryWriteBytes(span.Slice(offset, 8), value);
         offset += 8;

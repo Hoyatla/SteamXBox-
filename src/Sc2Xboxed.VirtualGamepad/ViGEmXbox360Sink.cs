@@ -59,7 +59,18 @@ public sealed class ViGEmXbox360Sink : IVirtualXbox360Sink
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
+    public bool IsConnected
+    {
+        get { lock (_gate) return _connected; }
+    }
+
+    /// <summary>
+    /// Unplugs the virtual pad. Needed when handing the physical controller to Steam: leaving it
+    /// plugged in makes Steam enumerate a phantom Xbox 360 controller alongside the real one, and
+    /// games launched from Steam may bind to the phantom. <see cref="ConnectAsync"/> plugs it
+    /// back in.
+    /// </summary>
+    public async ValueTask DisconnectAsync()
     {
         await SubmitNeutralIfConnectedAsync().ConfigureAwait(false);
 
@@ -80,6 +91,8 @@ public sealed class ViGEmXbox360Sink : IVirtualXbox360Sink
             _connected = false;
         }
     }
+
+    public ValueTask DisposeAsync() => DisconnectAsync();
 
     private ValueTask SubmitNeutralIfConnectedAsync()
     {

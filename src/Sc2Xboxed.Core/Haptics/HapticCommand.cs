@@ -7,7 +7,13 @@ public readonly record struct HapticCommand(
     ushort Frequency = 0,
     ushort DurationMs = 0,
     ushort LfoFreq = 0,
-    byte LfoDepth = 0)
+    byte LfoDepth = 0,
+    /// <summary>
+    /// Pulse on-time in microseconds for <see cref="HapticType.Tick"/> and
+    /// <see cref="HapticType.Click"/>. The pulse report carries no gain field on this
+    /// firmware, so on-time is how strength is controlled. 0 uses the per-type default.
+    /// </summary>
+    ushort PulseWidthUs = 0)
 {
     public static HapticCommand Stop(HapticActuator actuator)
     {

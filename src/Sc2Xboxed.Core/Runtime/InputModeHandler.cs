@@ -4,6 +4,11 @@ using Sc2Xboxed.Core.Mapping;
 
 namespace Sc2Xboxed.Core.Runtime;
 
+/// <summary>
+/// Translates button chords into user intent: switch output mode, launch Steam, kill Steam.
+/// It deliberately says nothing about the controller's native firmware layer — that follows from
+/// <see cref="ControllerOwner"/>, tracked by <see cref="SteamPresenceWatcher"/>.
+/// </summary>
 public sealed class InputModeHandler
 {
 	private readonly SteamControllerButtons _switchButtons;
@@ -12,8 +17,8 @@ public sealed class InputModeHandler
 	private bool _steamHeldWithY;
 	private bool _wasSteamPressed;
 	private TimeSpan? _lastToggle;
+
 	public ControllerOutputMode CurrentMode { get; private set; }
-	public bool WantsNativeLayer { get; private set; }
 	public bool SteamLaunchRequested { get; private set; }
 	public bool SteamKillRequested { get; private set; }
 
@@ -44,7 +49,6 @@ public sealed class InputModeHandler
 			if (yPressed)
 			{
 				SteamKillRequested = true;
-				WantsNativeLayer = false;
 				_steamHeldWithY = true;
 				return false;
 			}
@@ -52,7 +56,6 @@ public sealed class InputModeHandler
 			if (!_steamHeldWithY)
 			{
 				SteamLaunchRequested = true;
-				WantsNativeLayer = true;
 				return true;
 			}
 		}
@@ -71,13 +74,18 @@ public sealed class InputModeHandler
 				? ControllerOutputMode.Profile
 				: ControllerOutputMode.Xbox360;
 
-			WantsNativeLayer = false;
 			_lastToggle = state.Timestamp;
 
 			return true;
 		}
 
 		return false;
+	}
+
+	/// <summary>Overrides the current output mode, used by automatic foreground-based switching.</summary>
+	public void SetMode(ControllerOutputMode mode)
+	{
+		CurrentMode = mode;
 	}
 
 	public SteamControllerState ConsumeButton(SteamControllerState state)
