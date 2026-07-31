@@ -35,7 +35,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _core = new CoreProcessService();
         _device = new DeviceDetectionService();
         _profileService = App.ProfileSvc;
-        _settings = new SettingsService();
+        _settings = App.SettingsSvc;
         _settings.Load();
 
         _core.OutputReceived += msg =>

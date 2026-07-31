@@ -16,16 +16,22 @@ public static class WindowsStartupService
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "SteamXBox";
 
-    public static bool IsEnabled()
+    public static bool IsEnabled() => RegisteredCommand() is not null;
+
+    /// <summary>
+    /// The command Windows will actually run at sign-in, or null when nothing is registered.
+    /// Surfaced in the GUI so a stale entry left by an older install is visible rather than guessed at.
+    /// </summary>
+    public static string? RegisteredCommand()
     {
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: false);
-            return key?.GetValue(ValueName) is string value && value.Length > 0;
+            return key?.GetValue(ValueName) is string value && value.Length > 0 ? value : null;
         }
         catch
         {
-            return false;
+            return null;
         }
     }
 
@@ -55,8 +61,12 @@ public static class WindowsStartupService
             }
 
             // Quoted: the install path routinely contains spaces.
-            key.SetValue(ValueName, $"\"{exePath}\"");
-            return true;
+            var command = $"\"{exePath}\"";
+            key.SetValue(ValueName, command);
+
+            // Read back rather than trusting the write: a policy or a sync agent can revert the
+            // value immediately, and the checkbox must not claim something that did not stick.
+            return string.Equals(RegisteredCommand(), command, StringComparison.OrdinalIgnoreCase);
         }
         catch
         {

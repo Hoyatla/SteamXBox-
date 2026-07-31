@@ -140,13 +140,25 @@ public sealed class TritonHapticSink : IHapticSink
         try
         {
             CloseStream();
-            _lastOpenAttemptTick = int.MinValue;
+
+            // Clear the flag; never back-date the tick. Seeding it with int.MinValue overflows the
+            // subtraction in EnsureOpen to a large negative number, which reads as "still cooling
+            // down" for every subsequent call. Reset() runs when the controller is handed to Steam,
+            // so that sentinel left haptics permanently dead once Steam had been opened even once.
+            _hasAttemptedOpen = false;
         }
         finally
         {
             _writeGate.Release();
         }
     }
+
+    /// <summary>
+    /// Whether a reopen attempt must be skipped. Exposed so the overflow that killed haptics after a
+    /// Steam handover stays covered by a test rather than by a comment.
+    /// </summary>
+    public static bool IsCoolingDown(bool hasAttemptedOpen, int lastOpenAttemptTick, int nowTick)
+        => hasAttemptedOpen && nowTick - lastOpenAttemptTick < ReopenCooldownMs;
 
     /// <summary>Caller must hold <see cref="_writeGate"/>.</summary>
     private bool TryWrite(byte[] report)
@@ -183,7 +195,7 @@ public sealed class TritonHapticSink : IHapticSink
         // with int.MinValue made the first subtraction overflow to a negative number, which read as
         // "still cooling down" forever and silently disabled every haptic in the app.
         int now = Environment.TickCount;
-        if (_hasAttemptedOpen && now - _lastOpenAttemptTick < ReopenCooldownMs)
+        if (IsCoolingDown(_hasAttemptedOpen, _lastOpenAttemptTick, now))
         {
             return false;
         }

@@ -156,6 +156,8 @@ public static class Translations
         ["Aucun fichier de log trouvé."] = "No log file found.",
         ["Erreur lecture log : {0}"] = "Error reading the log: {0}",
         ["Impossible de modifier le démarrage Windows."] = "Could not change the Windows startup entry.",
+        ["Windows lancera : {0}"] = "Windows will launch: {0}",
+        ["Windows lancera une autre copie : {0}"] = "Windows will launch a different copy: {0}",
         ["Profil sauvegardé."] = "Profile saved.",
         ["Paramètres appliqués."] = "Settings applied.",
         ["Nouveau profil créé à partir de la configuration actuelle."] = "New profile created from the current configuration.",

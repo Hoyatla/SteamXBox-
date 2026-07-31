@@ -32,7 +32,7 @@ public partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel()
     {
-        _settingsService = new SettingsService();
+        _settingsService = App.SettingsSvc;
         _settingsService.Load();
 
         AutoStart = _settingsService.Settings.AutoStart;
@@ -108,9 +108,32 @@ public partial class SettingsViewModel : ObservableObject
 
             _settingsService.Settings.StartWithWindows = value;
             _settingsService.Save();
-            StartupStatus = "";
+            StartupStatus = value ? DescribeRegistration() : "";
             OnPropertyChanged();
         }
+    }
+
+    /// <summary>
+    /// Shows what Windows will launch, and warns when that is a different copy of SteamXBox than the
+    /// one running. An install left a stale entry pointing at a path this build never updates, which
+    /// looked exactly like the setting doing nothing.
+    /// </summary>
+    private static string DescribeRegistration()
+    {
+        var command = WindowsStartupService.RegisteredCommand();
+        if (command is null)
+        {
+            return Strings.Current["Impossible de modifier le démarrage Windows."];
+        }
+
+        var current = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(current)
+            && !command.Trim('"').Equals(current, StringComparison.OrdinalIgnoreCase))
+        {
+            return Strings.Current.Format("Windows lancera une autre copie : {0}", command);
+        }
+
+        return Strings.Current.Format("Windows lancera : {0}", command);
     }
 
     [ObservableProperty] private string _startupStatus = "";

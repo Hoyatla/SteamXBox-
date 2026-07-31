@@ -521,7 +521,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
     // Ownership arbitration: Steam and SteamXBox cannot drive the controller at the same time.
     var steamWatcher = new SteamPresenceWatcher();
-    var autoModeSwitch = !args.Contains("--no-auto-mode", StringComparer.OrdinalIgnoreCase);
+    // Opt-in. As an always-on default this fought the user: it re-evaluated the foreground every
+    // 750 ms and forced a mode from it, so a manual Quick Access switch was undone as soon as focus
+    // moved, and a game that briefly stopped covering its monitor was dropped out of Xbox360 mode
+    // mid-session. Manual switching is the contract; automatic switching is an extra.
+    var autoModeSwitch = args.Contains("--auto-mode", StringComparer.OrdinalIgnoreCase);
     var foregroundArbiter = autoModeSwitch && OperatingSystem.IsWindows()
         ? new ForegroundModeArbiter()
         : null;
@@ -1446,7 +1450,7 @@ static void PrintUsage()
     Console.WriteLine("                Options: --seconds N, --no-haptics, --restart");
     Console.WriteLine("                         --start-mode xbox360|profile");
     Console.WriteLine("                         --no-mode-switch");
-    Console.WriteLine("                         --no-auto-mode  Disable foreground-based Profile/Xbox360 switching");
+    Console.WriteLine("                         --auto-mode  Also switch Profile/Xbox360 from the foreground window");
     Console.WriteLine("                         --switch-button steam|quick-access|steam-or-quick-access");
     Console.WriteLine("                         --debug  Mirror the log to the console and enable frame tracing");
     Console.WriteLine("                         --log-level error|warn|info|debug|trace");

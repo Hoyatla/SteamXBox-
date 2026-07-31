@@ -28,6 +28,35 @@ public sealed class ForegroundModeArbiter
         "SteamXBox.Core",
     ];
 
+    /// <summary>
+    /// Foregrounds that belong to Windows itself rather than to an application.
+    /// </summary>
+    /// <remarks>
+    /// The compositor in particular is reported as the foreground during window transitions, and its
+    /// window covers the whole monitor, so it reads as a game. A session log showed exactly that:
+    /// "AUTO MODE -> Xbox360 (foreground=dwm)" fired while the user was on the desktop.
+    /// </remarks>
+    private static readonly string[] SystemProcessNames =
+    [
+        "dwm",
+        "ApplicationFrameHost",
+        "ShellExperienceHost",
+        "StartMenuExperienceHost",
+        "SearchHost",
+        "TextInputHost",
+        "LockApp",
+    ];
+
+    /// <summary>
+    /// Consecutive polls that must agree before the mode actually changes.
+    /// </summary>
+    /// <remarks>
+    /// A single sample is not evidence: a fullscreen game stops covering its monitor during loading
+    /// screens, resolution changes and alt-tabs. Acting on one sample dropped the user out of
+    /// Xbox360 mode mid-game and back, repeatedly, in the space of a minute.
+    /// </remarks>
+    private const int AgreeingPollsRequired = 4;
+
     private readonly WindowsForegroundProcessProvider _provider;
     private readonly TimeSpan _pollInterval;
 
@@ -39,6 +68,10 @@ public sealed class ForegroundModeArbiter
     /// the foreground moves to a different application.
     /// </summary>
     private int _manualOverrideProcessId = -1;
+
+    /// <summary>Suggestion seen on the most recent polls, and how many agreed in a row.</summary>
+    private ControllerOutputMode? _pendingMode;
+    private int _agreeingPolls;
 
     public ForegroundModeArbiter(
         WindowsForegroundProcessProvider? provider = null,
@@ -74,8 +107,11 @@ public sealed class ForegroundModeArbiter
 
         LastForegroundProcess = foreground.ProcessName;
 
-        if (OwnProcessNames.Contains(foreground.ProcessName, StringComparer.OrdinalIgnoreCase))
+        if (OwnProcessNames.Contains(foreground.ProcessName, StringComparer.OrdinalIgnoreCase)
+            || SystemProcessNames.Contains(foreground.ProcessName, StringComparer.OrdinalIgnoreCase))
         {
+            // Not an application: hold the current opinion rather than forming a new one, so a
+            // transient compositor or shell foreground cannot move the mode.
             return null;
         }
 
@@ -89,9 +125,23 @@ public sealed class ForegroundModeArbiter
             return null;
         }
 
-        return IsForegroundFullscreen()
+        var suggestion = IsForegroundFullscreen()
             ? ControllerOutputMode.Xbox360
             : ControllerOutputMode.Profile;
+
+        if (suggestion != _pendingMode)
+        {
+            _pendingMode = suggestion;
+            _agreeingPolls = 1;
+            return null;
+        }
+
+        if (_agreeingPolls < AgreeingPollsRequired)
+        {
+            _agreeingPolls++;
+        }
+
+        return _agreeingPolls >= AgreeingPollsRequired ? suggestion : null;
     }
 
     /// <summary>
@@ -102,6 +152,11 @@ public sealed class ForegroundModeArbiter
     {
         var foreground = _provider.GetForegroundProcess();
         _manualOverrideProcessId = foreground?.ProcessId ?? -1;
+
+        // Drop any suggestion built up before the user spoke, so leaving the app does not
+        // immediately hand a stale majority to the automatic path.
+        _pendingMode = null;
+        _agreeingPolls = 0;
     }
 
     /// <summary>True when the foreground window covers its entire monitor.</summary>

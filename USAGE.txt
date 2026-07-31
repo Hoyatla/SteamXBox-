@@ -52,6 +52,12 @@ The controller firmware needs a few seconds to restore and remap its native laye
 During that short delay, inputs can appear partially inactive or temporarily remapped.
 This is expected behavior with the current SteamXBox mode handoff.
 
+Interface language
+------------------
+The GUI ships in English and French. It follows the Windows display language on first launch.
+To choose explicitly, open the Settings tab and pick a language under "Language" / "Langue".
+Labels change immediately; status texts already on screen adopt the new language the next time
+they are refreshed, or after restarting the GUI.
 Notes
 -----
 - If Windows or a game does not see the virtual Xbox 360 controller, verify that ViGEmBus is installed correctly.

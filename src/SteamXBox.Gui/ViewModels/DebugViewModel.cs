@@ -15,7 +15,7 @@ namespace SteamXBox.Gui.ViewModels;
 
 public partial class DebugViewModel : ObservableObject
 {
-    private readonly SettingsService _settings = new();
+    private readonly SettingsService _settings = App.SettingsSvc;
     private string _debugLogTail = "";
     private string _logFilePath = "";
 
