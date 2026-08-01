@@ -95,7 +95,7 @@
                     <StackPanel>
                         <TextBlock Text="{loc:T Text='Dernières lignes du log'}" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-                        <Border Background="#FF0A0A10" CornerRadius="4" Padding="12,8" MinHeight="200">
+                        <Border Background="{StaticResource CodePanelBrush}" CornerRadius="4" Padding="12,8" MinHeight="200">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <TextBlock Text="{Binding DebugLogTail, Mode=OneWay}"
                                            FontFamily="Consolas" FontSize="11"

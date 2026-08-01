@@ -113,18 +113,19 @@ public sealed class OverlayForm : Form
 
     private void DrawKeyboard(Graphics g)
     {
-        using var keyBrush = new SolidBrush(Color.FromArgb(0x80, 0x20, 0x20, 0x30));
-        using var borderPen = new Pen(Color.FromArgb(0x90, 0x80, 0x80, 0x90), 1);
-        using var highlightBrush = new SolidBrush(Color.FromArgb(0xC0, 0x40, 0x80, 0xFF));
-        using var flashBrush = new SolidBrush(Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
-        using var symBrush = new SolidBrush(Color.FromArgb(0xC0, 0xFF, 0xCC, 0x44));
-        using var symHighlightBrush = new SolidBrush(Color.FromArgb(0xFF, 0x18, 0x18, 0x18));
-        using var normalFont = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var specialFont = new Font("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var shiftFont = new Font("Segoe UI", 9, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var symFont = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var textBrush = new SolidBrush(Color.White);
-        using var shiftBrush = new SolidBrush(Color.FromArgb(0x90, 0xCC, 0xCC, 0xCC));
+        var palette = OverlayPalette.Current;
+        using var keyBrush = new SolidBrush(palette.Colour(palette.KeyFill, 0x80202030));
+        using var borderPen = new Pen(palette.Colour(palette.KeyBorder, 0x90808090), 1);
+        using var highlightBrush = new SolidBrush(palette.Colour(palette.KeyHighlight, 0xC04080FF));
+        using var flashBrush = new SolidBrush(palette.Colour(palette.KeyFlash, 0xE0FFFFFF));
+        using var symBrush = new SolidBrush(palette.Colour(palette.SymbolText, 0xC0FFCC44));
+        using var symHighlightBrush = new SolidBrush(palette.Colour(palette.SymbolHighlightText, 0xFF181818));
+        using var normalFont = palette.CreateFont(16, FontStyle.Bold);
+        using var specialFont = palette.CreateFont(11, FontStyle.Regular);
+        using var shiftFont = palette.CreateFont(9, FontStyle.Regular);
+        using var symFont = palette.CreateFont(16, FontStyle.Bold);
+        using var textBrush = new SolidBrush(palette.Colour(palette.KeyText, 0xFFFFFFFF));
+        using var shiftBrush = new SolidBrush(palette.Colour(palette.ShiftText, 0x90CCCCCC));
         using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         using var sfTopRight = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near };
         using var sfBotRight = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Far };
@@ -198,26 +199,28 @@ public sealed class OverlayForm : Form
     /// </summary>
     private void DrawDaisywheel(Graphics g)
     {
+        var palette = OverlayPalette.Current;
+
         // Slot colours follow the Xbox face buttons so the mapping is readable at a glance.
         Color[] slotColors =
         [
-            Color.FromArgb(0xFF, 0x5C, 0xC0, 0x5C), // A - green
-            Color.FromArgb(0xFF, 0xE0, 0x5C, 0x5C), // B - red
-            Color.FromArgb(0xFF, 0x5C, 0x9C, 0xE0), // X - blue
-            Color.FromArgb(0xFF, 0xE0, 0xC8, 0x5C), // Y - yellow
+            palette.Colour(palette.SlotA, 0xFF5CC05C),
+            palette.Colour(palette.SlotB, 0xFFE05C5C),
+            palette.Colour(palette.SlotX, 0xFF5C9CE0),
+            palette.Colour(palette.SlotY, 0xFFE0C85C),
         ];
 
-        using var petalBrush = new SolidBrush(Color.FromArgb(0xB0, 0x18, 0x18, 0x24));
-        using var activePetalBrush = new SolidBrush(Color.FromArgb(0xD8, 0x20, 0x38, 0x60));
-        using var borderPen = new Pen(Color.FromArgb(0x70, 0x80, 0x80, 0x90), 1.5f);
-        using var activeBorderPen = new Pen(Color.FromArgb(0xFF, 0x40, 0x80, 0xFF), 2.5f);
-        using var hubBrush = new SolidBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x18));
-        using var slotFont = new Font("Segoe UI", 20, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var specialFont = new Font("Segoe UI", 11, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var tagFont = new Font("Segoe UI", 9, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var hubFont = new Font("Segoe UI", 13, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var flashBrush = new SolidBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
-        using var dimBrush = new SolidBrush(Color.FromArgb(0xA0, 0xB0, 0xB0, 0xC0));
+        using var petalBrush = new SolidBrush(palette.Colour(palette.PetalFill, 0xB0181824));
+        using var activePetalBrush = new SolidBrush(palette.Colour(palette.PetalActiveFill, 0xD8203860));
+        using var borderPen = new Pen(palette.Colour(palette.PetalBorder, 0x70808090), 1.5f);
+        using var activeBorderPen = new Pen(palette.Colour(palette.PetalActiveBorder, 0xFF4080FF), 2.5f);
+        using var hubBrush = new SolidBrush(palette.Colour(palette.HubFill, 0xC0101018));
+        using var slotFont = palette.CreateFont(20, FontStyle.Bold);
+        using var specialFont = palette.CreateFont(11, FontStyle.Bold);
+        using var tagFont = palette.CreateFont(9, FontStyle.Regular);
+        using var hubFont = palette.CreateFont(13, FontStyle.Bold);
+        using var flashBrush = new SolidBrush(palette.Colour(palette.PetalFlash, 0xF0FFFFFF));
+        using var dimBrush = new SolidBrush(palette.Colour(palette.PetalDimText, 0xA0B0B0C0));
         using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
 
         float centerX = _screenW / 2f;

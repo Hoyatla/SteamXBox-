@@ -92,15 +92,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
             });
         };
 
-        _profileService.LoadAll();
-
+        // App already loaded the profiles. Loading them again here rebuilt the collection while
+        // ProfileService.ActiveProfile kept pointing at an object that was no longer in it, so the
+        // editor's list had nothing selected.
         AutoStart = _settings.Settings.AutoStart;
-        _device.StartPolling(_settings.Settings.DevicePollIntervalMs);
 
         var lastProfile = _settings.Settings.LastActiveProfile;
         var match = _profileService.Profiles.FirstOrDefault(p => p.Name == lastProfile);
         SelectedProfile = match ?? _profileService.ActiveProfile;
         CurrentMode = SelectedProfile?.Mode ?? "Profile";
+
+        // Only now: a controller that is already plugged in fires immediately, and with auto-start on
+        // that would launch the runtime before the saved profile had been restored — starting the
+        // previous session's controller configuration under whichever profile happened to be first.
+        // Clamped here too: the runtime must not inherit a pathological interval from a settings file
+        // written by an older build, where the slider allowed up to 30 seconds.
+        _device.StartPolling(Math.Clamp(
+            _settings.Settings.DevicePollIntervalMs,
+            SettingsViewModel.MinPollSeconds * 1000,
+            SettingsViewModel.MaxPollSeconds * 1000));
     }
 
     [RelayCommand]

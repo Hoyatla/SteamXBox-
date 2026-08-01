@@ -29,14 +29,19 @@ public sealed class DefaultSteamControllerMapper
     {
         state = state.Normalize();
 
+        // The tuning owns the dead zone now: it is radial rather than per-axis, and carries the
+        // curve and sensitivity with it. The profile's own stick dead zone remains the fallback.
+        var left = Tuning.ApplyStick(state.LeftStick.X, state.LeftStick.Y);
+        var right = Tuning.ApplyStick(state.RightStick.X, state.RightStick.Y);
+
         var report = new Xbox360Report(
             MapButtons(state.Buttons),
-            ToByteTrigger(state.LeftTrigger),
-            ToByteTrigger(state.RightTrigger),
-            ToThumbAxis(ApplyDeadZone(state.LeftStick.X)),
-            ToThumbAxis(ApplyDeadZone(state.LeftStick.Y)),
-            ToThumbAxis(ApplyDeadZone(state.RightStick.X)),
-            ToThumbAxis(ApplyDeadZone(state.RightStick.Y)));
+            ToByteTrigger(Tuning.ApplyTrigger(state.LeftTrigger)),
+            ToByteTrigger(Tuning.ApplyTrigger(state.RightTrigger)),
+            ToThumbAxis(left.X),
+            ToThumbAxis(left.Y),
+            ToThumbAxis(right.X),
+            ToThumbAxis(right.Y));
 
         var mouse = _leftPad
             .Update(state.Timestamp, state.LeftPad)
@@ -57,36 +62,16 @@ public sealed class DefaultSteamControllerMapper
         _rightTap.Reset();
     }
 
-    public static Xbox360Buttons MapButtons(SteamControllerButtons buttons)
-    {
-        var mapped = Xbox360Buttons.None;
+    /// <summary>
+    /// The active Xbox360-mode button mapping. Defaults to the built-in one, so nothing changes
+    /// until a profile is loaded over it.
+    /// </summary>
+    public static XboxButtonMap ButtonMap { get; set; } = XboxButtonMap.Default;
 
-        mapped |= buttons.HasFlag(SteamControllerButtons.A) ? Xbox360Buttons.A : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.B) ? Xbox360Buttons.B : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.X) ? Xbox360Buttons.X : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.Y) ? Xbox360Buttons.Y : Xbox360Buttons.None;
+    /// <summary>Active stick, trigger and vibration tuning for Xbox360 mode.</summary>
+    public static XboxTuning Tuning { get; set; } = new();
 
-        mapped |= buttons.HasFlag(SteamControllerButtons.LeftBumper) ? Xbox360Buttons.LeftShoulder : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.RightBumper) ? Xbox360Buttons.RightShoulder : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.LeftStick) ? Xbox360Buttons.LeftThumb : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.RightStick) ? Xbox360Buttons.RightThumb : Xbox360Buttons.None;
-
-        mapped |= buttons.HasFlag(SteamControllerButtons.Menu) ? Xbox360Buttons.Back : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.View) ? Xbox360Buttons.Start : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.Steam) ? Xbox360Buttons.Guide : Xbox360Buttons.None;
-
-        mapped |= buttons.HasFlag(SteamControllerButtons.DPadUp) ? Xbox360Buttons.DPadUp : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.DPadDown) ? Xbox360Buttons.DPadDown : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.DPadLeft) ? Xbox360Buttons.DPadLeft : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.DPadRight) ? Xbox360Buttons.DPadRight : Xbox360Buttons.None;
-
-        mapped |= buttons.HasFlag(SteamControllerButtons.L4) ? Xbox360Buttons.X : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.R4) ? Xbox360Buttons.Y : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.L5) ? Xbox360Buttons.A : Xbox360Buttons.None;
-        mapped |= buttons.HasFlag(SteamControllerButtons.R5) ? Xbox360Buttons.B : Xbox360Buttons.None;
-
-        return mapped;
-    }
+    public static Xbox360Buttons MapButtons(SteamControllerButtons buttons) => ButtonMap.Apply(buttons);
 
     private double ApplyDeadZone(double value)
     {

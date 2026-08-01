@@ -26,6 +26,11 @@ public static class Translations
         ["Démarrer automatiquement à la détection de la manette"] = "Start automatically when the controller is detected",
         ["Démarrer automatiquement au lancement"] = "Start automatically when the controller is detected",
         ["Démarrer avec Windows"] = "Start with Windows",
+        ["Éteindre la manette"] = "Turn the controller off",
+        ["Maintenez Menu et View ensemble pendant 3 secondes. SteamXBox débranche la manette virtuelle puis s'arrête proprement : ce n'est pas traité comme une déconnexion accidentelle."]
+            = "Hold Menu and View together for 3 seconds. SteamXBox unplugs the virtual controller and exits cleanly: this is not treated as an accidental disconnection.",
+        ["Les deux boutons doivent être enfoncés en même temps. Relâcher l'un des deux remet le compte à zéro."]
+            = "Both buttons must be down at the same time. Releasing either one restarts the count.",
 
         // ---- Profiles: structure ----
         ["Sélectionnez un profil pour l'éditer"] = "Select a profile to edit it",
@@ -110,6 +115,29 @@ public static class Translations
         ["Bumper L4/R4"] = "Bumper L4/R4",
         ["Bumper L5/R5"] = "Bumper L5/R5",
         ["Boutons"] = "Buttons",
+        ["Dead zone sticks"] = "Stick dead zone",
+        ["Courbe sticks"] = "Stick curve",
+        ["Seuil gâchettes"] = "Trigger threshold",
+        ["Point de fond"] = "Full-press point",
+        ["Intensité vibration"] = "Vibration intensity",
+        ["Transférer aussi aux pads"] = "Also send to the trackpads",
+        ["Haptique des gâchettes (expérimental)"] = "Trigger haptics (experimental)",
+        ["Envoyer la vibration aux gâchettes"] = "Send vibration to the triggers",
+        ["Force gâchettes"] = "Trigger strength",
+        ["Index actionneur"] = "Actuator index",
+        ["Courbe : 50 % est linéaire. En dessous, la visée fine gagne en précision ; au-dessus, la pleine amplitude arrive plus tôt."]
+            = "Curve: 50% is linear. Below that, fine aim gains precision; above it, full deflection arrives sooner.",
+        ["Sous le seuil, la gâchette ne renvoie rien. Au point de fond, elle renvoie le maximum : le descendre raccourcit la course."]
+            = "Below the threshold a trigger reports nothing. At the full-press point it reports maximum: lowering it shortens the throw.",
+        ["Aucun actionneur de gâchette n'est confirmé sur ce firmware. Lancez « SteamXBox.Core.exe haptic-probe » pour le savoir, puis renseignez l'index trouvé."]
+            = "No trigger actuator has been confirmed on this firmware. Run “SteamXBox.Core.exe haptic-probe” to find out, then enter the index it reports.",
+        ["Profil"] = "Profile",
+        ["Nouveau"] = "New",
+        ["Les boutons Steam et Quick Access ne sont pas remappables : ils pilotent SteamXBox lui-même."]
+            = "The Steam and Quick Access buttons cannot be remapped: they drive SteamXBox itself.",
+        ["🔄  Restaurer le mapping par défaut"] = "🔄  Restore the default mapping",
+        ["Mapping remis aux valeurs par défaut."] = "Mapping restored to its default values.",
+        ["Erreur d'enregistrement : {0}"] = "Could not save: {0}",
         ["Boutons :"] = "Buttons:",
         ["L3 (stick)"] = "L3 (stick)",
         ["R3 (stick)"] = "R3 (stick)",
@@ -124,6 +152,7 @@ public static class Translations
         ["Suivre Windows"] = "Follow Windows",
         ["Français"] = "French",
         ["Anglais"] = "English",
+        ["Rejoindre le Discord"] = "Join the Discord",
         ["À propos"] = "About",
         ["Steam Controller → Xbox 360 Virtual Gamepad Bridge"] = "Steam Controller → Xbox 360 Virtual Gamepad Bridge",
 

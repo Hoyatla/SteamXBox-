@@ -37,10 +37,20 @@ public partial class SettingsViewModel : ObservableObject
 
         AutoStart = _settingsService.Settings.AutoStart;
         MinimizeToTray = _settingsService.Settings.MinimizeToTray;
-        DevicePollInterval = _settingsService.Settings.DevicePollIntervalMs / 1000;
-        if (DevicePollInterval < 1) DevicePollInterval = 1;
+        // Clamped on load, not only on the slider: a stored value of 30 s meant a controller could sit
+        // plugged in for half a minute before SteamXBox noticed it, which reads as "auto-start is
+        // broken". Ten seconds is already generous for a detection poll.
+        DevicePollInterval = Math.Clamp(_settingsService.Settings.DevicePollIntervalMs / 1000, MinPollSeconds, MaxPollSeconds);
 
         CheckDriverStatus();
+
+        // Shown from the start, not only after the checkbox is toggled. The entry can be created by
+        // the portable Install-Startup script or by an older install, and then the interface said
+        // nothing at all — which reads as "this setting does nothing".
+        if (WindowsStartupService.IsEnabled())
+        {
+            StartupStatus = DescribeRegistration();
+        }
     }
 
     partial void OnAutoStartChanged(bool value)
@@ -55,9 +65,13 @@ public partial class SettingsViewModel : ObservableObject
         _settingsService.Save();
     }
 
+    /// <summary>Bounds of the device detection poll, in seconds.</summary>
+    public const int MinPollSeconds = 1;
+    public const int MaxPollSeconds = 10;
+
     partial void OnDevicePollIntervalChanged(int value)
     {
-        _settingsService.Settings.DevicePollIntervalMs = value * 1000;
+        _settingsService.Settings.DevicePollIntervalMs = Math.Clamp(value, MinPollSeconds, MaxPollSeconds) * 1000;
         _settingsService.Save();
         OnPropertyChanged(nameof(DevicePollIntervalDisplay));
     }
@@ -137,6 +151,9 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty] private string _startupStatus = "";
+
+    /// <summary>Product and version for the About box, read from the assembly.</summary>
+    public static string AppVersion => AppVersionInfo.ProductAndVersion;
 
     // Overlay keyboard settings live in the profile editor (ProfileViewModel), with the rest of the
     // controller configuration.

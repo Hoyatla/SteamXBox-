@@ -144,22 +144,31 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask SendPowerOffAsync()
+    /// <summary>
+    /// Asks the controller to power off. Returns false when there is no open stream.
+    /// </summary>
+    /// <remarks>
+    /// Goes through <see cref="SteamControllerPowerOff"/>, which uses the feature-report envelope
+    /// that the native-layer commands use. The previous implementation wrote a raw output report and
+    /// silently did nothing.
+    /// </remarks>
+    public bool SendPowerOff()
     {
         lock (_stateGate)
         {
             if (_activeStream is null || _activeStreamGate is null)
-                return ValueTask.CompletedTask;
-
-            lock (_activeStreamGate)
             {
-                var report = new byte[Math.Max(2, _outputReportLength)];
-                report[0] = 0x9F;
-                report[1] = 0x01;
-                _activeStream.Write(report);
+                return false;
             }
-        }
 
+            SteamControllerPowerOff.Send(_activeStream, _activeStreamGate);
+            return true;
+        }
+    }
+
+    public ValueTask SendPowerOffAsync()
+    {
+        SendPowerOff();
         return ValueTask.CompletedTask;
     }
 

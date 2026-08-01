@@ -16,6 +16,9 @@ public sealed class AppSettings
     [JsonPropertyName("lastActiveProfile")]
     public string LastActiveProfile { get; set; } = "Default";
 
+    /// <summary>Xbox-tab button mapping profile, kept separately from the desktop profile above.</summary>
+    public string LastXboxProfile { get; set; } = "Default";
+
     /// <summary>Interface language. Defaults to following the Windows display language.</summary>
     [JsonPropertyName("language")]
     public Localization.AppLanguage Language { get; set; } = Localization.AppLanguage.System;

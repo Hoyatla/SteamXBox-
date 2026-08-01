@@ -163,6 +163,12 @@ static async Task RunCommandAsync(string[] args, Action<string>? debugLog = null
         case "haptic-sides":
             RunHapticSideSweep();
             return;
+        case "haptic-probe":
+            RunHapticActuatorProbe(args);
+            return;
+        case "power-off":
+            RunPowerOffProbe(args);
+            return;
         default:
             PrintUsage();
             return;
@@ -318,6 +324,83 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
     return true;
 }
 
+/// <summary>
+/// Stands by after the user switched the controller off, until it comes back on.
+/// </summary>
+/// <remarks>
+/// Deliberately unbounded, unlike the disconnection path, which gives up after ten retries and exits.
+/// A controller switched off on purpose may be switched back on in ten seconds or tomorrow morning,
+/// and either way SteamXBox should still be there. Returns false only when cancelled.
+/// </remarks>
+static async Task<bool> WaitForControllerReturnAsync(
+    ViGEmXbox360Sink gamepad,
+    TritonHapticSink haptics,
+    Action<string> log,
+    CancellationToken cancellationToken)
+{
+    log("Controller powered off; standing by until it comes back.");
+    Console.WriteLine("Controller off. Waiting for it to come back on...");
+
+    haptics.Muted = true;
+    haptics.Reset();
+    StopOskOverlay(log);
+
+    try
+    {
+        await gamepad.DisconnectAsync().ConfigureAwait(false);
+    }
+    catch (Exception exception)
+    {
+        log($"Unplugging the virtual pad failed: {exception.GetType().Name}: {exception.Message}");
+    }
+
+    var discovery = new SteamHidDiscovery(_ => { });
+
+    while (true)
+    {
+        try
+        {
+            await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (discovery.FindPreferredControllerDevice() is not null)
+            {
+                break;
+            }
+        }
+        catch (Exception exception)
+        {
+            log($"Controller scan failed: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    log("Controller detected again; resuming.");
+    Console.WriteLine("Controller back on, resuming.");
+
+    haptics.Muted = false;
+
+    try
+    {
+        await gamepad.ConnectAsync(cancellationToken).ConfigureAwait(false);
+    }
+    catch (OperationCanceledException)
+    {
+        return false;
+    }
+    catch (Exception exception)
+    {
+        log($"Replugging the virtual pad failed: {exception.GetType().Name}: {exception.Message}");
+    }
+
+    return true;
+}
+
 /// <summary>Asks the overlay keyboard process to close, if it is running.</summary>
 static void StopOskOverlay(Action<string> log)
 {
@@ -387,6 +470,28 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         initialMode,
         switchButtons,
         TimeSpan.FromMilliseconds(350));
+    // Xbox360-mode button mapping, edited in the Xbox tab and kept apart from the desktop profile.
+    var xboxProfileName = ReadOptionValue(args, "--xbox-profile") ?? XboxProfile.DefaultName;
+    var xboxProfile = XboxProfile.Load(xboxProfileName);
+    DefaultSteamControllerMapper.ButtonMap = xboxProfile.Map;
+    DefaultSteamControllerMapper.Tuning = xboxProfile.Tuning;
+    TritonHapticReportBuilder.TriggerActuatorIndex = xboxProfile.Tuning.TriggerActuatorIndex;
+    var xboxProfileStamp = XboxProfileTimestamp(xboxProfileName);
+    log.Info(LogCategory.Session, $"Xbox button mapping: profile '{xboxProfileName}'");
+
+    static DateTime XboxProfileTimestamp(string name)
+    {
+        try
+        {
+            var path = XboxProfile.PathFor(name);
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
+    }
+
     var profileName = ReadOptionValue(args, "--profile");
     Sc2XboxedProfileSettings? loadedSettings = null;
 
@@ -457,7 +562,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         new SteamHidDiscovery(),
         new TritonHapticReportBuilder(),
         message => log.Info(LogCategory.Haptics, message));
-    var rumbleMapper = new XboxRumbleToSteamHapticsMapper();
+    var rumbleMapper = new XboxRumbleToSteamHapticsMapper { Tuning = xboxProfile.Tuning };
 
     gamepad.RumbleReceived += (_, rumble) =>
     {
@@ -519,6 +624,19 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     /// <summary>Cursor travel accumulated since the last motion tick, in pixels.</summary>
     var cursorTravel = 0.0;
 
+    // Menu + View held together for three seconds powers the controller off. Both are low-traffic
+    // buttons, and the detector requires them down simultaneously and rearms only on a full release,
+    // so a game that uses Start and Back cannot stumble into it.
+    const SteamControllerButtons PowerOffChord =
+        SteamControllerButtons.Menu | SteamControllerButtons.View;
+    var powerOffChord = new ButtonChordDetector(PowerOffChord, TimeSpan.FromSeconds(3));
+    var powerOffGate = new ChordButtonGate(PowerOffChord);
+    var powerOffRequested = false;
+
+    // Start the overlay resident and hidden now, while nobody is waiting on it, rather than paying
+    // its four-second cold start on the first toggle.
+    OskPrewarm.Start(AppContext.BaseDirectory, DLog);
+
     // Ownership arbitration: Steam and SteamXBox cannot drive the controller at the same time.
     var steamWatcher = new SteamPresenceWatcher();
     // Opt-in. As an always-on default this fought the user: it re-evaluated the foreground every
@@ -574,8 +692,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 log: DLog);
             DLog("HID device opened.");
 
-            await foreach (var state in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
+            await foreach (var incomingFrame in source.ReadFramesAsync(cancellation.Token).WithCancellation(cancellation.Token))
             {
+                // Local copy: the power-off chord strips its own buttons before the mappers see the
+                // frame, and a foreach variable cannot be reassigned.
+                var state = incomingFrame;
+
                 // Always cheap: the ring buffer keeps context in memory and is only written to the log
                 // when an event asks for it. The unconditional per-frame write this replaces produced
                 // megabytes per minute and buried everything else.
@@ -588,6 +710,48 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     log.Trace(LogCategory.Frame,
                         $"btn={state.Buttons} ls=({state.LeftStick.X:F3},{state.LeftStick.Y:F3}) rs=({state.RightStick.X:F3},{state.RightStick.Y:F3}) lt={state.LeftTrigger:F3} rt={state.RightTrigger:F3} lp=({state.LeftPad.X:F3},{state.LeftPad.Y:F3} t={state.LeftPad.IsTouched} c={state.LeftPad.IsPressed}) rp=({state.RightPad.X:F3},{state.RightPad.Y:F3} t={state.RightPad.IsTouched} c={state.RightPad.IsPressed})");
+                }
+
+                // The detector reads the frame as it arrived; the mappers read it through the gate.
+                // Masking the chord only once both buttons were down was too late — two fingers never
+                // land on the same frame, so the first button had already fired its own action.
+                var frameTime = DateTimeOffset.UtcNow;
+                var chordComplete = powerOffChord.Update(state.Buttons, frameTime);
+                var chordEngaged = chordComplete || (state.Buttons & PowerOffChord) == PowerOffChord;
+
+                state = state with { Buttons = powerOffGate.Filter(state.Buttons, frameTime, chordEngaged) };
+
+                if (chordComplete)
+                {
+                    DumpFrameContext("power-off chord held");
+                    log.Info(LogCategory.Session, "*** Power-off chord (Menu + View, 3s) ***");
+                    Console.WriteLine("Powering the controller off.");
+
+                    // Neutral first: the game must not be left holding Start and Back down.
+                    await gamepad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+
+                    try
+                    {
+                        var sent = source.SendPowerOff();
+                        log.Info(LogCategory.Session,
+                            sent
+                                ? "Power-off feature report sent."
+                                : "Power-off skipped: no open HID stream.");
+                    }
+                    catch (Exception exception)
+                    {
+                        log.Warn(LogCategory.Session,
+                            $"Power-off report rejected by the device: {exception.GetType().Name}: {exception.Message}");
+                    }
+
+                    // Give the firmware a moment to act before the process tears the stream down.
+                    await Task.Delay(400, CancellationToken.None);
+
+                    // Stand by rather than exit. Switching the controller off is not "I am done with
+                    // SteamXBox": the user expects it to be picked up again when it comes back on,
+                    // and a process that has exited cannot do that.
+                    powerOffRequested = true;
+                    break;
                 }
 
                 if (enableModeSwitch && modeSwitcher.Update(state))
@@ -626,6 +790,20 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 if (profileWatcher?.TryConsumeChange() == true)
                 {
                     ReloadProfile();
+                }
+
+                // The Xbox mapping is written straight to disk by the editor, so a rebinding takes
+                // effect without restarting. Comparing a timestamp costs nothing next to a HID read.
+                var stamp = XboxProfileTimestamp(xboxProfileName);
+                if (stamp != xboxProfileStamp)
+                {
+                    xboxProfileStamp = stamp;
+                    var reloadedXbox = XboxProfile.Load(xboxProfileName);
+                    DefaultSteamControllerMapper.ButtonMap = reloadedXbox.Map;
+                    DefaultSteamControllerMapper.Tuning = reloadedXbox.Tuning;
+                    rumbleMapper.Tuning = reloadedXbox.Tuning;
+                    TritonHapticReportBuilder.TriggerActuatorIndex = reloadedXbox.Tuning.TriggerActuatorIndex;
+                    log.Info(LogCategory.Mapping, $"Xbox button mapping reloaded from '{xboxProfileName}'.");
                 }
 
                 // Steam may also have been started from outside SteamXBox entirely.
@@ -690,13 +868,25 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                 {
                                     try
                                     {
-                                        var psi = new ProcessStartInfo
+                                        if (OskPrewarm.IsResident)
                                         {
-                                            FileName = overlayPath,
-                                            UseShellExecute = true
-                                        };
-                                        var proc = Process.Start(psi);
-                                        DLog($"OSK overlay launched: PID={proc?.Id}");
+                                            // Already running and hidden: a signal file is all it takes.
+                                            File.WriteAllText(
+                                                Path.Combine(oskDir, "osk-show.signal"),
+                                                DateTimeOffset.UtcNow.Ticks.ToString());
+                                            DLog("OSK overlay shown via the resident instance.");
+                                        }
+                                        else
+                                        {
+                                            var psi = new ProcessStartInfo
+                                            {
+                                                FileName = overlayPath,
+                                                UseShellExecute = true
+                                            };
+                                            var proc = Process.Start(psi);
+                                            DLog($"OSK overlay launched cold: PID={proc?.Id}");
+                                        }
+
                                         profileMapper.OskActive = true;
 
                                         // The overlay reads the same settings file; mirror the mode
@@ -871,6 +1061,25 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         if (cancellation.Token.IsCancellationRequested)
             break;
 
+        if (powerOffRequested)
+        {
+            powerOffRequested = false;
+
+            // The detector latches until the chord is fully released, and no frames arrive from a
+            // controller that is off — so without this it would still be latched on the next power
+            // up, and the chord would never fire again.
+            powerOffChord.Reset();
+            powerOffGate.Reset();
+
+            if (!await WaitForControllerReturnAsync(gamepad, haptics, DLog, cancellation.Token))
+            {
+                break;
+            }
+
+            // Straight back to opening the device: no reset delay, nothing disconnected unexpectedly.
+            continue;
+        }
+
         // Handing over to Steam is a deliberate release, not a disconnect: skip the reset delay and
         // the device scan, and go straight back to the stand-down wait at the top of the loop.
         if (steamWatcher.Owner == ControllerOwner.Steam)
@@ -945,6 +1154,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         DLog("Reconnection successful, resuming main loop.");
     }
 
+    // Before anything else: a hidden overlay that outlives us would hold the pad pipe open.
+    OskPrewarm.Stop(AppContext.BaseDirectory, DLog);
+
     log.Info(LogCategory.Session, "Virtual Xbox 360 controller disconnected.");
     Console.WriteLine("Virtual Xbox 360 controller disconnected.");
     await padSender.DisposeAsync();
@@ -967,6 +1179,159 @@ static ControllerOutputMode ReadInitialOutputMode(string[] args)
 /// <summary>
 /// Pulses each candidate side byte in turn, announcing it, so the operator can say which pad
 /// actually buzzed. Settles the side mapping by observation instead of by assumption.
+/// <summary>
+/// Sweeps the haptic side byte to find out which actuators this firmware actually has.
+/// </summary>
+/// <remarks>
+/// Sides 0x00 and 0x01 are the two halves of the controller and are known to work. Anything above is
+/// unknown: the report format is reverse-engineered, and whether this controller has trigger
+/// actuators has never been established. This pulses each index in turn and asks what was felt, so
+/// the answer comes from the hardware instead of from a guess.
+/// <summary>
+/// Sends the controller power-off command, or sweeps the candidate variants to find which one works.
+/// </summary>
+/// <remarks>
+/// The command has never been confirmed on this firmware. The envelope is now the same one the
+/// native-layer commands use, which are known to work, but the payload is still a guess. Running
+/// this with --probe tries each candidate in turn and stops as soon as the controller goes quiet.
+/// </remarks>
+static void RunPowerOffProbe(string[] args)
+{
+    var probe = args.Contains("--probe", StringComparer.OrdinalIgnoreCase);
+
+    var discovery = new SteamHidDiscovery(Console.WriteLine);
+    var device = discovery.FindPreferredControllerDevice();
+    if (device is null)
+    {
+        Console.WriteLine("No controller found. Stop SteamXBox first, then run this as administrator.");
+        return;
+    }
+
+    if (!device.TryOpen(out var stream))
+    {
+        Console.WriteLine("Could not open the device. Stop SteamXBox first, then run this as administrator.");
+        return;
+    }
+
+    var gate = new object();
+
+    using (stream)
+    {
+        stream.WriteTimeout = 500;
+
+        if (!probe)
+        {
+            try
+            {
+                SteamControllerPowerOff.Send(stream, gate);
+                Console.WriteLine($"Sent: {SteamControllerPowerOff.Variants[0].Name}");
+                Console.WriteLine("If the controller is still on, run again with --probe.");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"The device rejected the report: {exception.GetType().Name}: {exception.Message}");
+            }
+
+            return;
+        }
+
+        Console.WriteLine("Power-off probe");
+        Console.WriteLine("===============");
+        Console.WriteLine();
+        Console.WriteLine("Each variant is sent in turn. Stop as soon as the controller switches off:");
+        Console.WriteLine("the variant just named is the working one, and its number is what to report.");
+        Console.WriteLine();
+
+        for (var index = 0; index < SteamControllerPowerOff.Variants.Count; index++)
+        {
+            var (name, _) = SteamControllerPowerOff.Variants[index];
+            Console.WriteLine($"--- variant {index}: {name} ---");
+
+            try
+            {
+                SteamControllerPowerOff.SendVariant(stream, gate, index);
+                Console.WriteLine("  sent");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"  rejected: {exception.GetType().Name}: {exception.Message}");
+            }
+
+            Console.Write("  Did the controller switch off? (enter to try the next one) ");
+            Console.ReadLine();
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("If none of them worked, this firmware does not accept any of these payloads.");
+    }
+}
+/// </remarks>
+static void RunHapticActuatorProbe(string[] args)
+{
+    int maxIndex = int.TryParse(ReadOptionValue(args, "--max"), out var parsed) ? Math.Clamp(parsed, 1, 32) : 8;
+
+    Console.WriteLine("Haptic actuator probe");
+    Console.WriteLine("=====================");
+    Console.WriteLine();
+    Console.WriteLine("Hold the controller normally, with a finger resting on each trigger.");
+    Console.WriteLine("For each index, note what moved: left grip, right grip, left pad, right pad,");
+    Console.WriteLine("left trigger, right trigger, or nothing at all.");
+    Console.WriteLine();
+    Console.WriteLine("Sides 0 and 1 are the known-good halves; expect those to work. They are your");
+    Console.WriteLine("reference for how strong a real pulse feels.");
+    Console.WriteLine();
+
+    var discovery = new SteamHidDiscovery(Console.WriteLine);
+    var device = discovery.FindPreferredControllerDevice();
+    if (device is null)
+    {
+        Console.WriteLine("No controller found. Stop SteamXBox first, then run this as administrator.");
+        return;
+    }
+
+    if (!device.TryOpen(out var stream))
+    {
+        Console.WriteLine("Could not open the device. Stop SteamXBox first, then run this as administrator.");
+        return;
+    }
+
+    using (stream)
+    {
+        stream.WriteTimeout = 250;
+        int reportLength = Math.Max(7, device.GetMaxOutputReportLength());
+        var builder = new TritonHapticReportBuilder();
+
+        for (int side = 0; side <= maxIndex; side++)
+        {
+            Console.WriteLine($"--- side 0x{side:X2} ---");
+
+            for (int burst = 0; burst < 6; burst++)
+            {
+                try
+                {
+                    stream.Write(builder.BuildRawSidePulse((byte)side, onUs: 528, reportLength));
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"  write failed: {exception.GetType().Name}: {exception.Message}");
+                    break;
+                }
+
+                Thread.Sleep(120);
+            }
+
+            Console.Write("  What did you feel? (enter to continue) ");
+            Console.ReadLine();
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Done. If a trigger responded, set triggerActuatorIndex in the Xbox profile to");
+    Console.WriteLine("the LEFT trigger's index; the right one is assumed to be the next index up.");
+    Console.WriteLine("The profile lives in %LOCALAPPDATA%\\SteamXBox\\xbox-profiles.");
+    Console.WriteLine("If nothing above side 0x01 ever responded, this firmware has no trigger");
+    Console.WriteLine("actuators and the setting should stay off.");
+}
 /// </summary>
 static void RunHapticSideSweep()
 {
@@ -1458,6 +1823,9 @@ static void PrintUsage()
     Console.WriteLine("  stop           Kill other running SteamXBox instances from the same executable path.");
     Console.WriteLine("  hidhide-setup  Register SteamXBox with HidHide and cloak Valve physical HID devices.");
     Console.WriteLine("  hidhide-status Print HidHide state.");
+    Console.WriteLine("  power-off      Switch the controller off. Options: --probe to sweep the variants.");
+    Console.WriteLine("  haptic-probe   Sweep haptic actuator indices to find out which exist.");
+    Console.WriteLine("                Options: --max N (default 8)");
     Console.WriteLine("  hidhide-off    Disable HidHide cloaking.");
     Console.WriteLine("  help           Print this help.");
     Console.WriteLine("  sanity         Run a static mapping sanity check.");

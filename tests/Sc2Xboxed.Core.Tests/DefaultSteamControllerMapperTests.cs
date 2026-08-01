@@ -157,15 +157,25 @@ public sealed class DefaultSteamControllerMapperTests
             });
     }
 
+    /// <summary>
+    /// Menu is Start and View is Back, the Xbox convention.
+    /// </summary>
+    /// <remarks>
+    /// This asserted the opposite until 3.2, under a name claiming it matched what the controller
+    /// reports. Testing on the hardware showed the two were simply inverted. If a game ever reacts to
+    /// View where it should react to Menu, the fault is then in which HID bit
+    /// <c>TritonInputReportParser</c> calls Menu, not here — fixing it in the mapper would only hide
+    /// a mislabelled bit and break every profile that stores the mapping by name.
+    /// </remarks>
     [Fact]
-    public void MenuAndViewMapToCorrectXboxStartAndBackForCurrentControllerReports()
+    public void MenuIsStartAndViewIsBack()
     {
         var menu = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.Menu);
         var view = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.View);
 
-        Assert.True(menu.HasFlag(Xbox360Buttons.Back));
-        Assert.False(menu.HasFlag(Xbox360Buttons.Start));
-        Assert.True(view.HasFlag(Xbox360Buttons.Start));
-        Assert.False(view.HasFlag(Xbox360Buttons.Back));
+        Assert.True(menu.HasFlag(Xbox360Buttons.Start));
+        Assert.False(menu.HasFlag(Xbox360Buttons.Back));
+        Assert.True(view.HasFlag(Xbox360Buttons.Back));
+        Assert.False(view.HasFlag(Xbox360Buttons.Start));
     }
 }

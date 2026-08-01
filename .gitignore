@@ -32,3 +32,6 @@ dist/
 # OS
 Thumbs.db
 Desktop.ini
+
+# Exclusif skins (keep local)
+Exclusif/

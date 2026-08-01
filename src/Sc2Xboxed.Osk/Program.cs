@@ -30,6 +30,9 @@ public static class Program
         var logPath = Path.Combine(AppContext.BaseDirectory, "steamxbox-osk-debug.log");
         _logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
 
+        // Before the form exists, so the first paint is already skinned.
+        OverlayPalette.Load(AppContext.BaseDirectory);
+
         Log($"OSK overlay starting. BaseDir={AppContext.BaseDirectory}");
 
         Application.EnableVisualStyles();
@@ -61,9 +64,25 @@ public static class Program
         var cts = new CancellationTokenSource();
         form.FormClosing += (_, _) => cts.Cancel();
 
+        // Prewarm: the process starts and stays resident with the window hidden, so toggling the
+        // overlay costs a signal file instead of a cold start. Measured on this build, the .NET host
+        // needs about four seconds before the first line of this program runs — the overlay itself
+        // takes 94 ms. Paying that once, when the runtime starts, is the whole point.
+        var prewarm = Environment.GetCommandLineArgs()
+            .Contains("--prewarm", StringComparer.OrdinalIgnoreCase);
+
         var closeSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-close.signal");
-        try { if (File.Exists(closeSignalPath)) File.Delete(closeSignalPath); } catch { }
-        Log($"Close signal path: {closeSignalPath}");
+        var showSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-show.signal");
+        var exitSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-exit.signal");
+        foreach (var stale in new[] { closeSignalPath, showSignalPath, exitSignalPath })
+        {
+            try { if (File.Exists(stale)) File.Delete(stale); } catch { }
+        }
+        Log($"Signal paths under {AppContext.BaseDirectory} (prewarm={prewarm})");
+
+        // Invoke needs a window handle, and a form that is never shown has none. Force it here, on
+        // the UI thread, before anything can post to it.
+        _ = form.Handle;
 
         var closeWatcher = new Thread(() =>
         {
@@ -71,17 +90,73 @@ public static class Program
             {
                 try
                 {
-                    if (File.Exists(closeSignalPath))
+                    if (File.Exists(exitSignalPath))
                     {
-                        File.Delete(closeSignalPath);
-                        Log("Close signal file detected, shutting down overlay.");
-                        try { form.Invoke(form.Close); }
+                        File.Delete(exitSignalPath);
+                        Log("Exit signal detected, shutting down overlay.");
+                        try
+                        {
+                            form.Invoke(() =>
+                            {
+                                form.Close();
+                                // A bare message loop has no main form to end it: it runs until the
+                                // thread is told to stop.
+                                Application.ExitThread();
+                            });
+                        }
                         catch { try { form.Close(); } catch { } }
                         return;
                     }
+
+                    if (File.Exists(showSignalPath))
+                    {
+                        File.Delete(showSignalPath);
+                        Log("Show signal detected.");
+                        // Re-read the mode: the user may have changed it in the GUI while resident.
+                        var mode = OskSettings.Load().TypingMode;
+                        try
+                        {
+                            form.Invoke(() =>
+                            {
+                                form.SetTypingMode(mode == OskTypingMode.Daisywheel);
+                                form.Show();
+                                form.BringToFront();
+                                // The overlay is layered and never activates, so no external probe
+                                // can tell whether it is on screen. Report it ourselves.
+                                Log($"Overlay shown. Visible={form.Visible} mode={mode}");
+                            });
+                        }
+                        catch { }
+                    }
+
+                    if (File.Exists(closeSignalPath))
+                    {
+                        File.Delete(closeSignalPath);
+
+                        if (prewarm)
+                        {
+                            // Hide, do not exit: staying resident is what makes the next toggle instant.
+                            try
+                            {
+                                form.Invoke(() =>
+                                {
+                                    form.HideAll();
+                                    form.Hide();
+                                    Log($"Overlay hidden (resident). Visible={form.Visible}");
+                                });
+                            }
+                            catch { }
+                        }
+                        else
+                        {
+                            Log("Close signal file detected, shutting down overlay.");
+                            try { form.Invoke(form.Close); } catch { try { form.Close(); } catch { } }
+                            return;
+                        }
+                    }
                 }
                 catch { }
-                Thread.Sleep(300);
+                Thread.Sleep(prewarm ? 60 : 300);
             }
         })
         {
@@ -89,7 +164,7 @@ public static class Program
             Name = "OskCloseWatcher"
         };
         closeWatcher.Start();
-        Log("Close watcher started (file-based signal).");
+        Log("Signal watcher started.");
 
         var reader = new PadInputReader();
         var haptics = new HapticFeedback(Log);
@@ -104,10 +179,22 @@ public static class Program
         };
         bgThread.Start();
 
-        form.Show();
-        Log("Overlay form shown.");
+        if (prewarm)
+        {
+            // A bare message loop. Application.Run(Form) shows the form, and so does
+            // Application.Run(ApplicationContext) — it sets MainForm.Visible before pumping. Either
+            // one puts the keyboard on screen at startup with the runtime believing it is closed,
+            // which is exactly the state where the toggle button appears to do nothing.
+            Log("Overlay resident, hidden, waiting for a show signal.");
+            Application.Run();
+        }
+        else
+        {
+            form.Show();
+            Log("Overlay form shown.");
+            Application.Run(form);
+        }
 
-        Application.Run(form);
         Log("Application.Run exited.");
 
         // Belt and braces: the overlay no longer holds the physical Shift key at all, but releasing it
@@ -195,18 +282,23 @@ public static class Program
         public readonly bool[] PrevSlotDown = new bool[DaisywheelLayout.SlotsPerPetal];
         public bool DaisywheelPrimed;
 
+        private readonly CursorFilter _rightFilter = new(Settings.CursorSmoothing);
+        private readonly CursorFilter _leftFilter = new(Settings.CursorSmoothing);
+
         public void EaseRight(double rawX, double rawY)
         {
-            double f = Settings.CursorSmoothing;
-            if (!HasSmoothRight) { SmoothRightX = rawX; SmoothRightY = rawY; HasSmoothRight = true; }
-            else { SmoothRightX += f * (rawX - SmoothRightX); SmoothRightY += f * (rawY - SmoothRightY); }
+            if (!HasSmoothRight) { _rightFilter.Reset(); HasSmoothRight = true; }
+            _rightFilter.Update(rawX, rawY);
+            SmoothRightX = _rightFilter.X;
+            SmoothRightY = _rightFilter.Y;
         }
 
         public void EaseLeft(double rawX, double rawY)
         {
-            double f = Settings.CursorSmoothing;
-            if (!HasSmoothLeft) { SmoothLeftX = rawX; SmoothLeftY = rawY; HasSmoothLeft = true; }
-            else { SmoothLeftX += f * (rawX - SmoothLeftX); SmoothLeftY += f * (rawY - SmoothLeftY); }
+            if (!HasSmoothLeft) { _leftFilter.Reset(); HasSmoothLeft = true; }
+            _leftFilter.Update(rawX, rawY);
+            SmoothLeftX = _leftFilter.X;
+            SmoothLeftY = _leftFilter.Y;
         }
     }
 

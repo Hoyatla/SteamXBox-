@@ -216,7 +216,7 @@
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
                                       ItemsSource="{Binding OskTypingModes}"
-                                      DisplayMemberPath="Display"
+                                      ItemTemplate="{StaticResource OptionDisplayItem}"
                                       SelectedValuePath="Value"
                                       SelectedValue="{Binding OskMode}"/>
 

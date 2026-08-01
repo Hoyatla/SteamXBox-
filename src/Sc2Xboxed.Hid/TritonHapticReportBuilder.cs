@@ -131,10 +131,21 @@ public sealed class TritonHapticReportBuilder
     /// same pad, which is what a value outside the expected range would do. Use the
     /// <c>haptic-sides</c> command to confirm empirically rather than guessing again.
     /// </remarks>
+    /// <summary>
+    /// Side byte used for <see cref="HapticActuator.LeftTrigger"/>; the right trigger is this plus
+    /// one. Set from the active Xbox profile, or swept by the <c>haptic-probe</c> command.
+    /// </summary>
+    public static int TriggerActuatorIndex { get; set; } = 2;
+
     private static byte ToTritonSide(HapticActuator actuator)
     {
         return actuator switch
         {
+            // Unconfirmed hardware. The index is configurable so it can be corrected from a profile
+            // once the probe has identified it, rather than needing a new build.
+            HapticActuator.LeftTrigger => (byte)Math.Clamp(TriggerActuatorIndex, 0, 255),
+            HapticActuator.RightTrigger => (byte)Math.Clamp(TriggerActuatorIndex + 1, 0, 255),
+
             HapticActuator.RightRumble or HapticActuator.RightTrackpad => 0x00,
             HapticActuator.LeftRumble or HapticActuator.LeftTrackpad => 0x01,
             _ => throw new ArgumentOutOfRangeException(nameof(actuator), actuator, null)

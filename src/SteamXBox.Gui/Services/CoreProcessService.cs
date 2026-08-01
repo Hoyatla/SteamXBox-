@@ -46,7 +46,9 @@ public sealed class CoreProcessService : IDisposable
             }
 
             // Quoted: profile names are user-chosen and routinely contain spaces.
-            var args = $"xbox-run --restart --start-mode {profile.Mode.ToLower()} --switch-button {profile.SwitchButton} --profile \"{profile.Name}\"";
+            var xboxProfile = App.SettingsSvc.Settings.LastXboxProfile;
+            var args = $"xbox-run --restart --start-mode {profile.Mode.ToLower()} --switch-button {profile.SwitchButton} "
+                     + $"--profile \"{profile.Name}\" --xbox-profile \"{xboxProfile}\"";
 
             var psi = new ProcessStartInfo
             {

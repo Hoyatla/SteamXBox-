@@ -4,140 +4,244 @@
              xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
              xmlns:views="clr-namespace:SteamXBox.Gui.Views">
 
-    <StackPanel>
-        <TextBlock Text="{loc:T Text='Xbox'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
-
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Mode Xbox360'}" FontSize="16" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-                <TextBlock Text="{loc:T Text='Lorsque le mode Xbox est actif, le contrôleur Steam est transmis tel quel au jeu via le contrôleur virtuel Xbox 360.'}"
-                           FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
-                <TextBlock Text="{loc:T Text='Les paramètres ci-dessous contrôlent le comportement de la manette dans ce mode.'}"
-                           FontSize="12" Foreground="{StaticResource TextDimBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Boutons'}" FontSize="14" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Bouton Steam'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                        <ComboBoxItem Content="{loc:T Text='Guide Xbox (défaut)'}"/>
-                        <ComboBoxItem Content="{loc:T Text='Aucun'}"/>
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='Bouton Quick Access'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ComboBox Grid.Row="0" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                        <ComboBoxItem Content="{loc:T Text='Guide Xbox (défaut)'}"/>
-                        <ComboBoxItem Content="{loc:T Text='Aucun'}"/>
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Bumper L4/R4'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4">
-                        <ComboBoxItem Content="{loc:T Text='Pass-through'}"/>
-                        <ComboBoxItem Content="{loc:T Text='Aucun'}"/>
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='Bumper L5/R5'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ComboBox Grid.Row="1" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                        <ComboBoxItem Content="{loc:T Text='Pass-through'}"/>
-                        <ComboBoxItem Content="{loc:T Text='Aucun'}"/>
-                    </ComboBox>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Sticks &amp; Triggers'}" FontSize="14" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Dead Zone sticks'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource TextBoxDark}"
-                             Text="{loc:T Text='0.08'}" Margin="0,4,12,4"/>
-
-                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:T Text='Sensibilité sticks'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource TextBoxDark}"
-                             Text="{loc:T Text='1.0'}" Margin="0,4,0,4"/>
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Seuil triggers'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource TextBoxDark}"
-                             Text="{loc:T Text='0.5'}" Margin="0,4,12,4"/>
-
-                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:T Text='Inversion Y'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal">
-                        <CheckBox Content="{loc:T Text='Stick gauche'}" Style="{StaticResource ToggleSwitch}" Margin="0,4,8,4"/>
-                        <CheckBox Content="{loc:T Text='Stick droit'}" Style="{StaticResource ToggleSwitch}" Margin="0,4,0,4"/>
-                    </StackPanel>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Vibration'}" FontSize="14" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-
-                <CheckBox Content="{loc:T Text='Activer la vibration'}"
-                          IsChecked="True"
-                          Style="{StaticResource ToggleSwitch}" Margin="0,0,0,8"/>
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock Grid.Column="0" Text="{loc:T Text='Intensité motricité'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <TextBox Grid.Column="1" Style="{StaticResource TextBoxDark}"
-                             Text="{loc:T Text='1.0'}" Margin="0,4,12,4"/>
-
-                    <TextBlock Grid.Column="2" Text="{loc:T Text='Transfert haptique'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ComboBox Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4">
-                        <ComboBoxItem Content="{loc:T Text='Activé (défaut)'}"/>
-                        <ComboBoxItem Content="{loc:T Text='Désactivé'}"/>
-                    </ComboBox>
-                </Grid>
-            </StackPanel>
-        </Border>
-    </StackPanel>
+    <!-- Les onglets debordent verticalement des que la fenetre est petite. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  PanningMode="VerticalOnly">
+        <StackPanel>
+            <TextBlock Text="{loc:T Text='Xbox'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Mode Xbox360'}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                    <TextBlock Text="{loc:T Text='Lorsque le mode Xbox est actif, le contrôleur Steam est transmis tel quel au jeu via le contrôleur virtuel Xbox 360.'}"
+                               FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{loc:T Text='Les paramètres ci-dessous contrôlent le comportement de la manette dans ce mode.'}"
+                               FontSize="12" Foreground="{StaticResource TextDimBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Boutons'}" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+    
+                    <!-- Profil de mapping, sur le modèle de l'onglet Profils : les changements sont
+                         écrits sur disque immédiatement, le runtime surveille le fichier. -->
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <TextBlock Grid.Column="0" Text="{loc:T Text='Profil'}" VerticalAlignment="Center"
+                                   Margin="0,0,10,0" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <ComboBox Grid.Column="1" Style="{StaticResource ComboBoxDark}"
+                                  ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}"
+                                  DisplayMemberPath="Name"/>
+    
+                        <TextBox Grid.Column="3" Style="{StaticResource TextBoxDark}" Width="130" Margin="10,0,6,0"
+                                 Text="{Binding NewProfileName, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="4" Content="{loc:T Text='Nouveau'}" Padding="12,6" Margin="0,0,6,0"
+                                Style="{StaticResource SecondaryButton}" Command="{Binding CreateProfileCommand}"/>
+                        <Button Grid.Column="5" Content="{loc:T Text='Supprimer'}" Padding="12,6"
+                                Style="{StaticResource DangerButton}" Command="{Binding DeleteProfileCommand}"/>
+                    </Grid>
+    
+                    <TextBlock Text="{loc:T Text='Les boutons Steam et Quick Access ne sont pas remappables : ils pilotent SteamXBox lui-même.'}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
+                               Foreground="{StaticResource TextDimBrush}"/>
+    
+                    <!-- Deux colonnes, comme la manette : main gauche à gauche, main droite à droite,
+                         et de haut en bas dans l'ordre physique — gâchette, palettes, croix ou ABXY,
+                         stick, bouton central. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{loc:T Text='GAUCHE'}" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"
+                                       Foreground="{StaticResource AccentBrush}"/>
+                            <ItemsControl ItemsSource="{Binding LeftBindings}"
+                                          ItemTemplate="{StaticResource XboxBindingRow}"/>
+                        </StackPanel>
+    
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="{loc:T Text='DROITE'}" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"
+                                       Foreground="{StaticResource AccentBrush}"/>
+                            <ItemsControl ItemsSource="{Binding RightBindings}"
+                                          ItemTemplate="{StaticResource XboxBindingRow}"/>
+                        </StackPanel>
+                    </Grid>
+    
+                    <Grid Margin="0,12,0,0">
+                        <Button HorizontalAlignment="Left" Padding="12,6"
+                                Content="{loc:T Text='🔄  Restaurer le mapping par défaut'}"
+                                Style="{StaticResource SecondaryButton}"
+                                Command="{Binding RestoreDefaultsCommand}"/>
+                        <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                                   HorizontalAlignment="Right" FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{StaticResource AccentGreenBrush}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Sticks &amp; Triggers'}" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+    
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Dead zone sticks'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Row="0" Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                Value="{Binding StickDeadZonePercent}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding StickDeadZonePercent, StringFormat={}{0}%}"/>
+    
+                        <TextBlock Grid.Row="0" Grid.Column="4" Text="{loc:T Text='Sensibilité sticks'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Row="0" Grid.Column="5" Style="{StaticResource SliderCompact}"
+                                Value="{Binding StickSensitivityPercent}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="6" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding StickSensitivityPercent, StringFormat={}{0}%}"/>
+    
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Courbe sticks'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Row="1" Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                Value="{Binding StickCurvePercent}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding StickCurvePercent, StringFormat={}{0}%}"/>
+                    </Grid>
+    
+                    <TextBlock Text="{loc:T Text='Courbe : 50 % est linéaire. En dessous, la visée fine gagne en précision ; au-dessus, la pleine amplitude arrive plus tôt.'}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,6,0,12"
+                               Foreground="{StaticResource TextDimBrush}"/>
+    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <TextBlock Grid.Column="0" Text="{loc:T Text='Seuil gâchettes'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                Value="{Binding TriggerThresholdPercent}"/>
+                        <TextBlock Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding TriggerThresholdPercent, StringFormat={}{0}%}"/>
+    
+                        <TextBlock Grid.Column="4" Text="{loc:T Text='Point de fond'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Column="5" Style="{StaticResource SliderCompact}"
+                                Value="{Binding TriggerFullPointPercent}"/>
+                        <TextBlock Grid.Column="6" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding TriggerFullPointPercent, StringFormat={}{0}%}"/>
+                    </Grid>
+    
+                    <TextBlock Text="{loc:T Text='Sous le seuil, la gâchette ne renvoie rien. Au point de fond, elle renvoie le maximum : le descendre raccourcit la course.'}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Foreground="{StaticResource TextDimBrush}"/>
+                </StackPanel>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Vibration'}" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+    
+                    <CheckBox Content="{loc:T Text='Activer la vibration'}"
+                              IsChecked="{Binding VibrationEnabled}"
+                              Style="{StaticResource ToggleSwitch}" Margin="0,0,0,4"/>
+    
+                    <CheckBox Content="{loc:T Text='Transférer aussi aux pads'}"
+                              IsChecked="{Binding HapticForwarding}"
+                              Style="{StaticResource ToggleSwitch}" Margin="0,0,0,8"/>
+    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <TextBlock Grid.Column="0" Text="{loc:T Text='Intensité vibration'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                Value="{Binding VibrationIntensityPercent}"/>
+                        <TextBlock Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding VibrationIntensityPercent, StringFormat={}{0}%}"/>
+                    </Grid>
+    
+                    <!-- Canal expérimental : aucun actionneur de gâchette n'est confirmé sur ce
+                         firmware. Désactivé par défaut, et l'index se règle après la sonde. -->
+                    <Border Background="#22000000" CornerRadius="4" Padding="10,8" Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock Text="{loc:T Text='Haptique des gâchettes (expérimental)'}"
+                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       Foreground="{StaticResource AccentOrangeBrush}"/>
+                            <TextBlock Text="{loc:T Text='Aucun actionneur de gâchette n\'est confirmé sur ce firmware. Lancez « SteamXBox.Core.exe haptic-probe » pour le savoir, puis renseignez l\'index trouvé.'}"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Foreground="{StaticResource TextDimBrush}"/>
+    
+                            <CheckBox Content="{loc:T Text='Envoyer la vibration aux gâchettes'}"
+                                      IsChecked="{Binding TriggerHapticsEnabled}"
+                                      Style="{StaticResource ToggleSwitch}" Margin="0,0,0,6"/>
+    
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="34"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+    
+                                <TextBlock Grid.Column="0" Text="{loc:T Text='Force gâchettes'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <Slider Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                        Value="{Binding TriggerHapticStrengthPercent}"
+                                        IsEnabled="{Binding TriggerHapticsEnabled}"/>
+                                <TextBlock Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                           Text="{Binding TriggerHapticStrengthPercent, StringFormat={}{0}%}"/>
+    
+                                <TextBlock Grid.Column="4" Text="{loc:T Text='Index actionneur'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <TextBox Grid.Column="5" Style="{StaticResource TextBoxDark}"
+                                         Text="{Binding TriggerActuatorIndex, UpdateSourceTrigger=LostFocus}"
+                                         IsEnabled="{Binding TriggerHapticsEnabled}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

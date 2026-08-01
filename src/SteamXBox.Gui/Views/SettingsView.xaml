@@ -4,128 +4,148 @@
              xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
              xmlns:vm="clr-namespace:SteamXBox.Gui.ViewModels">
 
-    <StackPanel>
-        <TextBlock Text="{loc:T Text='Paramètres'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
+    <!-- Les onglets debordent verticalement des que la fenetre est petite. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  PanningMode="VerticalOnly">
+        <StackPanel>
+            <TextBlock Text="{loc:T Text='Paramètres'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Pilotes'}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+    
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{loc:T Text='ViGEmBus'}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="{Binding VigEmStatus}" FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{loc:T Text='Recharger'}" Command="{Binding CheckDriverStatusCommand}"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Padding="12,6"/>
+                        <Button Grid.Column="2" Content="{loc:T Text='Télécharger'}" Command="{Binding OpenViGEmDownloadCommand}"
+                                Style="{StaticResource SecondaryButton}" Padding="12,6"/>
+                    </Grid>
+    
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,12"/>
+    
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{loc:T Text='HidHide'}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="{Binding HidHideStatus}" FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{loc:T Text='Recharger'}" Command="{Binding CheckDriverStatusCommand}"
+                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Padding="12,6"/>
+                        <Button Grid.Column="2" Content="{loc:T Text='Télécharger'}" Command="{Binding OpenHidHideDownloadCommand}"
+                                Style="{StaticResource SecondaryButton}" Padding="12,6"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Comportement'}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+    
+                    <CheckBox Content="{loc:T Text='Démarrer avec Windows'}"
+                              IsChecked="{Binding StartWithWindows}"
+                              Style="{StaticResource ToggleSwitch}"/>
+    
+                    <TextBlock Text="{Binding StartupStatus}" FontSize="11"
+                               Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,0,4"
+                               TextWrapping="Wrap"/>
+    
+                    <CheckBox Content="{loc:T Text='Démarrer automatiquement à la détection de la manette'}"
+                              IsChecked="{Binding AutoStart}"
+                              Style="{StaticResource ToggleSwitch}"/>
 
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Pilotes'}" FontSize="16" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="{loc:T Text='ViGEmBus'}" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <TextBlock Text="{Binding VigEmStatus}" FontSize="12"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="{loc:T Text='Recharger'}" Command="{Binding CheckDriverStatusCommand}"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Padding="12,6"/>
-                    <Button Grid.Column="2" Content="{loc:T Text='Télécharger'}" Command="{Binding OpenViGEmDownloadCommand}"
-                            Style="{StaticResource SecondaryButton}" Padding="12,6"/>
-                </Grid>
-
-                <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,12"/>
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="{loc:T Text='HidHide'}" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <TextBlock Text="{Binding HidHideStatus}" FontSize="12"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="{loc:T Text='Recharger'}" Command="{Binding CheckDriverStatusCommand}"
-                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Padding="12,6"/>
-                    <Button Grid.Column="2" Content="{loc:T Text='Télécharger'}" Command="{Binding OpenHidHideDownloadCommand}"
-                            Style="{StaticResource SecondaryButton}" Padding="12,6"/>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Comportement'}" FontSize="16" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-
-                <CheckBox Content="{loc:T Text='Démarrer avec Windows'}"
-                          IsChecked="{Binding StartWithWindows}"
-                          Style="{StaticResource ToggleSwitch}"/>
-
-                <TextBlock Text="{Binding StartupStatus}" FontSize="11"
-                           Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,0,4"
-                           TextWrapping="Wrap"/>
-
-                <CheckBox Content="{loc:T Text='Démarrer automatiquement à la détection de la manette'}"
-                          IsChecked="{Binding AutoStart}"
-                          Style="{StaticResource ToggleSwitch}"/>
-
-                <CheckBox Content="{loc:T Text='Minimiser dans la barre des tâches'}"
-                          IsChecked="{Binding MinimizeToTray}"
-                          Style="{StaticResource ToggleSwitch}"/>
-
-                <Grid Margin="0,12,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="150"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{loc:T Text='Langue'}" FontSize="13"
-                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                              ItemsSource="{Binding LanguageOptions}"
-                              DisplayMemberPath="Display"
-                              SelectedValuePath="Value"
-                              SelectedValue="{Binding Language}"/>
-                </Grid>
-
-                <Grid Margin="0,12,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="150"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{loc:T Text='Intervalle de détection device'}" FontSize="13"
-                               Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                    <!-- Shown in seconds rather than a percentage: unlike a sensitivity, a delay has a
-                         unit the user can reason about directly. -->
-                    <DockPanel Grid.Column="1">
-                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
-                                   Text="{Binding DevicePollIntervalDisplay}"/>
-                        <Slider Style="{StaticResource SliderCompact}" Minimum="1" Maximum="30"
-                                Value="{Binding DevicePollInterval}"/>
-                    </DockPanel>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='À propos'}" FontSize="16" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-                <TextBlock Text="{loc:T Text='SteamXBox v3.1'}" FontSize="14"
-                           Foreground="{StaticResource TextPrimaryBrush}"/>
-                <TextBlock Text="{loc:T Text='Steam Controller → Xbox 360 Virtual Gamepad Bridge'}"
-                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
-                <TextBlock Text="{loc:T Text='github.com/Hoyatla/SteamXBox-'}" FontSize="12"
-                           Foreground="{StaticResource AccentBrush}" Margin="0,4,0,0"
-                           Cursor="Hand">
-                    <TextBlock.InputBindings>
-                        <MouseBinding MouseAction="LeftClick"
-                                      Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                      CommandParameter="https://github.com/Hoyatla/SteamXBox-"/>
-                    </TextBlock.InputBindings>
-                </TextBlock>
-            </StackPanel>
-        </Border>
-    </StackPanel>
+                    <!-- Extinction de la manette : la combinaison n'est visible nulle part ailleurs,
+                         et une fonction que personne ne peut découvrir n'existe pas vraiment. -->
+                    <Border Background="#22000000" CornerRadius="4" Padding="10,8" Margin="0,10,0,4">
+                        <StackPanel>
+                            <TextBlock Text="{loc:T Text='Éteindre la manette'}"
+                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Text="{loc:T Text='Maintenez Menu et View ensemble pendant 3 secondes. SteamXBox débranche la manette virtuelle puis s\'arrête proprement : ce n\'est pas traité comme une déconnexion accidentelle.'}"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"
+                                       Foreground="{StaticResource TextDimBrush}"
+                                       Text="{loc:T Text='Les deux boutons doivent être enfoncés en même temps. Relâcher l\'un des deux remet le compte à zéro.'}"/>
+                        </StackPanel>
+                    </Border>
+    
+                    <CheckBox Content="{loc:T Text='Minimiser dans la barre des tâches'}"
+                              IsChecked="{Binding MinimizeToTray}"
+                              Style="{StaticResource ToggleSwitch}"/>
+    
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="150"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:T Text='Langue'}" FontSize="13"
+                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" Style="{StaticResource ComboBoxDark}"
+                                  ItemsSource="{Binding LanguageOptions}"
+                                  ItemTemplate="{StaticResource OptionDisplayItem}"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Language}"/>
+                    </Grid>
+    
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="150"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:T Text='Intervalle de détection device'}" FontSize="13"
+                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        <!-- Shown in seconds rather than a percentage: unlike a sensitivity, a delay has a
+                             unit the user can reason about directly. -->
+                        <DockPanel Grid.Column="1">
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                       Text="{Binding DevicePollIntervalDisplay}"/>
+                            <Slider Style="{StaticResource SliderCompact}" Minimum="1" Maximum="10"
+                                    Value="{Binding DevicePollInterval}"/>
+                        </DockPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='À propos'}" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                    <TextBlock Text="{Binding AppVersion}" FontSize="14"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock Text="{loc:T Text='Steam Controller → Xbox 360 Virtual Gamepad Bridge'}"
+                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock Text="{loc:T Text='github.com/Hoyatla/SteamXBox-'}" FontSize="12"
+                               Foreground="{StaticResource AccentBrush}" Margin="0,4,0,0"
+                               Cursor="Hand">
+                        <TextBlock.InputBindings>
+                            <MouseBinding MouseAction="LeftClick"
+                                          Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="https://github.com/Hoyatla/SteamXBox-"/>
+                        </TextBlock.InputBindings>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

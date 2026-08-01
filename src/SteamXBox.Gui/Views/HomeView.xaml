@@ -4,131 +4,135 @@
              xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
              xmlns:views="clr-namespace:SteamXBox.Gui.Views">
 
-    <StackPanel>
-        <TextBlock Text="{loc:T Text='Accueil'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
-
-        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Grid Grid.Row="0" Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="{loc:T Text='Contrôleur'}" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <TextBlock Text="{Binding DeviceName}" FontSize="13"
-                                   Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
-                    </StackPanel>
-
-                    <Border Grid.Column="1" CornerRadius="12" Padding="12,6"
-                            Background="{Binding IsDeviceConnected, Converter={x:Static views:StatusToBgConverter.Instance}}">
-                        <TextBlock FontSize="11" FontWeight="SemiBold"
-                                   Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="CONNECTÉ"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsDeviceConnected}" Value="False">
-                                            <Setter Property="Text" Value="DÉCONNECTÉ"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+    <!-- Les onglets debordent verticalement des que la fenetre est petite. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  PanningMode="VerticalOnly">
+        <StackPanel>
+            <TextBlock Text="{loc:T Text='Accueil'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
+    
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+    
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{loc:T Text='Contrôleur'}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="{Binding DeviceName}" FontSize="13"
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+    
+                        <Border Grid.Column="1" CornerRadius="12" Padding="12,6"
+                                Background="{Binding IsDeviceConnected, Converter={x:Static views:StatusToBgConverter.Instance}}">
+                            <TextBlock FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="CONNECTÉ"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDeviceConnected}" Value="False">
+                                                <Setter Property="Text" Value="DÉCONNECTÉ"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
+                    </Grid>
+    
+                    <Separator Grid.Row="1" Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
+    
+                    <Grid Grid.Row="2" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+    
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{loc:T Text='Mode actuel'}" FontSize="12"
+                                       Foreground="{StaticResource TextDimBrush}"/>
+                            <TextBlock Text="{Binding CurrentMode}" FontSize="16" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentBrush}"/>
+                        </StackPanel>
+    
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                            <TextBlock Text="{loc:T Text='Profil actif'}" FontSize="12"
+                                       Foreground="{StaticResource TextDimBrush}" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding SelectedProfile.Name}" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+    
+                    <CheckBox Grid.Row="3" IsChecked="{Binding AutoStart}"
+                              Style="{StaticResource ToggleSwitch}" Margin="0,0,0,12">
+                        <TextBlock Text="{loc:T Text='Démarrer automatiquement à la détection de la manette'}"
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"/>
+                    </CheckBox>
+    
+                    <Button Grid.Row="4" Command="{Binding ToggleCoreCommand}"
+                            HorizontalAlignment="Stretch" Height="48" FontSize="16">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                <Setter Property="Content" Value="▶  Démarrer"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCoreRunning}" Value="True">
+                                        <Setter Property="Content" Value="⏹  Arrêter"/>
+                                        <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Border>
+    
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="{loc:T Text='Mode'}" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="14" Foreground="{StaticResource TextSecondaryBrush}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="Profile — Le contrôleur agit comme souris/clavier sur le bureau."/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentMode}" Value="Xbox360">
+                                        <Setter Property="Text" Value="Xbox360 — Le contrôleur est transmis tel quel au jeu."/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{loc:T Text='Utilisez le bouton quick-access pour basculer entre les modes.'}"
+                               FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+    
+            <Grid HorizontalAlignment="Right" Margin="0,12,0,0">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:T Text='Support Me, Plz!'}" FontSize="13" FontStyle="Italic"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                    <Border Cursor="Hand" HorizontalAlignment="Center"
+                            BorderThickness="0" Background="Transparent" Padding="0">
+                        <Border.InputBindings>
+                            <MouseBinding MouseAction="LeftClick"
+                                          Command="{x:Static views:HomeView.OpenPayPalCommand}"/>
+                        </Border.InputBindings>
+                        <Image Source="/Resources/paypal-support.gif" Stretch="None"
+                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Border>
-                </Grid>
-
-                <Separator Grid.Row="1" Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
-
-                <Grid Grid.Row="2" Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="{loc:T Text='Mode actuel'}" FontSize="12"
-                                   Foreground="{StaticResource TextDimBrush}"/>
-                        <TextBlock Text="{Binding CurrentMode}" FontSize="16" FontWeight="Bold"
-                                   Foreground="{StaticResource AccentBrush}"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                        <TextBlock Text="{loc:T Text='Profil actif'}" FontSize="12"
-                                   Foreground="{StaticResource TextDimBrush}" HorizontalAlignment="Right"/>
-                        <TextBlock Text="{Binding SelectedProfile.Name}" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
-                    </StackPanel>
-                </Grid>
-
-                <CheckBox Grid.Row="3" IsChecked="{Binding AutoStart}"
-                          Style="{StaticResource ToggleSwitch}" Margin="0,0,0,12">
-                    <TextBlock Text="{loc:T Text='Démarrer automatiquement à la détection de la manette'}"
-                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="13"/>
-                </CheckBox>
-
-                <Button Grid.Row="4" Command="{Binding ToggleCoreCommand}"
-                        HorizontalAlignment="Stretch" Height="48" FontSize="16">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-                            <Setter Property="Content" Value="▶  Démarrer"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsCoreRunning}" Value="True">
-                                    <Setter Property="Content" Value="⏹  Arrêter"/>
-                                    <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                </StackPanel>
             </Grid>
-        </Border>
-
-        <Border Style="{StaticResource CardBorder}">
-            <StackPanel>
-                <TextBlock Text="{loc:T Text='Mode'}" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
-                <TextBlock FontSize="14" Foreground="{StaticResource TextSecondaryBrush}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Text" Value="Profile — Le contrôleur agit comme souris/clavier sur le bureau."/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CurrentMode}" Value="Xbox360">
-                                    <Setter Property="Text" Value="Xbox360 — Le contrôleur est transmis tel quel au jeu."/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <TextBlock Text="{loc:T Text='Utilisez le bouton quick-access pour basculer entre les modes.'}"
-                           FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,6,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <Grid HorizontalAlignment="Right" Margin="0,12,0,0">
-            <StackPanel HorizontalAlignment="Center">
-                <TextBlock Text="{loc:T Text='Support Me, Plz!'}" FontSize="13" FontStyle="Italic"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                <Border Cursor="Hand" HorizontalAlignment="Center"
-                        BorderThickness="0" Background="Transparent" Padding="0">
-                    <Border.InputBindings>
-                        <MouseBinding MouseAction="LeftClick"
-                                      Command="{x:Static views:HomeView.OpenPayPalCommand}"/>
-                    </Border.InputBindings>
-                    <Image Source="/Resources/paypal-support.gif" Stretch="None"
-                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                </Border>
-            </StackPanel>
-        </Grid>
-    </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

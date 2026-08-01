@@ -54,11 +54,15 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="{StaticResource BgMediumBrush}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Style="{StaticResource NavRail}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="16,0,16,16">
-                        <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8">
+                        <!-- Juste au-dessus des encarts d'état, aligné à droite du rail. -->
+                        <Button Style="{StaticResource DiscordButton}" Click="Discord_Click"
+                                Margin="0,0,0,6"
+                                ToolTip="{loc:T Text='Rejoindre le Discord'}"/>
+
+                        <Border Style="{StaticResource StatusCard}">
                             <StackPanel>
                                 <TextBlock Text="{loc:T Text='Status'}" FontSize="10" Foreground="{StaticResource TextDimBrush}"
                                            FontWeight="SemiBold"/>
@@ -66,7 +70,7 @@
                                            Foreground="{Binding IsCoreRunning, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
                             </StackPanel>
                         </Border>
-                        <Border Background="{StaticResource BgLightBrush}" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                        <Border Style="{StaticResource StatusCard}" Margin="0,6,0,0">
                             <StackPanel>
                                 <TextBlock Text="{loc:T Text='Device'}" FontSize="10" Foreground="{StaticResource TextDimBrush}"
                                            FontWeight="SemiBold"/>
@@ -76,19 +80,21 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Margin="16,16">
-                        <Button Content="{loc:T Text='🏠  Accueil'}" Tag="0" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="{loc:T Text='📋  Profils'}" Tag="1" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="{loc:T Text='🎮  Xbox'}" Tag="2" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="{loc:T Text='⚙  Paramètres'}" Tag="3" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="{loc:T Text='📄  Logs'}" Tag="4" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
-                        <Button Content="{loc:T Text='🔧  Debug'}" Tag="5" Click="Nav_Click"
-                                Style="{StaticResource SecondaryButton}" Margin="0,0,0,4" Padding="12,8"/>
+                    <!-- RadioButtons, not Buttons: the group gives the active tab a real checked
+                         state, which a theme can render and a skin can retemplate freely. -->
+                    <StackPanel Margin="16,16" x:Name="NavPanel">
+                        <RadioButton Content="{loc:T Text='🏠  Accueil'}" Tag="0" Click="Nav_Click"
+                                     GroupName="Nav" IsChecked="True" Style="{StaticResource NavButton}"/>
+                        <RadioButton Content="{loc:T Text='📋  Profils'}" Tag="1" Click="Nav_Click"
+                                     GroupName="Nav" Style="{StaticResource NavButton}"/>
+                        <RadioButton Content="{loc:T Text='🎮  Xbox'}" Tag="2" Click="Nav_Click"
+                                     GroupName="Nav" Style="{StaticResource NavButton}"/>
+                        <RadioButton Content="{loc:T Text='⚙  Paramètres'}" Tag="3" Click="Nav_Click"
+                                     GroupName="Nav" Style="{StaticResource NavButton}"/>
+                        <RadioButton Content="{loc:T Text='📄  Logs'}" Tag="4" Click="Nav_Click"
+                                     GroupName="Nav" Style="{StaticResource NavButton}"/>
+                        <RadioButton Content="{loc:T Text='🔧  Debug'}" Tag="5" Click="Nav_Click"
+                                     GroupName="Nav" Style="{StaticResource NavButton}"/>
                     </StackPanel>
                 </DockPanel>
             </Border>

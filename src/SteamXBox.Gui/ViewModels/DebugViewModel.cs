@@ -44,12 +44,7 @@ public partial class DebugViewModel : ObservableObject
         LoadLogTail();
     }
 
-    /// <summary>
-    /// Read from the assembly rather than typed into the view, which is how the Debug tab ended up
-    /// claiming v2.3 while v3.0 was shipping.
-    /// </summary>
-    public static string AppVersion =>
-        "v" + (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "?");
+    public static string AppVersion => AppVersionInfo.Display;
 
     public void RefreshSystemInfo()
     {
