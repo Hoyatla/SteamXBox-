@@ -4,7 +4,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using SteamXBox.Gui.Models;
 using SteamXBox.Gui.Services;
 using SteamXBox.Gui.Views;
 using SteamXBox.Gui.ViewModels;
@@ -33,10 +32,8 @@ public partial class MainWindow : Window
 
         ProfileView.DataContext = new ProfileViewModel();
         XboxView.DataContext = new XboxViewModel();
-        SettingsView.DataContext = new SettingsViewModel();
-        DebugView.DataContext = App.DebugVm;
 
-        _views = [HomeView, ProfileView, XboxView, SettingsView, LogView, DebugView];
+        _views = [HomeView, ProfileView, XboxView];
 
         try
         {
@@ -111,8 +108,17 @@ public partial class MainWindow : Window
     {
         // FrameworkElement rather than Button: the navigation items are RadioButtons so that a theme
         // can style the active tab, and a skin is free to retemplate them into anything at all.
-        if (sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var idx))
+        // "1:DualSense" — the view to show, and the controller family it should be looking at. The
+        // family half is optional so Accueil can stay a plain "0".
+        if (sender is FrameworkElement { Tag: string tag }
+            && int.TryParse(tag.Split(':')[0], out var idx))
         {
+            var parts = tag.Split(':');
+            ViewModels.ControllerStripViewModel.Shared.ShowFamily(
+                parts.Length > 1 && Enum.TryParse<Sc2Xboxed.Core.Input.ControllerKind>(parts[1], out var kind)
+                    ? kind
+                    : null);
+
             try
             {
                 SaveTabSize(_currentTabIndex);

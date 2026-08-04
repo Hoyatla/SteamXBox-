@@ -4,16 +4,23 @@ using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
+using Sc2Xboxed.Core.Osk;
+
 namespace Sc2Xboxed.Osk;
 
 public sealed class OverlayForm : Form
 {
-    private readonly double _boardY;
-    private readonly double _boardX;
-    private readonly double _keyW;
-    private readonly double _keyH;
-    private readonly int _screenW;
-    private readonly int _screenH;
+    private double _boardY;
+    private double _boardX;
+    private double _keyW;
+    private double _keyH;
+    private int _screenW;
+    private int _screenH;
+
+    // Origin of the virtual desktop. It goes negative as soon as a monitor sits to the left of or
+    // above the primary one, which is why every draw converts screen coordinates to client ones.
+    private int _originX;
+    private int _originY;
 
     private double _rightCursorX, _rightCursorY;
     private double _leftCursorX, _leftCursorY;
@@ -35,30 +42,196 @@ public sealed class OverlayForm : Form
     public double KeyW => _keyW;
     public double KeyH => _keyH;
 
+    /// <summary>
+    /// Standard key size, in pixels. Keys are wider than they are tall, like a real keyboard: the
+    /// thumb travels further horizontally than vertically, and square keys wasted vertical space.
+    /// The board is sized from these rather than from the screen width, so it stays the same
+    /// physical size on a 1080p laptop and on an ultrawide.
+    /// </summary>
+    public const int StandardKeyWidth = 92;
+    public const int StandardKeyHeight = 69;
+
+    /// <summary>User scale, as a percentage of the standard size.</summary>
+    /// <remarks>
+    /// Hidden from designer serialisation: this form is built in code, and WinForms otherwise refuses
+    /// a public property on a Form that does not declare how it serialises.
+    /// </remarks>
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public int ScalePercent { get; set; } = 100;
+
+    /// <summary>
+    /// True: the board follows the text field and dodges the pointer. False: it is pinned to the
+    /// bottom of the screen and never moves.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Floating { get; set; } = true;
+
+    public int BoardWidth => (int)Math.Round(StandardKeyWidth * KeyboardLayout.MaxCols * ScalePercent / 100.0);
+    public int BoardHeight => (int)Math.Round(StandardKeyHeight * KeyboardLayout.Rows * ScalePercent / 100.0);
+
+    /// <summary>
+    /// Sizes the window to the whole virtual desktop rather than the primary monitor.
+    /// </summary>
+    /// <remarks>
+    /// The overlay used to be created as a rectangle from (0,0) to the primary screen's size. On a
+    /// multi-monitor desktop, a keyboard placed next to a field on any other monitor was computed
+    /// correctly and then drawn outside the window, so nothing appeared at all.
+    /// </remarks>
+    private void CoverAllScreens()
+    {
+        var virtualScreen = SystemInformation.VirtualScreen;
+        _originX = virtualScreen.X;
+        _originY = virtualScreen.Y;
+        _screenW = Math.Max(1, virtualScreen.Width);
+        _screenH = Math.Max(1, virtualScreen.Height);
+    }
+
+    /// <summary>Screen coordinate to client coordinate. Everything drawn goes through these.</summary>
+    private double ToClientX(double screenX) => screenX - _originX;
+
+    private double ToClientY(double screenY) => screenY - _originY;
+
+    /// <summary>
+    /// Moves the board next to whatever is being typed into. Called each time the overlay is shown.
+    /// </summary>
+    /// <remarks>
+    /// Recomputed on every show rather than once at construction: the field moves between one use
+    /// and the next, and a keyboard pinned where the last field happened to be is no better than a
+    /// keyboard pinned to the bottom of the screen.
+    /// </remarks>
+    public void UpdatePlacement()
+    {
+        // Monitors can be plugged in, unplugged or rearranged while the overlay sits resident, so the
+        // virtual desktop is re-measured on every show rather than only at construction.
+        CoverAllScreens();
+        if (IsHandleCreated)
+        {
+            Bounds = new Rectangle(_originX, _originY, _screenW, _screenH);
+        }
+
+        if (!Floating)
+        {
+            // Fixed mode: bottom of the monitor holding the foreground window, and nothing else moves
+            // it. An empty field is exactly the "nothing known" case the placement already handles.
+            var fixedArea = CaretLocator.ForegroundWorkArea();
+            var fixedPlacement = OverlayPlacement.Place(BoardWidth, BoardHeight, default, fixedArea);
+
+            lock (_lock)
+            {
+                _boardX = fixedPlacement.Bounds.X;
+                _boardY = fixedPlacement.Bounds.Y;
+                _keyW = fixedPlacement.Bounds.Width / (double)KeyboardLayout.MaxCols;
+                _keyH = fixedPlacement.Bounds.Height / (double)KeyboardLayout.Rows;
+            }
+
+            LastPlacement = fixedPlacement.Kind;
+            Invalidate();
+            return;
+        }
+
+        var field = CaretLocator.FindActiveFieldDetailed();
+
+        // The monitor of the foreground window, not the primary one. With no caret to locate, the
+        // keyboard used to go home to monitor one while the user was typing on monitor two.
+        var work = field.Rect.IsEmpty
+            ? CaretLocator.ForegroundWorkArea()
+            : CaretLocator.WorkAreaFor(field.Rect);
+
+        var placement = OverlayPlacement.Place(BoardWidth, BoardHeight, field.Rect, field.IsCaret, work);
+
+        lock (_lock)
+        {
+            _boardX = placement.Bounds.X;
+            _boardY = placement.Bounds.Y;
+            _keyW = placement.Bounds.Width / (double)KeyboardLayout.MaxCols;
+            _keyH = placement.Bounds.Height / (double)KeyboardLayout.Rows;
+        }
+
+        LastPlacement = placement.Kind;
+        Invalidate();
+    }
+
+    /// <summary>Where the board ended up last time, for the log.</summary>
+    public PlacementKind LastPlacement { get; private set; } = PlacementKind.ScreenBottom;
+
+    /// <summary>
+    /// Moves the board out from under the mouse pointer when it comes near.
+    /// </summary>
+    /// <remarks>
+    /// The pointer and the keyboard are driven by the same hands — the right pad moves the cursor
+    /// while the board sits on the text field — so they collide constantly. Rather than let the
+    /// keyboard block the pointer, the board steps aside.
+    ///
+    /// The daisywheel is excluded: it is centred on the screen by design and has no position to
+    /// negotiate.
+    /// </remarks>
+    private void DodgePointer()
+    {
+        // A pinned keyboard does not move, pointer or no pointer: predictability is the whole point
+        // of choosing fixed mode.
+        if (_daisywheel || !Floating)
+        {
+            return;
+        }
+
+        ScreenRect board;
+        lock (_lock)
+        {
+            board = new ScreenRect((int)_boardX, (int)_boardY, BoardWidth, BoardHeight);
+        }
+
+        var cursor = Cursor.Position;
+        var work = CaretLocator.WorkAreaFor(board);
+
+        if (OverlayAvoidance.Dodge(board, cursor.X, cursor.Y, work) is not { } moved)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            _boardX = moved.X;
+            _boardY = moved.Y;
+        }
+
+        Invalidate();
+    }
+
     public OverlayForm()
     {
-        _screenW = Screen.PrimaryScreen!.Bounds.Width;
-        _screenH = Screen.PrimaryScreen.Bounds.Height;
-        _boardY = _screenH - 260;
-        _boardX = 0;
-        _keyW = (double)_screenW / KeyboardLayout.MaxCols;
-        _keyH = 50;
+        CoverAllScreens();
+        // Fixed key size: the board is sized from its own content instead of stretching across the
+        // whole screen. That is what makes it float rather than sit as a full-width band.
+        _keyW = StandardKeyWidth;
+        _keyH = StandardKeyHeight;
+        _boardX = (_screenW - BoardWidth) / 2.0;
+        _boardY = _screenH - BoardHeight - 40;
 
         Text = "SteamXBox Keyboard";
         FormBorderStyle = FormBorderStyle.None;
         TopMost = true;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
-        Bounds = new Rectangle(0, 0, _screenW, _screenH);
+        Bounds = new Rectangle(_originX, _originY, _screenW, _screenH);
         BackColor = Color.Black;
         TransparencyKey = Color.Black;
         DoubleBuffered = true;
 
-        _topMostTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        // 120 ms rather than a second: this both re-asserts topmost and runs the pointer dodge, and a
+        // keyboard that took a second to notice the cursor arriving would be worse than one that
+        // never moved. It is two cheap calls, not a repaint.
+        _topMostTimer = new System.Windows.Forms.Timer { Interval = 120 };
         _topMostTimer.Tick += (_, _) =>
         {
-            if (IsHandleCreated && Visible)
-                SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (!IsHandleCreated || !Visible)
+            {
+                return;
+            }
+
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            DodgePointer();
         };
         _topMostTimer.Start();
     }
@@ -223,8 +396,10 @@ public sealed class OverlayForm : Form
         using var dimBrush = new SolidBrush(palette.Colour(palette.PetalDimText, 0xA0B0B0C0));
         using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
 
-        float centerX = _screenW / 2f;
-        float centerY = _screenH - 250f;
+        // Centre sur l'ecran qui porte le champ actif, converti en coordonnees client.
+        var wheelArea = CaretLocator.WorkAreaFor(CaretLocator.FindActiveField());
+        float centerX = (float)ToClientX(wheelArea.X + (wheelArea.Width / 2.0));
+        float centerY = (float)ToClientY(wheelArea.Bottom - 250.0);
         float ringRadius = 165f;
         float petalRadius = 62f;
 
@@ -328,11 +503,12 @@ public sealed class OverlayForm : Form
     {
         lock (_lock)
         {
+            // Cursor positions arrive in screen coordinates, like the board they follow.
             if (_rightVisible)
-                DrawCircle(g, (float)_rightCursorX, (float)_rightCursorY, 12,
+                DrawCircle(g, (float)ToClientX(_rightCursorX), (float)ToClientY(_rightCursorY), 12,
                     Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
             if (_leftVisible)
-                DrawCircle(g, (float)_leftCursorX, (float)_leftCursorY, 12,
+                DrawCircle(g, (float)ToClientX(_leftCursorX), (float)ToClientY(_leftCursorY), 12,
                     Color.White, Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
         }
     }

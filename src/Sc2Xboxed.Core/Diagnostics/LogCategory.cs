@@ -50,7 +50,19 @@ public enum LogCategory
     /// <summary>Startup identity and resolved settings.</summary>
     Session = 1 << 9,
 
-    All = Hid | Mapping | Haptics | Osk | Owner | Mode | Pipe | Frame | Counters | Session,
+    /// <summary>
+    /// Windows appearing, closing and changing hands, tiles launched, child processes started and
+    /// stopped.
+    /// </summary>
+    /// <remarks>
+    /// The environment owns the screen and recorded nothing, so anything it did that the user could
+    /// not name afterwards left no trace at all — and the burden of describing a half-second of
+    /// screen fell on them. Every silent <c>catch</c> in the interface belongs here too: a swallowed
+    /// exception is precisely the failure nobody can describe.
+    /// </remarks>
+    Ui = 1 << 10,
+
+    All = Hid | Mapping | Haptics | Osk | Owner | Mode | Pipe | Frame | Counters | Session | Ui,
 
     Default = All & ~Frame,
 }

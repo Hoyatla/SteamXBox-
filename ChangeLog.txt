@@ -2,7 +2,7 @@ SteamXBox - Change log
 ======================
 
 
-3.2
+4.0
 ---
   Interface
 
@@ -119,5 +119,5 @@ SteamXBox - Change log
 
 Earlier versions
 ----------------
-  Releases 1.0 through 3.1 were published without a change log. The packages remain
+  Releases 1.0 through 3.2 were published without a change log. The packages remain
   available in the project's dist folder.

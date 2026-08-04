@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 
-namespace SteamXBox.Gui.Localization;
+namespace SteamXBox.Shell.Localization;
 
 /// <summary>
 /// Runtime string translation, keyed by the French source text.

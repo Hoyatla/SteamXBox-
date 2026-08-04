@@ -1,5 +1,5 @@
 SteamXBox
-Version 3.2 - win-x64
+Version 4.0 - win-x64
 
 SteamXBox is a Windows bridge that exposes a Valve Steam Controller as a virtual
 Xbox 360 controller, and lets the same controller drive the Windows desktop when no

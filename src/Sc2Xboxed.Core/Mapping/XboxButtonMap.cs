@@ -66,11 +66,12 @@ public sealed class XboxButtonMap
             map[SteamControllerButtons.LeftStick] = Xbox360Buttons.LeftThumb;
             map[SteamControllerButtons.RightStick] = Xbox360Buttons.RightThumb;
 
-            // Menu is the right-hand hamburger and View the left-hand two-panes icon, so they follow
-            // the Xbox convention: Menu is Start, View is Back. Shipped inverted until 3.2; a saved
-            // profile keeps whatever it stored, only this default changed.
-            map[SteamControllerButtons.Menu] = Xbox360Buttons.Start;
-            map[SteamControllerButtons.View] = Xbox360Buttons.Back;
+            // Menu produces Back and View produces Start. This is what the controller actually does
+            // in practice, confirmed on the hardware; the apparent inversion against the Xbox naming
+            // is in how the two buttons are labelled, not in this mapping. Briefly swapped in 3.2 and
+            // put back — a saved profile keeps whatever it stored, only this default moved.
+            map[SteamControllerButtons.Menu] = Xbox360Buttons.Back;
+            map[SteamControllerButtons.View] = Xbox360Buttons.Start;
 
             map[SteamControllerButtons.DPadUp] = Xbox360Buttons.DPadUp;
             map[SteamControllerButtons.DPadDown] = Xbox360Buttons.DPadDown;

@@ -1,0 +1,110 @@
+using Sc2Xboxed.Core.Mapping;
+
+namespace Sc2Xboxed.Core.Runtime;
+
+/// <summary>
+/// Everything the bridge remembers about one controller between two of its frames.
+/// </summary>
+/// <remarks>
+/// The rule this type exists to enforce, arrived at after fixing the same class of bug four times:
+///
+/// <list type="bullet">
+/// <item>
+/// <b>Anything that compares a frame to the previous one must be per controller.</b> Button edges,
+/// chord latches, sub-pixel carry, frame gaps. Shared between two pads, the comparison happens
+/// across them: pad A reports a button held, pad B's next frame reports it released, pad A's reports
+/// it held again. Every button then fires dozens of times a second, the mode chord latches and
+/// unlatches, and the measured frame gap is the interval between two controllers rather than one
+/// controller's own.
+/// </item>
+/// <item>
+/// <b>Anything driving a single desktop resource must be global and arbitrated.</b> The pointer, the
+/// wheel, the overlay keyboard, the output mode. Those live in the loop, not here.
+/// </item>
+/// </list>
+///
+/// <para>
+/// Mixing the two categories is what made every fix reveal another fault: the symptoms differed but
+/// the cause was one, and correcting them one at a time could never converge.
+/// </para>
+///
+/// <para>
+/// The frame gap deserves its own note. <see cref="LastFrame"/> shared between controllers meant the
+/// pointer measured the time since <i>somebody else's</i> frame — a few hundred microseconds instead
+/// of eight milliseconds — so the stick moved the cursor a fraction of what it should, or the guard
+/// rejected the frame outright. With no trackpads on Xbox or PlayStation pads, the sticks are the
+/// only pointer there is, so this was not an edge case: it was the pointer not working whenever a
+/// second pad was attached, including a phantom one.
+/// </para>
+/// </remarks>
+public sealed class ControllerSession
+{
+    public ControllerSession(ProfileMapper profileMapper, InputModeHandler modeSwitcher)
+    {
+        ProfileMapper = profileMapper;
+        ModeSwitcher = modeSwitcher;
+    }
+
+    /// <summary>Desktop mapping, and the button edges it detects.</summary>
+    public ProfileMapper ProfileMapper { get; }
+
+    /// <summary>
+    /// Mode chord detection for this controller.
+    /// </summary>
+    /// <remarks>
+    /// Per controller although the mode it switches is global: the chord is a sequence of presses by
+    /// one pair of thumbs, and detecting it across two players' frames latches on inputs nobody made.
+    /// The resulting switch still applies to everyone — one desktop, one mode.
+    /// </remarks>
+    public InputModeHandler ModeSwitcher { get; }
+
+    /// <summary>Sub-pixel remainder of this controller's stick motion.</summary>
+    public StickPointerCarry Carry;
+
+    /// <summary>Timestamp of this controller's previous frame.</summary>
+    public TimeSpan LastFrame { get; set; } = TimeSpan.Zero;
+}
+
+/// <summary>
+/// One session per controller, built on first sight.
+/// </summary>
+/// <remarks>
+/// The factory takes the controller's id so a session can be built from that controller's own
+/// profile rather than one profile serving everybody.
+/// </remarks>
+public sealed class ControllerSessionSet
+{
+    private readonly Dictionary<string, ControllerSession> _sessions = new(StringComparer.Ordinal);
+    private readonly Func<string, ControllerSession> _factory;
+
+    public ControllerSessionSet(Func<string, ControllerSession> factory) => _factory = factory;
+
+    /// <summary>How many controllers have been seen.</summary>
+    public int Count => _sessions.Count;
+
+    /// <summary>Every session, for the transitions that must reach all controllers at once.</summary>
+    public IReadOnlyCollection<ControllerSession> All => _sessions.Values;
+
+    public ControllerSession For(string controllerId)
+    {
+        if (!_sessions.TryGetValue(controllerId, out var session))
+        {
+            session = _factory(controllerId);
+            _sessions[controllerId] = session;
+        }
+
+        return session;
+    }
+
+    /// <summary>Forgets a controller that has gone away, so it comes back with a clean memory.</summary>
+    public void Forget(string controllerId) => _sessions.Remove(controllerId);
+
+    /// <summary>Rebuilds every session, for when the profiles on disk have changed.</summary>
+    public void Reload()
+    {
+        foreach (var id in _sessions.Keys.ToList())
+        {
+            _sessions[id] = _factory(id);
+        }
+    }
+}

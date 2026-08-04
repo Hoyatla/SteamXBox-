@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
 
-namespace SteamXBox.Gui.Localization;
+namespace SteamXBox.Shell.Localization;
 
 /// <summary>
 /// Translates a value for display only.

@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Mapping;
 using Sc2Xboxed.Core.Output;
-using SteamXBox.Gui.Localization;
+using SteamXBox.Shell.Localization;
 using SteamXBox.Gui.Services;
 
 namespace SteamXBox.Gui.ViewModels;
@@ -17,15 +17,32 @@ public partial class XboxButtonBinding : ObservableObject
     public XboxButtonBinding(SteamControllerButtons physical, string label, Xbox360Buttons output, Action changed)
     {
         Physical = physical;
-        Label = label;
+        _defaultLabel = label;
+        _label = label;
         _output = output;
         _changed = changed;
     }
 
     public SteamControllerButtons Physical { get; }
 
-    /// <summary>Name as it is printed on the controller, not the enum name.</summary>
-    public string Label { get; }
+    /// <summary>
+    /// Name as it is printed on the controller, not the enum name.
+    /// </summary>
+    /// <remarks>
+    /// Observable because it depends on which family of pad the tab is showing: the same row reads
+    /// "B" under the Xbox tabs and "Rond (B)" under the PlayStation ones. The bound value does not
+    /// change with it — a circle and a B are the same button in the same place — only what the user
+    /// is told they are holding.
+    /// </remarks>
+    [ObservableProperty] private string _label;
+
+    /// <summary>Relabels this row for the family of controller now being edited.</summary>
+    public void Relabel(Sc2Xboxed.Core.Input.ControllerKind? kind)
+        => Label = kind is { } family
+            ? Sc2Xboxed.Core.Input.ControllerButtonLabels.Describe(family, Physical)
+            : _defaultLabel;
+
+    private readonly string _defaultLabel;
 
     [ObservableProperty] private Xbox360Buttons _output;
 
@@ -46,6 +63,9 @@ public partial class XboxViewModel : ObservableObject
     private bool _loading;
 
     public ObservableCollection<XboxProfile> Profiles { get; } = [];
+
+    /// <summary>The connected controllers, shared with the other tab.</summary>
+    public ControllerStripViewModel Controllers => ControllerStripViewModel.Shared;
 
     /// <summary>Left half of the controller, top to bottom.</summary>
     public ObservableCollection<XboxButtonBinding> LeftBindings { get; } = [];
@@ -172,6 +192,20 @@ public partial class XboxViewModel : ObservableObject
 
         var last = _settings.Settings.LastXboxProfile;
         SelectedProfile = Profiles.FirstOrDefault(p => p.Name == last) ?? Profiles.FirstOrDefault();
+
+        // The rows are named after the pad in the user's hands: "Rond (B)" under the PlayStation
+        // tabs, "B" under the Xbox ones. Nothing about the mapping changes — only what the user is
+        // told they are holding, so they are not translating every row in their head.
+        ControllerStripViewModel.Shared.FamilyChanged += RelabelBindings;
+        RelabelBindings(ControllerStripViewModel.Shared.Family);
+    }
+
+    private void RelabelBindings(Sc2Xboxed.Core.Input.ControllerKind? family)
+    {
+        foreach (var binding in LeftBindings.Concat(RightBindings))
+        {
+            binding.Relabel(family);
+        }
     }
 
     private void ReloadProfiles()

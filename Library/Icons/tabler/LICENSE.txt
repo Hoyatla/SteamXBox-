@@ -1,0 +1,10 @@
+Tabler Icons - Iconify icon set
+
+Prefix   : tabler
+Icons    : 6232
+Author   : Paweł Kuna
+Source   : https://github.com/tabler/tabler-icons
+License  : MIT (MIT)
+Text     : https://github.com/tabler/tabler-icons/blob/master/LICENSE
+
+Retrieved from https://github.com/iconify/icon-sets

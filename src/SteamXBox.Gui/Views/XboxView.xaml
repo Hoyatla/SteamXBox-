@@ -1,7 +1,7 @@
 <UserControl x:Class="SteamXBox.Gui.Views.XboxView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
+             xmlns:loc="clr-namespace:SteamXBox.Shell.Localization;assembly=SteamXBox.Shell"
              xmlns:views="clr-namespace:SteamXBox.Gui.Views">
 
     <!-- Les onglets debordent verticalement des que la fenetre est petite. -->
@@ -9,6 +9,12 @@
                   PanningMode="VerticalOnly">
         <StackPanel>
             <TextBlock Text="{loc:T Text='Xbox'}" Style="{StaticResource HeaderText}" Margin="0,0,0,20"/>
+
+            <!--
+                The same strip as the Profile tab, from the same view model. Two instances would
+                drift: assigning in one tab and looking at the other would show a stale list.
+            -->
+            <views:ControllerStripView DataContext="{Binding Controllers}"/>
     
             <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
                 <StackPanel>

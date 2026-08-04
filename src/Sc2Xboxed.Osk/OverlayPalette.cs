@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -60,11 +61,21 @@ public sealed class OverlayPalette
     /// Loads <c>skin.json</c> from the application directory when present. Safe to call more than
     /// once; the last successful load wins.
     /// </summary>
-    public static void Load(string baseDirectory)
+    /// <param name="theme">
+    /// Theme folder under <c>Themes</c>, or empty for the built-in look. A loose skin.json beside the
+    /// executable still wins, so a single-theme package keeps working unchanged.
+    /// </param>
+    public static void Load(string baseDirectory, string? theme = null)
     {
         try
         {
             var path = Path.Combine(baseDirectory, FileName);
+
+            if (!File.Exists(path) && !string.IsNullOrWhiteSpace(theme))
+            {
+                path = Path.Combine(baseDirectory, "Themes", theme, FileName);
+            }
+
             if (!File.Exists(path))
             {
                 return;

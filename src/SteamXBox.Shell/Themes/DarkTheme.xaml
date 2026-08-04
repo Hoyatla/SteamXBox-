@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
+                    xmlns:loc="clr-namespace:SteamXBox.Shell.Localization"
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <loc:LocalizeConverter x:Key="Loc"/>
@@ -210,6 +210,108 @@
     <Style x:Key="SubHeaderText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
         <Setter Property="FontSize" Value="13"/>
+    </Style>
+
+    <!-- Les deux styles ci-dessous utilisent DynamicResource et non StaticResource pour leurs
+         couleurs. StaticResource se resout a l'analyse de CE dictionnaire, donc sur la palette
+         integree : une tuile serait restee opaque et grise sous un thème qui repeint tout le reste.
+         DynamicResource cherche a l'execution, et le dictionnaire du thème, fusionne par-dessus,
+         gagne. Les surfaces recentes suivent ainsi les sept thèmes sans etre redeclarees dans
+         chacun. -->
+    <!-- Une tuile du centre de controle. Le focus est traite comme l'etat principal, pas comme un
+         etat secondaire du survol : a la manette il n'y a pas de pointeur, donc c'est le seul repere
+         visuel disponible. Il grossit la tuile au lieu de la souligner, ce qui reste lisible de
+         loin, sur un ecran de television comme sur un moniteur. -->
+    <Style x:Key="QuickTile" TargetType="Button">
+        <Setter Property="Margin" Value="6"/>
+        <Setter Property="Height" Value="112"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{DynamicResource BgLightBrush}"
+                            BorderBrush="Transparent" BorderThickness="2"
+                            CornerRadius="10" Padding="8"
+                            RenderTransformOrigin="0.5,0.5">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- L'echelle est posee en remplacant la transformation entiere : un
+                         ScaleTransform nomme a l'interieur de Border.RenderTransform n'appartient
+                         pas a la portee de noms du modele, donc TargetName ne peut pas l'atteindre. -->
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="border" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="1.06" ScaleY="1.06"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="0.97" ScaleY="0.97"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Une touche de la calculatrice. Meme traitement du focus que QuickTile, en plus compact :
+         le focus grossit et se cerne d'accent, parce que sans pointeur c'est le seul repere.
+         Le declencheur sur Accent lit une propriete de la touche liee, ce qui evite un
+         convertisseur et laisse un skin repeindre les touches d'action. -->
+    <Style x:Key="CalcKey" TargetType="Button">
+        <Setter Property="Margin" Value="3"/>
+        <Setter Property="Height" Value="46"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{DynamicResource BgLightBrush}"
+                            BorderBrush="Transparent" BorderThickness="2"
+                            CornerRadius="8" RenderTransformOrigin="0.5,0.5">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter TargetName="border" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="1.08" ScaleY="1.08"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border" Property="RenderTransform">
+                                <Setter.Value>
+                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Accent}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="TextBoxDark" TargetType="TextBox">

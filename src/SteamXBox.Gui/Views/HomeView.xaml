@@ -1,7 +1,7 @@
 <UserControl x:Class="SteamXBox.Gui.Views.HomeView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:SteamXBox.Gui.Localization"
+             xmlns:loc="clr-namespace:SteamXBox.Shell.Localization;assembly=SteamXBox.Shell"
              xmlns:views="clr-namespace:SteamXBox.Gui.Views">
 
     <!-- Les onglets debordent verticalement des que la fenetre est petite. -->
@@ -20,36 +20,14 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
     
-                    <Grid Grid.Row="0" Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="{loc:T Text='Contrôleur'}" FontSize="14" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"/>
-                            <TextBlock Text="{Binding DeviceName}" FontSize="13"
-                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
-                        </StackPanel>
-    
-                        <Border Grid.Column="1" CornerRadius="12" Padding="12,6"
-                                Background="{Binding IsDeviceConnected, Converter={x:Static views:StatusToBgConverter.Instance}}">
-                            <TextBlock FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="CONNECTÉ"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsDeviceConnected}" Value="False">
-                                                <Setter Property="Text" Value="DÉCONNECTÉ"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Border>
-                    </Grid>
+                    <!--
+                        The same strip as every other tab, from the same view model. What stood here
+                        was a single "Contrôleur / CONNECTÉ" line fed by its own detection service —
+                        a second answer to the same question, free to disagree with the list shown
+                        everywhere else and to say "déconnecté" while three pads were listed a tab
+                        away.
+                    -->
+                    <views:ControllerStripView Grid.Row="0" DataContext="{Binding Controllers}"/>
     
                     <Separator Grid.Row="1" Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
     

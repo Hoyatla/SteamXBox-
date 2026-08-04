@@ -1,0 +1,100 @@
+<Window x:Class="SteamXBox.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SteamXBox.Shell.Localization;assembly=SteamXBox.Shell"
+        Title="SteamXBox Desktop"
+        WindowState="Maximized" WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        AllowsTransparency="True"
+        Background="{StaticResource BgDarkBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Barre de titre maison, comme le GUI : la fenetre est sans chrome pour que le theme
+             possede la totalite de sa surface. -->
+        <Grid Grid.Row="0" Background="{StaticResource BgMediumBrush}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock Text="{Binding VersionText, RelativeSource={RelativeSource AncestorType=Window}}"
+                       VerticalAlignment="Center" Margin="12,0,0,0"
+                       FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <!-- Ni réduire ni agrandir : cette fenêtre est un overlay qui recouvre le bureau, pas
+                 une application qu'on range dans la barre des tâches. Il ne reste que fermer, qui
+                 arrête l'environnement entier. -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="✕" Click="Close_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" BorderThickness="0"
+                        Foreground="{StaticResource TextSecondaryBrush}">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Margin="24">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="4,0,4,16">
+                    <TextBlock Text="{loc:T Text='Centre de contrôle'}" Style="{StaticResource HeaderText}"/>
+                    <!-- La description de la tuile visee. MinHeight pour que la grille ne saute pas
+                         quand elle passe de vide a remplie. -->
+                    <TextBlock Text="{Binding SelectedHint, RelativeSource={RelativeSource AncestorType=Window}}"
+                               Style="{StaticResource SubHeaderText}" Margin="0,4,0,0" MinHeight="18"/>
+                </StackPanel>
+
+                <TextBlock DockPanel.Dock="Bottom" Margin="4,14,4,0" FontSize="11"
+                           Foreground="{StaticResource TextDimBrush}"
+                           Text="{loc:T Text='Direction pour naviguer, Entrée pour ouvrir.'}"/>
+
+                <!-- La navigation au focus est ce qui rend la manette utilisable : chaque tuile est
+                     un bouton focusable, et les touches directionnelles se deplacent dans la
+                     grille. La souris marche pareil, elle n'est simplement pas le sujet. -->
+                <ItemsControl x:Name="Tiles"
+                              ItemsSource="{Binding Actions, RelativeSource={RelativeSource AncestorType=Window}}"
+                              KeyboardNavigation.DirectionalNavigation="Cycle">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="5"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource QuickTile}" Click="Tile_Click"
+                                    GotKeyboardFocus="Tile_Focused" MouseEnter="Tile_Hovered"
+                                    Tag="{Binding}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Glyph}"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="28" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AccentBrush}"/>
+                                    <TextBlock Text="{Binding Label, Converter={StaticResource Loc}}"
+                                               FontSize="12" Margin="0,10,0,0" TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+    </Grid>
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
+                      GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+</Window>

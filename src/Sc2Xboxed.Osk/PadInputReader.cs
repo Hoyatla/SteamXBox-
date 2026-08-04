@@ -11,7 +11,7 @@ public sealed class PadInputReader : IAsyncDisposable
 
     public bool IsOpen => _pipe is not null && _pipe.IsConnected;
 
-    public async IAsyncEnumerable<SteamControllerState> ReadFramesAsync(
+    public async IAsyncEnumerable<ControllerState> ReadFramesAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -43,6 +43,15 @@ public sealed class PadInputReader : IAsyncDisposable
             catch (IOException) { yield break; }
 
             int offset = 0;
+
+            // A sender and a reader that disagree on the frame size do not fail, they slide out of
+            // step and stay there — and the overlay would type whatever the misread bytes mean.
+            // Disconnecting is the honest outcome: it is visible, and it stops on its own.
+            if (buffer[offset++] != PadDataSender.ProtocolVersion)
+            {
+                yield break;
+            }
+
             var rightX = ReadDouble(buffer, ref offset);
             var rightY = ReadDouble(buffer, ref offset);
             bool rightTouched = buffer[offset++] != 0;
@@ -55,16 +64,23 @@ public sealed class PadInputReader : IAsyncDisposable
 
             var buttons = (SteamControllerButtons)ReadUInt64(buffer, ref offset);
 
+            // Carried for controllers with no trackpads: each stick aims at its own half of the
+            // keyboard, and the triggers commit the key that half has selected.
+            var leftStick = new NormalizedStick(ReadDouble(buffer, ref offset), ReadDouble(buffer, ref offset));
+            var rightStick = new NormalizedStick(ReadDouble(buffer, ref offset), ReadDouble(buffer, ref offset));
+            var leftTrigger = ReadDouble(buffer, ref offset);
+            var rightTrigger = ReadDouble(buffer, ref offset);
+
             var right = new TouchpadSample(rightTouched, rightX, rightY, 0.0, rightPressed);
             var left = new TouchpadSample(leftTouched, leftX, leftY, 0.0, leftPressed);
 
-            yield return new SteamControllerState(
+            yield return new ControllerState(
                 TimeSpan.FromMilliseconds(Environment.TickCount64),
                 buttons,
-                NormalizedStick.Center,
-                NormalizedStick.Center,
-                0.0,
-                0.0,
+                leftStick,
+                rightStick,
+                leftTrigger,
+                rightTrigger,
                 left,
                 right);
         }

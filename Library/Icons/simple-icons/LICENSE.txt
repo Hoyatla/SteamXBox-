@@ -1,0 +1,10 @@
+Simple Icons - Iconify icon set
+
+Prefix   : simple-icons
+Icons    : 3723
+Author   : Simple Icons Collaborators
+Source   : https://github.com/simple-icons/simple-icons
+License  : CC0 1.0 (CC0-1.0)
+Text     : https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md
+
+Retrieved from https://github.com/iconify/icon-sets

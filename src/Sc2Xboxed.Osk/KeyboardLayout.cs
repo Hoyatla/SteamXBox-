@@ -40,6 +40,17 @@ public sealed class KeyDef
 public static class KeyboardLayout
 {
     public const int Rows = 5;
+
+    /// <summary>
+    /// Key count of the widest row, which is what the stick anchors divide.
+    /// </summary>
+    /// <remarks>
+    /// Measured from the loaded layout rather than fixed: AZERTY, QWERTZ and the detected system
+    /// layout do not all have the same number of keys, and a hard-coded width would leave the last
+    /// column of the widest one unreachable.
+    /// </remarks>
+    public static int WidestRow =>
+        Keys.Count == 0 ? 1 : Keys.GroupBy(k => k.Row).Max(g => g.Count());
     public const int MaxCols = 11;
 
     /// <summary>
@@ -93,11 +104,39 @@ public static class KeyboardLayout
 
     private static IReadOnlyList<KeyDef>? _detected;
 
+    /// <summary>
+    /// Layout the overlay imitates. Setting it discards the cached keys so the next paint rebuilds.
+    /// </summary>
+    /// <remarks>
+    /// Detection is the default, but it cannot be the only option: someone typing French on a machine
+    /// set to English still wants AZERTY under their thumbs, and an overlay whose legends do not match
+    /// the user's mental model is slower than no overlay at all.
+    /// </remarks>
+    public static OskKeyboardLayout Selected
+    {
+        get => _selected;
+        set
+        {
+            if (_selected == value) return;
+            _selected = value;
+            _detected = null;
+        }
+    }
+
+    private static OskKeyboardLayout _selected = OskKeyboardLayout.Auto;
+
     public static IReadOnlyList<KeyDef> Keys
     {
         get
         {
             if (_detected is not null) return _detected;
+
+            if (_selected != OskKeyboardLayout.Auto)
+            {
+                _detected = KeyboardLayouts.Build(_selected);
+                return _detected;
+            }
+
             try { _detected = SystemKeyboardLayout.DetectLayout(); }
             catch (Exception ex)
             {

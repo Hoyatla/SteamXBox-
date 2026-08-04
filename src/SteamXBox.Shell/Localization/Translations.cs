@@ -1,4 +1,4 @@
-namespace SteamXBox.Gui.Localization;
+namespace SteamXBox.Shell.Localization;
 
 /// <summary>
 /// French source text to English. Anything absent falls through unchanged, which is why
@@ -18,6 +18,65 @@ public static class Translations
         ["Accueil"] = "Home",
         ["Paramètres"] = "Settings",
         ["Profils"] = "Profiles",
+
+        ["Thème Windows"] = "Windows theme",
+        ["Manettes concurrentes"] = "Competing controllers",
+        ["Emplacements XInput"] = "XInput slots",
+        ["Autres manettes"] = "Other controllers",
+        ["occupé"] = "taken",
+        ["libre"] = "free",
+        ["Aucune"] = "None",
+        ["La manette Steam est détectée mais ne peut pas être ouverte : Windows n'a pas réussi à la démarrer. Débranchez et rebranchez-la."]
+            = "The Steam Controller is detected but cannot be opened: Windows failed to start it. Unplug it and plug it back in.",
+        ["Une autre manette occupe l'emplacement XInput 0, celui que les jeux lisent pour le joueur 1. La manette virtuelle de SteamXBox se retrouve après elle et n'est pas lue. Éteignez les autres manettes puis relancez le jeu."]
+            = "Another controller holds XInput slot 0, the one games read for player one. SteamXBox's virtual pad ends up behind it and is never read. Turn the other controllers off, then restart the game.",
+        ["Curseurs"] = "Cursors",
+        ["Glissez pour sélectionner une zone. Échap pour annuler."] = "Drag to select a region. Esc to cancel.",
+        ["Capture annulée."] = "Capture cancelled.",
+        ["Vider"] = "Clear",
+        ["Historique vidé."] = "History cleared.",
+        ["Copié. Aucune fenêtre où coller : utilisez Ctrl+V."] = "Copied. No window to paste into: use Ctrl+V.",
+        ["Sélectionnez une entrée pour la coller dans la fenêtre où vous étiez. L'historique n'est pas enregistré sur le disque."]
+            = "Pick an entry to paste it into the window you were in. The history is never written to disk.",
+        ["{0} est introuvable."] = "{0} was not found.",
+        ["Capture {0}×{1} copiée et enregistrée dans {2}"] = "Capture {0}×{1} copied and saved to {2}",
+        ["Capture {0}×{1} copiée dans le presse-papiers."] = "Capture {0}×{1} copied to the clipboard.",
+        ["Aucun paquet de curseurs sélectionné."] = "No cursor pack selected.",
+        ["Ces réglages modifient Windows, pas seulement SteamXBox. L'état d'origine est sauvegardé avant la première modification et peut être restauré à tout moment."]
+            = "These settings change Windows itself, not only SteamXBox. The original state is saved before the first change and can be restored at any time.",
+        ["Restaurer les réglages Windows d'origine"] = "Restore the original Windows settings",
+        ["Aucun plugin de thème Windows installé."] = "No Windows theme plugin installed.",
+        ["Point d'entrée du plugin introuvable."] = "Plugin entry point not found.",
+        ["Réglages Windows d'origine restaurés."] = "Original Windows settings restored.",
+        ["Aucune sauvegarde à restaurer."] = "No backup to restore.",
+        // ---- SteamXBox Desktop ----
+        // Les libelles des tuiles sont ceux de QuickActions, sans accents : ils servent de cle de
+        // traduction et une cle accentuee se retrouve tot ou tard recopiee de travers.
+        ["Centre de contrôle"] = "Control centre",
+        ["Direction pour naviguer, Entrée pour ouvrir."] = "Arrows to move, Enter to open.",
+        ["Manette : reglages et profils"] = "Controller: settings and profiles",
+        ["Sortie audio"] = "Audio output",
+        ["Casque, enceintes ou HDMI"] = "Headset, speakers or HDMI",
+        ["Reseaux et connexion sans fil"] = "Networks and wireless",
+        ["Appareils et appairage"] = "Devices and pairing",
+        ["Luminosite"] = "Brightness",
+        ["Affichage et luminosite"] = "Display and brightness",
+        ["Ne pas deranger"] = "Do not disturb",
+        ["Assistant de concentration"] = "Focus assist",
+        ["Presse-papiers"] = "Clipboard",
+        ["Historique des copies"] = "Copy history",
+        ["Capture"] = "Snip",
+        ["Capturer une zone de l'ecran"] = "Capture part of the screen",
+        ["Calculatrice"] = "Calculator",
+        ["Calculatrice scientifique"] = "Scientific calculator",
+        ["Calculatrice scientifique de SteamXBox"] = "SteamXBox scientific calculator",
+        ["Gestionnaire des taches"] = "Task manager",
+        ["Processus et performances"] = "Processes and performance",
+        ["Parametres SteamXBox"] = "SteamXBox settings",
+        ["Paramètres SteamXBox"] = "SteamXBox settings",
+        ["Preferences, journaux et diagnostic"] = "Preferences, logs and diagnostics",
+        ["Ouvrir les parametres"] = "Open settings",
+
 
         // ---- Home ----
         ["Contrôleur"] = "Controller",
@@ -81,6 +140,8 @@ public static class Translations
         ["Ces réglages s'appliquent au clavier virtuel, pas au bureau Windows."]
             = "These settings apply to the on-screen keyboard, not to the Windows desktop.",
         ["Mode de saisie"] = "Typing mode",
+        ["Taille du clavier"] = "Keyboard size",
+        ["Clavier flottant (sinon fixe en bas de l'écran)"] = "Floating keyboard (otherwise pinned to the bottom of the screen)",
         ["Intensité vibrations"] = "Vibration intensity",
         ["Force clic pad gauche"] = "Left pad click strength",
         ["Force clic pad droit"] = "Right pad click strength",
@@ -149,6 +210,10 @@ public static class Translations
         ["Minimiser dans la barre des tâches"] = "Minimise to the system tray",
         ["Intervalle de détection device"] = "Device detection interval",
         ["Langue"] = "Language",
+        ["Thème"] = "Theme",
+        ["Thème intégré"] = "Built-in theme",
+        ["L'apparence par défaut de SteamXBox."] = "The default SteamXBox look.",
+        ["{0} — appliqué au prochain démarrage."] = "{0} — applied at the next start.",
         ["Suivre Windows"] = "Follow Windows",
         ["Français"] = "French",
         ["Anglais"] = "English",
@@ -156,6 +221,22 @@ public static class Translations
         ["À propos"] = "About",
         ["Steam Controller → Xbox 360 Virtual Gamepad Bridge"] = "Steam Controller → Xbox 360 Virtual Gamepad Bridge",
 
+        // ---- Etiquettes courtes de la coque et des cartes ----
+        // Beaucoup d'etiquettes de cette interface sont deja neutres — L4, RB, Menu, View, Xbox,
+        // ViGEmBus, DPad — et n'ont donc aucune entree ici : elles traversent le dictionnaire telles
+        // quelles. Seules celles qui sont reellement des mots francais, ou des mots anglais qu'un
+        // francophone lirait mal, sont listees.
+        ["Status"] = "Status",
+        ["Mode"] = "Mode",
+        ["Log"] = "Log",
+        ["Log:"] = "Log:",
+        ["Core:"] = "Core:",
+        ["|  Device:"] = "|  Device:",
+        ["Support Me, Plz!"] = "Support Me, Plz!",
+
+        // ---- Resume du profil par defaut ----
+        // Les fleches et les noms de touches sont neutres ; seul "Aucun" doit changer de langue.
+        ["L3 → Enter          R3 → Aucun"] = "L3 → Enter          R3 → None",
         // ---- Log and debug ----
         ["Effacer"] = "Clear",
         ["Dernières lignes du log"] = "Last log lines",

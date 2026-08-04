@@ -20,8 +20,8 @@ HidHide_*.exe
 **/bin/
 **/obj/
 
-# Tools (rebundle, etc.)
-tools/
+# tools/ est versionne : make-icon.ps1 et svg-to-png.ps1 font partie du flux de
+# fabrication des icones. Leurs bin/ et obj/ restent couverts par les regles plus haut.
 
 # Distribution / temp
 dist/
@@ -34,4 +34,18 @@ Thumbs.db
 Desktop.ini
 
 # Exclusif skins (keep local)
-Exclusif/
+Library/Exclusif/
+
+# Binaires deployes a la racine : reconstruits par publish, 130 Mo piece.
+/SteamXBox.exe
+/SteamXBox.Desktop.exe
+/SteamXBox.Core.exe
+/Sc2Xboxed.Osk.exe
+/publish/
+
+# Artefacts d'execution.
+*.signal
+steamxbox-*.log
+
+# Backups locaux
+Library/archive/

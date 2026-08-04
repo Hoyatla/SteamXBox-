@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      The Windows target is what brings in the WinRT projections, and Windows.Data.Pdf is the PDF
+      renderer already present in the operating system. Nothing to install, no poppler, no
+      Ghostscript: this machine has neither and the document has no text layer to extract.
+    -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PdfRender</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

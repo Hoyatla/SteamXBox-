@@ -1,0 +1,10 @@
+Phosphor - Iconify icon set
+
+Prefix   : ph
+Icons    : 9161
+Author   : Phosphor Icons
+Source   : https://github.com/phosphor-icons/core
+License  : MIT (MIT)
+Text     : https://github.com/phosphor-icons/core/blob/main/LICENSE
+
+Retrieved from https://github.com/iconify/icon-sets

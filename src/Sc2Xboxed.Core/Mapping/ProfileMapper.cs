@@ -327,7 +327,7 @@ public sealed class ProfileMapper
 		_mouseRemainderY = 0.0;
 	}
 
-	public void Map(SteamControllerState state)
+	public void Map(ControllerState state)
 	{
 		state = state.Normalize();
 

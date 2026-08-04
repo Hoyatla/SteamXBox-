@@ -36,12 +36,12 @@ public sealed class DefaultSteamControllerMapperTests
             }
         });
 
-        mapper.Map(SteamControllerState.Empty(TimeSpan.Zero) with
+        mapper.Map(ControllerState.Empty(TimeSpan.Zero) with
         {
             LeftPad = new TouchpadSample(true, 0.0, 0.0)
         });
 
-        var output = mapper.Map(SteamControllerState.Empty(TimeSpan.FromMilliseconds(8)) with
+        var output = mapper.Map(ControllerState.Empty(TimeSpan.FromMilliseconds(8)) with
         {
             LeftPad = new TouchpadSample(true, 0.0, 0.25)
         });
@@ -62,12 +62,12 @@ public sealed class DefaultSteamControllerMapperTests
             }
         });
 
-        mapper.Map(SteamControllerState.Empty(TimeSpan.Zero) with
+        mapper.Map(ControllerState.Empty(TimeSpan.Zero) with
         {
             RightPad = new TouchpadSample(true, 0.0, 0.0)
         });
 
-        var output = mapper.Map(SteamControllerState.Empty(TimeSpan.FromMilliseconds(10)) with
+        var output = mapper.Map(ControllerState.Empty(TimeSpan.FromMilliseconds(10)) with
         {
             RightPad = new TouchpadSample(true, 0.2, -0.1)
         });
@@ -97,17 +97,17 @@ public sealed class DefaultSteamControllerMapperTests
             }
         });
 
-        mapper.Map(SteamControllerState.Empty(TimeSpan.Zero) with
+        mapper.Map(ControllerState.Empty(TimeSpan.Zero) with
         {
             RightPad = new TouchpadSample(true, 0.0, 0.0)
         });
 
-        mapper.Map(SteamControllerState.Empty(TimeSpan.FromMilliseconds(10)) with
+        mapper.Map(ControllerState.Empty(TimeSpan.FromMilliseconds(10)) with
         {
             RightPad = new TouchpadSample(true, 0.1, 0.0)
         });
 
-        var output = mapper.Map(SteamControllerState.Empty(TimeSpan.FromMilliseconds(20)) with
+        var output = mapper.Map(ControllerState.Empty(TimeSpan.FromMilliseconds(20)) with
         {
             RightPad = TouchpadSample.Released
         });
@@ -121,12 +121,12 @@ public sealed class DefaultSteamControllerMapperTests
     {
         var mapper = new DefaultSteamControllerMapper();
 
-        mapper.Map(SteamControllerState.Empty(TimeSpan.Zero) with
+        mapper.Map(ControllerState.Empty(TimeSpan.Zero) with
         {
             LeftPad = new TouchpadSample(true, 0.25, -0.25, Pressure: 0.5)
         });
 
-        var output = mapper.Map(SteamControllerState.Empty(TimeSpan.FromMilliseconds(90)) with
+        var output = mapper.Map(ControllerState.Empty(TimeSpan.FromMilliseconds(90)) with
         {
             LeftPad = TouchpadSample.Released
         });
@@ -158,24 +158,24 @@ public sealed class DefaultSteamControllerMapperTests
     }
 
     /// <summary>
-    /// Menu is Start and View is Back, the Xbox convention.
+    /// Menu is Back and View is Start, which is what the hardware does.
     /// </summary>
     /// <remarks>
-    /// This asserted the opposite until 3.2, under a name claiming it matched what the controller
-    /// reports. Testing on the hardware showed the two were simply inverted. If a game ever reacts to
-    /// View where it should react to Menu, the fault is then in which HID bit
-    /// <c>TritonInputReportParser</c> calls Menu, not here — fixing it in the mapper would only hide
-    /// a mislabelled bit and break every profile that stores the mapping by name.
+    /// Briefly swapped during 4.0 on the assumption that it was a bug, then put back: the naming
+    /// looks inverted against the Xbox convention, but this is what the controller actually produces.
+    /// If a game ever reacts to View where it should react to Menu, the fault is in which HID bit
+    /// <c>TritonInputReportParser</c> calls Menu, not here — correcting it in the mapper would only
+    /// hide a mislabelled bit and break every profile that stores the mapping by name.
     /// </remarks>
     [Fact]
-    public void MenuIsStartAndViewIsBack()
+    public void MenuIsBackAndViewIsStart()
     {
         var menu = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.Menu);
         var view = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.View);
 
-        Assert.True(menu.HasFlag(Xbox360Buttons.Start));
-        Assert.False(menu.HasFlag(Xbox360Buttons.Back));
-        Assert.True(view.HasFlag(Xbox360Buttons.Back));
-        Assert.False(view.HasFlag(Xbox360Buttons.Start));
+        Assert.True(menu.HasFlag(Xbox360Buttons.Back));
+        Assert.False(menu.HasFlag(Xbox360Buttons.Start));
+        Assert.True(view.HasFlag(Xbox360Buttons.Start));
+        Assert.False(view.HasFlag(Xbox360Buttons.Back));
     }
 }

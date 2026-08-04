@@ -1,4 +1,4 @@
-namespace SteamXBox.Gui.Localization;
+namespace SteamXBox.Shell.Localization;
 
 public enum AppLanguage
 {

@@ -45,16 +45,42 @@ public sealed class PadDataSender : IAsyncDisposable
     }
 
     /// <summary>
-    /// Fixed frame size: two touchpad samples plus the button mask. The overlay needs the buttons
-    /// for daisywheel typing, where ABXY pick the character.
+    /// Layout of the frames on this pipe.
     /// </summary>
-    public const int FrameSize = 44;
+    /// <remarks>
+    /// Written first on every frame, and checked by the reader. The pipe carries fixed-size frames,
+    /// so a sender and a reader that disagree on the size do not fail — they slide out of step and
+    /// stay there, and the overlay types whatever the misread bytes happen to mean. A version byte
+    /// turns that into a clean disconnection.
+    ///
+    /// Bumped when the sticks and triggers were added for controllers that have no trackpads.
+    /// </remarks>
+    public const byte ProtocolVersion = 2;
 
-    public void SendPadState(TouchpadSample rightPad, TouchpadSample leftPad, SteamControllerButtons buttons)
+    /// <summary>
+    /// Fixed frame size: version, two touchpad samples, the button mask, then both sticks and both
+    /// triggers.
+    /// </summary>
+    /// <remarks>
+    /// The overlay needs the buttons for daisywheel typing, where ABXY pick the character, and the
+    /// sticks for a controller with no pads, where each stick aims at its own half of the keyboard.
+    /// </remarks>
+    public const int FrameSize = 1 + 44 + 48;
+
+    public void SendPadState(
+        TouchpadSample rightPad,
+        TouchpadSample leftPad,
+        SteamControllerButtons buttons,
+        NormalizedStick leftStick,
+        NormalizedStick rightStick,
+        double leftTrigger,
+        double rightTrigger)
     {
         var buffer = new byte[FrameSize];
         var span = buffer.AsSpan();
         int offset = 0;
+
+        span[offset++] = ProtocolVersion;
 
         WriteDouble(span, ref offset, rightPad.X);
         WriteDouble(span, ref offset, rightPad.Y);
@@ -67,6 +93,13 @@ public sealed class PadDataSender : IAsyncDisposable
         span[offset++] = (byte)(leftPad.IsPressed ? 1 : 0);
 
         WriteUInt64(span, ref offset, (ulong)buttons);
+
+        WriteDouble(span, ref offset, leftStick.X);
+        WriteDouble(span, ref offset, leftStick.Y);
+        WriteDouble(span, ref offset, rightStick.X);
+        WriteDouble(span, ref offset, rightStick.Y);
+        WriteDouble(span, ref offset, leftTrigger);
+        WriteDouble(span, ref offset, rightTrigger);
 
         lock (_lock)
         {

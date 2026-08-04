@@ -1,7 +1,7 @@
 using System.Windows.Data;
 using System.Windows.Markup;
 
-namespace SteamXBox.Gui.Localization;
+namespace SteamXBox.Shell.Localization;
 
 /// <summary>
 /// Markup extension that binds a label to its translation: <c>Text="{loc:T Sensibilité pad}"</c>.

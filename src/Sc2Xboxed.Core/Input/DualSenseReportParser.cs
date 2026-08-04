@@ -1,0 +1,179 @@
+namespace Sc2Xboxed.Core.Input;
+
+/// <summary>
+/// Turns a DualSense input report into the state the rest of SteamXBox speaks.
+/// </summary>
+/// <remarks>
+/// A PlayStation 5 pad is not an XInput device and never will be: XInput is a Microsoft API that
+/// enumerates Xbox-compatible pads only. Windows exposes the DualSense as a plain HID gamepad, so
+/// it has to be read and decoded here rather than handed to the same code as an Xbox pad. That is
+/// why "the DualSense does nothing" was never a bug in the XInput path — there was no path at all.
+///
+/// <para>
+/// The two transports carry the same fields at different offsets. Over USB the report is
+/// <c>0x01</c> and the axes start at byte 1; over Bluetooth the full report is <c>0x31</c>, which
+/// inserts a sequence byte and pushes everything one further along. Getting that offset wrong does
+/// not fail loudly — it silently reads the Y axis as X — so the transport is decided from the
+/// report id rather than assumed, and both are tested.
+/// </para>
+///
+/// <para>
+/// Only what an Xbox pad also has is mapped. The touchpad, the gyroscope, the adaptive triggers and
+/// the mute button have no equivalent in <see cref="ControllerState"/> and inventing one would
+/// mean guessing what the user wants them to do.
+/// </para>
+/// </remarks>
+public static class DualSenseReportParser
+{
+    /// <summary>Report id of the compact USB report.</summary>
+    public const byte UsbReportId = 0x01;
+
+    /// <summary>Report id of the full Bluetooth report.</summary>
+    public const byte BluetoothReportId = 0x31;
+
+    /// <summary>Sticks rest near the middle of a byte; anything closer than this is noise.</summary>
+    /// <remarks>
+    /// A DualSense at rest does not report exactly 128. Left raw, a pad sitting untouched on a desk
+    /// produces a slow permanent drift — which on this project has already been mistaken for a bug
+    /// in the mapping three times over.
+    /// </remarks>
+    private const double RestBand = 4.0 / 128.0;
+
+    /// <summary>Whether a report can be decoded at all.</summary>
+    public static bool CanParse(ReadOnlySpan<byte> report)
+        => report.Length >= MinimumLength(report.Length == 0 ? (byte)0 : report[0]);
+
+    /// <summary>Shortest USB <c>0x01</c> report; anything shorter under that id is the Bluetooth one.</summary>
+    /// <remarks>
+    /// The whole reason this constant exists. Report <c>0x01</c> means two different things
+    /// depending on the transport, and the id alone cannot tell them apart — only the length can.
+    /// </remarks>
+    private const int UsbReportLength = 32;
+
+    private static int MinimumLength(byte reportId) => reportId switch
+    {
+        UsbReportId => 10,
+        BluetoothReportId => 12,
+        _ => int.MaxValue,
+    };
+
+    /// <summary>Where the fields sit in one particular report.</summary>
+    private readonly record struct Layout(int Axes, int Buttons, int Triggers);
+
+    /// <summary>
+    /// Which of the three report shapes this is.
+    /// </summary>
+    /// <remarks>
+    /// Three, not two. A DualSense on Bluetooth sends a compact <c>0x01</c> report until something
+    /// asks it for the full one, and that compact report shares its id with the USB report while
+    /// laying the fields out differently: buttons and triggers are swapped. The axes are in the same
+    /// place in both, which is exactly what makes the mistake so misleading — the pointer moves
+    /// correctly and then every button does something else. Read as a bitfield, a trigger byte is a
+    /// fistful of buttons pressed at once.
+    /// </remarks>
+    private static Layout LayoutOf(ReadOnlySpan<byte> report)
+    {
+        if (report[0] == BluetoothReportId)
+        {
+            return new Layout(Axes: 2, Buttons: 9, Triggers: 6);
+        }
+
+        // Report 0x01 always carries the compact layout, whatever its length. The length test that
+        // stood here was wrong and wrong silently: a real DualSense sends 0x01 in 78-byte frames
+        // over Bluetooth, so the USB branch was taken, the buttons were read from byte 8 instead of
+        // byte 5, and a resting pad decoded as DPadUp for ever. Measured on the author's pad:
+        // [01 80 7F 80 82 08 00 20 ...] — byte 5 is 0x08, a centred hat, exactly where this says.
+        return new Layout(Axes: 1, Buttons: 5, Triggers: 8);
+    }
+
+    /// <summary>
+    /// Decodes one report.
+    /// </summary>
+    /// <param name="report">The raw HID report, including its id byte.</param>
+    /// <param name="timestamp">When it arrived, relative to the start of the session.</param>
+    /// <returns>The decoded state, or null when the report is not one this understands.</returns>
+    /// <remarks>
+    /// Null rather than an exception for an unknown report. A DualSense also emits feature and
+    /// audio reports on the same pipe, and they are perfectly normal traffic — throwing would turn
+    /// ordinary chatter into a crash.
+    /// </remarks>
+    public static ControllerState? Parse(ReadOnlySpan<byte> report, TimeSpan timestamp)
+    {
+        if (!CanParse(report))
+        {
+            return null;
+        }
+
+        var layout = LayoutOf(report);
+
+        if (report.Length <= layout.Buttons + 1 || report.Length <= layout.Triggers + 1)
+        {
+            return null;
+        }
+
+        var leftStick = new NormalizedStick(Axis(report[layout.Axes]), -Axis(report[layout.Axes + 1]));
+        var rightStick = new NormalizedStick(Axis(report[layout.Axes + 2]), -Axis(report[layout.Axes + 3]));
+
+        var leftTrigger = report[layout.Triggers] / 255.0;
+        var rightTrigger = report[layout.Triggers + 1] / 255.0;
+
+        var faceAndDpad = report[layout.Buttons];
+        var shoulders = report[layout.Buttons + 1];
+
+        var buttons = SteamControllerButtons.None;
+
+        // The face buttons sit in the high nibble. Named by position rather than by PlayStation
+        // label: cross is where A is on an Xbox pad, and it is the position the user's thumb knows.
+        if ((faceAndDpad & 0x20) != 0) buttons |= SteamControllerButtons.A;      // cross
+        if ((faceAndDpad & 0x40) != 0) buttons |= SteamControllerButtons.B;      // circle
+        if ((faceAndDpad & 0x10) != 0) buttons |= SteamControllerButtons.X;      // square
+        if ((faceAndDpad & 0x80) != 0) buttons |= SteamControllerButtons.Y;      // triangle
+
+        buttons |= DpadOf(faceAndDpad & 0x0F);
+
+        if ((shoulders & 0x01) != 0) buttons |= SteamControllerButtons.LeftBumper;
+        if ((shoulders & 0x02) != 0) buttons |= SteamControllerButtons.RightBumper;
+        if ((shoulders & 0x10) != 0) buttons |= SteamControllerButtons.View;     // create
+        if ((shoulders & 0x20) != 0) buttons |= SteamControllerButtons.Menu;     // options
+        if ((shoulders & 0x40) != 0) buttons |= SteamControllerButtons.LeftStick;
+        if ((shoulders & 0x80) != 0) buttons |= SteamControllerButtons.RightStick;
+
+        return new ControllerState(
+            timestamp,
+            buttons,
+            leftStick,
+            rightStick,
+            leftTrigger,
+            rightTrigger,
+            TouchpadSample.Released,
+            TouchpadSample.Released);
+    }
+
+    /// <summary>
+    /// The d-pad arrives as a hat switch: a direction from 0 to 7, and 8 for centred.
+    /// </summary>
+    /// <remarks>
+    /// Not a bitfield, which is the mistake this shape invites. Treating it as one makes "up" (0)
+    /// indistinguishable from "centred" and leaves the pad walking in one direction forever.
+    /// </remarks>
+    private static SteamControllerButtons DpadOf(int hat) => hat switch
+    {
+        0 => SteamControllerButtons.DPadUp,
+        1 => SteamControllerButtons.DPadUp | SteamControllerButtons.DPadRight,
+        2 => SteamControllerButtons.DPadRight,
+        3 => SteamControllerButtons.DPadDown | SteamControllerButtons.DPadRight,
+        4 => SteamControllerButtons.DPadDown,
+        5 => SteamControllerButtons.DPadDown | SteamControllerButtons.DPadLeft,
+        6 => SteamControllerButtons.DPadLeft,
+        7 => SteamControllerButtons.DPadUp | SteamControllerButtons.DPadLeft,
+        _ => SteamControllerButtons.None,
+    };
+
+    /// <summary>A stick byte, centred on 128, as -1..1 with the rest band flattened.</summary>
+    private static double Axis(byte raw)
+    {
+        var value = (raw - 128.0) / 128.0;
+
+        return Math.Abs(value) < RestBand ? 0 : Math.Clamp(value, -1.0, 1.0);
+    }
+}

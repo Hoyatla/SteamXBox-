@@ -23,6 +23,47 @@ public sealed class OskSettings
     public OskTypingMode TypingMode { get; set; } = OskTypingMode.FullKeyboard;
 
     /// <summary>
+    /// Physical keyboard the overlay imitates: "Auto", "SwissQwertz", "FrenchAzerty" or "UsQwerty".
+    /// </summary>
+    /// <remarks>
+    /// A string rather than an enum because the enum lives in the overlay project, which Core does
+    /// not reference. The overlay parses it and ignores anything it does not recognise.
+    /// </remarks>
+    public string KeyboardLayout { get; set; } = "Auto";
+
+    /// <summary>
+    /// Size of the floating keyboard, as a percentage of the standard size. 100 is the reference.
+    /// </summary>
+    /// <remarks>
+    /// Reach and screen size vary too much for one size to suit everyone: a 4K desktop at arm's
+    /// length and a handheld held close want very different boards. Clamped on read so a hand-edited
+    /// file cannot produce a keyboard larger than the screen or too small to aim at.
+    /// </remarks>
+    public int KeyboardScale { get; set; } = 100;
+
+    /// <summary>
+    /// True: the keyboard floats, following the text field and dodging the pointer.
+    /// False: it sits at the bottom of the screen and never moves.
+    /// </summary>
+    /// <remarks>
+    /// Both are legitimate. Following the field is better when it works, but a maximised editor
+    /// leaves nowhere free to go, and a keyboard that lands in a different place each time can be
+    /// worse than one that is always where you expect it.
+    /// </remarks>
+    public bool FloatingKeyboard { get; set; } = true;
+
+    /// <summary>
+    /// Theme folder the overlay takes its palette from. Written by the interface so both surfaces
+    /// change appearance together.
+    /// </summary>
+    public string Theme { get; set; } = "";
+
+    public const int MinKeyboardScale = 50;
+    public const int MaxKeyboardScale = 200;
+
+    public int ClampedKeyboardScale => Math.Clamp(KeyboardScale, MinKeyboardScale, MaxKeyboardScale);
+
+    /// <summary>
     /// Tick each time the highlighted key changes, not only on keypress. This is what makes
     /// typing without looking at the overlay possible.
     /// </summary>

@@ -1,0 +1,11 @@
+{
+  "_comment": "Palette overlay - Acrylic. Alignee sur AccentBlurBehind=3A232323 de translucent-windows. Couleurs en #AARRGGBB.",
+  "fontFamily": "Segoe UI Variable Text",
+  "keyFill": "#59232323", "keyBorder": "#40FFFFFF", "keyHighlight": "#D84CC2FF",
+  "keyFlash": "#F0FFFFFF", "keyText": "#FFFFFFFF", "shiftText": "#A0C8C8C8",
+  "symbolText": "#D04CC2FF", "symbolHighlightText": "#FF102027",
+  "petalFill": "#8C232323", "petalActiveFill": "#B34CC2FF", "petalBorder": "#40FFFFFF",
+  "petalActiveBorder": "#FF4CC2FF", "hubFill": "#B3141414", "petalFlash": "#F0FFFFFF",
+  "petalDimText": "#B0C8C8C8",
+  "slotA": "#FF6CCB5F", "slotB": "#FFFF6B6B", "slotX": "#FF4CC2FF", "slotY": "#FFFFB86C"
+}

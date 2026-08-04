@@ -7,7 +7,16 @@
     <AssemblyName>Sc2Xboxed.Osk</AssemblyName>
     <RootNamespace>Sc2Xboxed.Osk</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>OverlayKeyboard.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
+
+    <!--
+      UI Automation lives in the WPF part of the Windows Desktop pack, so this WinForms application
+      enables WPF purely to reference it. It is the only way to find the caret in Word, the WinUI
+      Notepad or a browser: none of them use the classic Windows caret API, so GetGUIThreadInfo
+      reports nothing at all for them.
+    -->
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>

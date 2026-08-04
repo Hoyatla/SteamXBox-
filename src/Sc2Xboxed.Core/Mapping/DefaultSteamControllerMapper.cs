@@ -25,7 +25,7 @@ public sealed class DefaultSteamControllerMapper
         _rightTap = new TouchpadTapDetector(settings.TouchpadTap);
     }
 
-    public ControllerOutputFrame Map(SteamControllerState state)
+    public ControllerOutputFrame Map(ControllerState state)
     {
         state = state.Normalize();
 

@@ -20,8 +20,8 @@ public class XboxButtonMapTests
     [InlineData(SteamControllerButtons.RightBumper, Xbox360Buttons.RightShoulder)]
     [InlineData(SteamControllerButtons.LeftStick, Xbox360Buttons.LeftThumb)]
     [InlineData(SteamControllerButtons.RightStick, Xbox360Buttons.RightThumb)]
-    [InlineData(SteamControllerButtons.Menu, Xbox360Buttons.Start)]
-    [InlineData(SteamControllerButtons.View, Xbox360Buttons.Back)]
+    [InlineData(SteamControllerButtons.Menu, Xbox360Buttons.Back)]
+    [InlineData(SteamControllerButtons.View, Xbox360Buttons.Start)]
     [InlineData(SteamControllerButtons.DPadUp, Xbox360Buttons.DPadUp)]
     [InlineData(SteamControllerButtons.DPadDown, Xbox360Buttons.DPadDown)]
     [InlineData(SteamControllerButtons.DPadLeft, Xbox360Buttons.DPadLeft)]
@@ -107,7 +107,7 @@ public class XboxButtonMapTests
     {
         var map = XboxButtonMap.FromDictionary(null);
 
-        Assert.Equal(Xbox360Buttons.Start, map[SteamControllerButtons.Menu]);
+        Assert.Equal(Xbox360Buttons.Back, map[SteamControllerButtons.Menu]);
     }
 
     /// <summary>Steam and Quick Access must stay out of the editable set.</summary>

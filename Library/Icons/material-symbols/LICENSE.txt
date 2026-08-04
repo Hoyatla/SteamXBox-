@@ -1,0 +1,10 @@
+Material Symbols - Iconify icon set
+
+Prefix   : material-symbols
+Icons    : 16284
+Author   : Google
+Source   : https://github.com/google/material-design-icons
+License  : Apache 2.0 (Apache-2.0)
+Text     : https://github.com/google/material-design-icons/blob/master/LICENSE
+
+Retrieved from https://github.com/iconify/icon-sets

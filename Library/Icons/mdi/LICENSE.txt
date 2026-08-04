@@ -1,0 +1,10 @@
+Material Design Icons - Iconify icon set
+
+Prefix   : mdi
+Icons    : 7638
+Author   : Pictogrammers
+Source   : https://github.com/Templarian/MaterialDesign
+License  : Apache 2.0 (Apache-2.0)
+Text     : https://github.com/Templarian/MaterialDesign/blob/master/LICENSE
+
+Retrieved from https://github.com/iconify/icon-sets

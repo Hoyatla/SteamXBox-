@@ -1,0 +1,11 @@
+{
+  "id": "stained-glass-cursors",
+  "name": "Curseurs Stained Glass",
+  "category": "theme.windows",
+  "version": "1.0.0",
+  "author": "Haunty",
+  "licence": "CC BY 4.0",
+  "source": "http://www.rw-designer.com/cursor-set/stained-glass",
+  "revertible": true,
+  "entry": "cursors/stained-glass.crs"
+}

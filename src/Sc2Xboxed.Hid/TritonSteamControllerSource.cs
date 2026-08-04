@@ -4,7 +4,7 @@ using Sc2Xboxed.Core.Runtime;
 
 namespace Sc2Xboxed.Hid;
 
-public sealed class TritonSteamControllerSource : IPhysicalControllerSource
+public sealed class TritonSteamControllerSource : IPhysicalControllerSource, INativeLayerControl, IPowerControl, ITrackpadInput
 {
     private readonly SteamHidDiscovery _discovery;
     private readonly TritonInputReportParser _parser;
@@ -55,7 +55,7 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource
         return ValueTask.CompletedTask;
     }
 
-    public async IAsyncEnumerable<SteamControllerState> ReadFramesAsync(
+    public async IAsyncEnumerable<ControllerState> ReadFramesAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var device = _discovery.FindPreferredControllerDevice()

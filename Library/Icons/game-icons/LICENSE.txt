@@ -1,0 +1,10 @@
+Game Icons - Iconify icon set
+
+Prefix   : game-icons
+Icons    : 4134
+Author   : GameIcons
+Source   : https://github.com/game-icons/icons
+License  : CC BY 3.0 (CC-BY-3.0)
+Text     : https://github.com/game-icons/icons/blob/master/license.txt
+
+Retrieved from https://github.com/iconify/icon-sets

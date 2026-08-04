@@ -1,8 +1,9 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Markup;
 using SteamXBox.Gui.Services;
 using SteamXBox.Gui.ViewModels;
+using Sc2Xboxed.Core.Diagnostics;
 
 namespace SteamXBox.Gui;
 
@@ -22,13 +23,31 @@ public partial class App : Application
     public static SettingsService SettingsSvc { get; private set; } = null!;
 
     public static MainViewModel MainVm { get; private set; } = null!;
-    public static DebugViewModel DebugVm { get; private set; } = null!;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        TryApplyExternalSkin();
+        UiLog.Start("gui");
+        UiLog.Info($"arguments: {(e.Args.Length == 0 ? "(none)" : string.Join(' ', e.Args))}");
+
+        // Both channels, because they fail differently. An exception on the UI thread is survivable
+        // and is recorded; one on a worker thread ends the process outright, which looks from the
+        // outside like the window vanishing for no reason — and is the harder of the two to report.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            UiLog.Crash("unhandled exception on the dispatcher", args.Exception);
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                UiLog.Crash("unhandled exception on a background thread", ex);
+            }
+
+            UiLog.Stop("process terminating on an unhandled exception");
+        };
 
         SettingsSvc = new SettingsService();
 
@@ -36,18 +55,40 @@ public partial class App : Application
         try
         {
             SettingsSvc.Load();
-            Localization.Strings.Current.Apply(SettingsSvc.Settings.Language);
+            SteamXBox.Shell.Localization.Strings.Current.Apply(SettingsSvc.Settings.Language);
         }
-        catch
+        catch (Exception ex)
         {
-            Localization.Strings.Current.Apply(Localization.AppLanguage.System);
+            UiLog.Failure("loading the settings", ex);
+            SteamXBox.Shell.Localization.Strings.Current.Apply(SteamXBox.Shell.Localization.AppLanguage.System);
         }
+
+        // After the settings, not before. This used to run first, while SettingsSvc was still null,
+        // so the selected theme resolved to nothing and only a loose skin.xaml was ever picked up:
+        // the configuration window sat on the built-in theme while Desktop wore the chosen one.
+        // Same call as Desktop makes, so the two cannot drift apart again.
+        _externalSkin = SteamXBox.Shell.Theming.ThemeLoader.Apply(this, SettingsSvc.Settings.Theme);
+
+
+        // Sans argument, SteamXBox.exe n'est qu'un lanceur : il ouvre l'environnement et s'efface.
+        // C'est Desktop qui est la racine du produit, et double-cliquer sur SteamXBox doit ouvrir
+        // le produit, pas son panneau de configuration manette. La tuile Controller de Desktop
+        // rappelle ce même exécutable avec --config pour obtenir cette fenêtre.
+        if (!e.Args.Any(a => a.Equals("--config", StringComparison.OrdinalIgnoreCase)))
+        {
+            UiLog.Info("launcher mode: opening the environment and standing down");
+            LaunchDesktop();
+            Shutdown();
+            return;
+        }
+
+        UiLog.Info("configuration mode: opening the controller settings window");
 
         ProfileSvc = new ProfileService();
         ProfileSvc.LoadAll();
+        UiLog.Info($"{ProfileSvc.Profiles.Count} profile(s) loaded");
 
         MainVm = new MainViewModel();
-        DebugVm = new DebugViewModel();
 
         ShowMainWindow();
     }
@@ -67,10 +108,12 @@ public partial class App : Application
         try
         {
             new MainWindow().Show();
+            UiLog.Window(nameof(MainWindow), "shown");
             return;
         }
         catch (Exception exception)
         {
+            UiLog.Failure("building the main window with the external skin", exception);
             RemoveExternalSkin();
             SkinFailure = exception.Message;
         }
@@ -78,6 +121,7 @@ public partial class App : Application
         // Second attempt on the built-in theme. If this throws too, the fault is not the skin and
         // the exception must surface rather than be swallowed.
         new MainWindow().Show();
+        UiLog.Window(nameof(MainWindow), "shown", "on the built-in theme after the skin was rejected");
     }
 
     /// <summary>Why the external skin was rejected, or null when none was.</summary>
@@ -85,54 +129,60 @@ public partial class App : Application
 
     private static void RemoveExternalSkin()
     {
-        if (_externalSkin is not null)
-        {
-            Current.Resources.MergedDictionaries.Remove(_externalSkin);
-            _externalSkin = null;
-        }
+        SteamXBox.Shell.Theming.ThemeLoader.Remove(Current, _externalSkin);
+        _externalSkin = null;
     }
 
     private static ResourceDictionary? _externalSkin;
 
-    /// <summary>Name of the optional skin dropped next to the executable.</summary>
-    private const string SkinFileName = "skin.xaml";
-
     /// <summary>
-    /// Merges <c>skin.xaml</c> from the application directory when it exists, on top of the built-in
-    /// theme.
+    /// Starts SteamXBox Desktop, or brings it to the front if it is already up.
     /// </summary>
     /// <remarks>
-    /// Every view refers to the theme only through named resource keys, so a dictionary that
-    /// redefines those keys restyles the whole interface without touching a single view. Merged last
-    /// means it wins the lookup, and this runs before any window is built so the first render is
-    /// already skinned. A broken or missing skin is not an error: the built-in theme stays.
+    /// Quiet on failure by design: this runs before any window exists, so a message box would be the
+    /// only thing on screen and would say nothing the user can act on. A missing
+    /// SteamXBox.Desktop.exe next to this one means a broken installation, not a mistake to warn
+    /// about mid-launch.
+    ///
+    /// Quiet on screen, not quiet in the record. This is the whole of what double-clicking
+    /// SteamXBox.exe does, so when nothing appears there is nothing else to consult — and "I
+    /// double-clicked and saw nothing" was left as the only available description of a failure that
+    /// has four distinct causes, each written below.
     /// </remarks>
-    private static void TryApplyExternalSkin()
+    private static void LaunchDesktop()
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, SkinFileName);
-            if (!File.Exists(path))
+            if (System.Diagnostics.Process.GetProcessesByName("SteamXBox.Desktop").Length > 0)
             {
+                UiLog.Process("SteamXBox.Desktop", "already running; not started again");
                 return;
             }
 
-            using var stream = File.OpenRead(path);
-            if (XamlReader.Load(stream) is ResourceDictionary skin)
+            var executable = Path.Combine(AppContext.BaseDirectory, "SteamXBox.Desktop.exe");
+            if (!File.Exists(executable))
             {
-                Current.Resources.MergedDictionaries.Add(skin);
-                _externalSkin = skin;
+                UiLog.Error($"process SteamXBox.Desktop: executable not found at {executable}");
+                return;
             }
+
+            var started = System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false });
+
+            UiLog.Process(
+                "SteamXBox.Desktop",
+                started is null ? "start returned no process" : $"started, PID {started.Id}");
         }
-        catch
+        catch (Exception ex)
         {
-            // A malformed skin must never stop the application from starting.
+            UiLog.Failure("starting SteamXBox.Desktop", ex);
         }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         MainVm?.Dispose();
+        UiLog.Stop($"exited with code {e.ApplicationExitCode}");
         base.OnExit(e);
     }
 }

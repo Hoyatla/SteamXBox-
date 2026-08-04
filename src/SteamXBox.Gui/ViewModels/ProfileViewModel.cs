@@ -2,10 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Sc2Xboxed.Core.Osk;
-using SteamXBox.Gui.Models;
 using SteamXBox.Gui.Services;
 
-using SteamXBox.Gui.Localization;
+using SteamXBox.Shell.Localization;
 
 namespace SteamXBox.Gui.ViewModels;
 
@@ -28,6 +27,9 @@ public partial class ProfileViewModel : ObservableObject
     }
 
     public ObservableCollection<ProfileData> Profiles => _service.Profiles;
+
+    /// <summary>The connected controllers, shared with the other tab.</summary>
+    public ControllerStripViewModel Controllers => ControllerStripViewModel.Shared;
 
     // ---- Wrapper properties for dictionary bindings ----
     // Buttons
@@ -323,6 +325,46 @@ public partial class ProfileViewModel : ObservableObject
     {
         get => _osk.TypingMode;
         set { if (_osk.TypingMode == value) return; _osk.TypingMode = value; OnPropertyChanged(); _osk.Save(); }
+    }
+
+    /// <summary>
+    /// Size of the floating keyboard, as a percentage of the standard size.
+    /// </summary>
+    /// <remarks>
+    /// Reach and screen size vary too much for one size to suit everyone, so this is a slider rather
+    /// than a constant. It takes effect the next time the overlay is shown, since the overlay re-reads
+    /// its settings on every show.
+    /// </remarks>
+    public int OskKeyboardScale
+    {
+        get => _osk.ClampedKeyboardScale;
+        set
+        {
+            var clamped = Math.Clamp(value, OskSettings.MinKeyboardScale, OskSettings.MaxKeyboardScale);
+            if (_osk.KeyboardScale == clamped) return;
+            _osk.KeyboardScale = clamped;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(OskKeyboardScaleDisplay));
+            _osk.Save();
+        }
+    }
+
+    public string OskKeyboardScaleDisplay => $"{OskKeyboardScale} %";
+
+    /// <summary>
+    /// Checked: the keyboard floats, following the text field and dodging the pointer.
+    /// Unchecked: it is pinned to the bottom of the screen.
+    /// </summary>
+    public bool OskFloatingKeyboard
+    {
+        get => _osk.FloatingKeyboard;
+        set
+        {
+            if (_osk.FloatingKeyboard == value) return;
+            _osk.FloatingKeyboard = value;
+            OnPropertyChanged();
+            _osk.Save();
+        }
     }
 
     public bool OskHoverHaptics

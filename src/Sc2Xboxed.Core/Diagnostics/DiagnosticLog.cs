@@ -127,6 +127,7 @@ public sealed class DiagnosticLog : IDisposable
             LogCategory.Frame => "Frame",
             LogCategory.Counters => "Counter",
             LogCategory.Session => "Session",
+            LogCategory.Ui => "Ui",
             _ => "-",
         };
     }

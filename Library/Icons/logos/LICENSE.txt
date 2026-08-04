@@ -1,0 +1,10 @@
+SVG Logos - Iconify icon set
+
+Prefix   : logos
+Icons    : 2091
+Author   : Gil Barbara
+Source   : https://github.com/gilbarbara/logos
+License  : CC0 (CC0-1.0)
+Text     : https://raw.githubusercontent.com/gilbarbara/logos/master/LICENSE.txt
+
+Retrieved from https://github.com/iconify/icon-sets

@@ -1,0 +1,10 @@
+Huge Icons - Iconify icon set
+
+Prefix   : hugeicons
+Icons    : 5091
+Author   : Hugeicons
+Source   : https://icon-sets.iconify.design/icon-sets/hugeicons/
+License  : MIT (MIT)
+Text     : -
+
+Retrieved from https://github.com/iconify/icon-sets

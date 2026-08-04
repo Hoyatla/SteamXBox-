@@ -1,0 +1,45 @@
+﻿[Hand]
+Path=Link.ani
+
+[Wait]
+Path=3 Busy.ani
+
+[SizeNESW]
+Path=Diagonal 1.cur
+
+[SizeNWSE]
+Path=Diagonal 2.cur
+
+[SizeWE]
+Path=Horizontal.cur
+
+[SizeNS]
+Path=Vertical.cur
+
+[SizeAll]
+Path=Move.cur
+
+[Arrow]
+Path=YellowGreen.cur
+
+[Help]
+Path=Help.cur
+
+[AppStarting]
+Path=Working.ani
+
+[No]
+Path=Unavailable.cur
+
+[NWPen]
+Path=Handwriting.cur
+
+[Crosshair]
+Path=Precision.cur
+
+[IBeam]
+Path=Text.cur
+
+[UpArrow]
+Path=Alternate.cur
+

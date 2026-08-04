@@ -1,0 +1,11 @@
+{
+  "id": "yellowgreen-cursors",
+  "name": "Curseurs Yellow-Green",
+  "category": "theme.windows",
+  "version": "1.0.0",
+  "author": "Daniel W.",
+  "licence": "CC BY 4.0",
+  "source": "http://www.rw-designer.com/cursor-set/yellowgreen",
+  "revertible": true,
+  "entry": "cursors/yellowgreen-shadow.crs"
+}

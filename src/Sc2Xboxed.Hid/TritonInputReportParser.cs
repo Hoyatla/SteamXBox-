@@ -33,9 +33,9 @@ public sealed class TritonInputReportParser
     private const uint ButtonLeftTouchpadTouch = 0x02000000;
     private const uint ButtonLeftTouchpadClick = 0x04000000;
 
-    public bool TryParse(ReadOnlySpan<byte> report, TimeSpan timestamp, out SteamControllerState state)
+    public bool TryParse(ReadOnlySpan<byte> report, TimeSpan timestamp, out ControllerState state)
     {
-        state = SteamControllerState.Empty(timestamp);
+        state = ControllerState.Empty(timestamp);
 
         if (report.Length < 30)
         {
@@ -57,7 +57,7 @@ public sealed class TritonInputReportParser
             return false;
         }
 
-        state = new SteamControllerState(
+        state = new ControllerState(
             timestamp,
             MapButtons(buttons),
             new NormalizedStick(

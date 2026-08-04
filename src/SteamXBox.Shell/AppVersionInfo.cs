@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace SteamXBox.Gui;
+namespace SteamXBox.Shell;
 
 /// <summary>
 /// The single place the interface gets its version number from.

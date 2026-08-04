@@ -1,0 +1,90 @@
+<Window x:Class="SteamXBox.Desktop.ControlCentre.CalculatorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SteamXBox.Shell.Localization;assembly=SteamXBox.Shell"
+        Title="Calculatrice"
+        Width="470" Height="640"
+        MinWidth="380" MinHeight="540"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip"
+        Background="{StaticResource BgDarkBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Background="{StaticResource BgMediumBrush}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock Text="{loc:T Text='Calculatrice scientifique'}" VerticalAlignment="Center"
+                       Margin="12,0,0,0" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <Button Content="✕" Click="Close_Click" Width="46" Height="32"
+                    HorizontalAlignment="Right" FontSize="13" BorderThickness="0"
+                    Background="Transparent" Foreground="{StaticResource TextSecondaryBrush}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </Grid>
+
+        <!-- L'ecran. L'expression complete reste visible pendant qu'on la construit : c'est tout
+             l'interet d'evaluer une expression plutot que d'executer touche par touche. -->
+        <Border Grid.Row="1" Style="{StaticResource CardBorder}" Margin="12,12,12,6" Padding="14,10">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding AngleLabel, RelativeSource={RelativeSource AncestorType=Window}}"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{StaticResource AccentBrush}"/>
+                    <TextBlock Text="M" Margin="10,0,0,0" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Visibility="{Binding MemoryIndicator, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding Expression, RelativeSource={RelativeSource AncestorType=Window}}"
+                           FontSize="20" Margin="0,8,0,0" TextAlignment="Right"
+                           TextWrapping="Wrap" MinHeight="26"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                <TextBlock Text="{Binding Display, RelativeSource={RelativeSource AncestorType=Window}}"
+                           FontSize="30" FontWeight="Bold" Margin="0,4,0,0" TextAlignment="Right"
+                           TextWrapping="Wrap"
+                           Foreground="{Binding DisplayBrush, RelativeSource={RelativeSource AncestorType=Window}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Meme principe que le centre de controle : chaque touche est focusable et les flèches
+             parcourent la grille, donc la manette et le clavier suivent le même chemin. -->
+        <ItemsControl Grid.Row="2" x:Name="KeyPad" Margin="6,0,6,6"
+                      ItemsSource="{Binding Keys, RelativeSource={RelativeSource AncestorType=Window}}"
+                      KeyboardNavigation.DirectionalNavigation="Cycle">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="6"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Style="{StaticResource CalcKey}" Click="Key_Click" Tag="{Binding}"
+                            Content="{Binding Label}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
+                      GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+</Window>

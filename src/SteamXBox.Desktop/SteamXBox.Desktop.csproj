@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L'environnement SteamXBox : le centre de controle aujourd'hui, le hub, la roue d'applications,
+    les espaces et les piles ensuite.
+
+    Processus distinct de SteamXBox.exe, qui reste ce qu'il est : l'outil de configuration du pont
+    manette. Les deux ne partagent que leur apparence, via SteamXBox.Shell. Un environnement qui
+    vivrait dans le processus du pont serait ingerable des le troisieme module, et se fermerait avec
+    lui.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SteamXBox.Desktop</AssemblyName>
+    <RootNamespace>SteamXBox.Desktop</RootNamespace>
+    <ApplicationIcon>Desktop.ico</ApplicationIcon>
+    <Product>SteamXBox</Product>
+    <AssemblyTitle>SteamXBox Desktop</AssemblyTitle>
+    <Description>SteamXBox - environnement de navigation superpose a Windows.</Description>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SteamXBox.Shell\SteamXBox.Shell.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
+    <ProjectReference Include="..\SteamXBox.Tools\SteamXBox.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+</Project>

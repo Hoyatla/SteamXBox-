@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    La logique des outils, sans interface.
+
+    Cible net10.0 et non net10.0-windows : c'est cette separation qui permet au projet de tests de
+    l'atteindre. Tout ce qu'un outil decide — des regles, des bornes, du formatage — appartient ici ;
+    ce qui dessine, ecoute Windows ou touche au presse-papiers reste dans SteamXBox.Desktop, ou rien
+    n'est testable.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SteamXBox.Tools</RootNamespace>
+    <Product>SteamXBox</Product>
+    <AssemblyTitle>SteamXBox Tools</AssemblyTitle>
+    <Description>SteamXBox - logique des outils, sans interface.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -31,12 +31,21 @@ public static class Program
         _logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
 
         // Before the form exists, so the first paint is already skinned.
-        OverlayPalette.Load(AppContext.BaseDirectory);
+        OverlayPalette.Load(AppContext.BaseDirectory, Settings.Theme);
 
         Log($"OSK overlay starting. BaseDir={AppContext.BaseDirectory}");
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+
+        // Diagnostic: report what the caret detection actually sees, for the window in front.
+        // Added because the placement was corrected twice on the assumption that a caret was being
+        // found, without that assumption ever being checked.
+        if (args.Contains("--probe-caret", StringComparer.OrdinalIgnoreCase))
+        {
+            ProbeCaret();
+            return;
+        }
 
         try
         {
@@ -55,9 +64,80 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Prints what the caret detection finds for the foreground window, once a second.
+    /// </summary>
+    /// <remarks>
+    /// Writes to the log rather than the console: this is a WinExe and has no console attached.
+    /// Focus the application under test, wait a few seconds, then read steamxbox-osk-debug.log.
+    /// </remarks>
+    private static void ProbeCaret()
+    {
+        Log("=== caret probe ===");
+
+        for (var i = 0; i < 12; i++)
+        {
+            Thread.Sleep(1000);
+
+            try
+            {
+                var win32 = CaretLocator.FindActiveField();
+                var uia = UiAutomationCaret.Find();
+                var detailed = CaretLocator.FindActiveFieldDetailed();
+                var work = detailed.Rect.IsEmpty
+                    ? CaretLocator.ForegroundWorkArea()
+                    : CaretLocator.WorkAreaFor(detailed.Rect);
+
+                var placement = Sc2Xboxed.Core.Osk.OverlayPlacement.Place(
+                    1012, 345, detailed.Rect, detailed.IsCaret, work);
+
+                Log($"[{i}] win32={Describe(win32)} uia={Describe(uia)} " +
+                    $"chosen={Describe(detailed.Rect)} isCaret={detailed.IsCaret} " +
+                    $"work={Describe(work)} -> {placement.Kind} {Describe(placement.Bounds)}");
+            }
+            catch (Exception exception)
+            {
+                Log($"[{i}] probe failed: {exception.GetType().Name}: {exception.Message}");
+            }
+        }
+
+        Log("=== probe done ===");
+    }
+
+    private static string Describe(Sc2Xboxed.Core.Osk.ScreenRect rect)
+        => rect.IsEmpty ? "none" : $"({rect.X},{rect.Y} {rect.Width}x{rect.Height})";
+
+    /// <summary>Scale read from the settings, applied to the form the next time it is shown.</summary>
+    private static int _pendingScale = 100;
+
+    /// <summary>Floating or pinned, read from the settings on every show.</summary>
+    private static bool _pendingFloating = true;
+
+    /// <summary>
+    /// Applies the stored layout name and size. An unrecognised layout falls back to detection
+    /// rather than leaving the overlay with no keys at all.
+    /// </summary>
+    private static void ApplyKeyboardLayout(OskSettings settings)
+    {
+        _pendingScale = settings.ClampedKeyboardScale;
+        _pendingFloating = settings.FloatingKeyboard;
+
+        // La palette suit le theme choisi dans le GUI, relue a chaque affichage.
+        OverlayPalette.Load(AppContext.BaseDirectory, settings.Theme);
+
+        KeyboardLayout.Selected =
+            Enum.TryParse<OskKeyboardLayout>(settings.KeyboardLayout, ignoreCase: true, out var layout)
+                ? layout
+                : OskKeyboardLayout.Auto;
+
+        Log($"Keyboard layout: {KeyboardLayout.Selected} (setting was '{settings.KeyboardLayout}'), scale {_pendingScale}%, floating={_pendingFloating}");
+    }
+
     private static void Run()
     {
-        var form = new OverlayForm();
+        ApplyKeyboardLayout(Settings);
+
+        var form = new OverlayForm { ScalePercent = _pendingScale, Floating = _pendingFloating };
         form.SetTypingMode(Settings.TypingMode == OskTypingMode.Daisywheel);
         Log($"Overlay form created. TypingMode={Settings.TypingMode}");
 
@@ -74,9 +154,18 @@ public static class Program
         var closeSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-close.signal");
         var showSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-show.signal");
         var exitSignalPath = Path.Combine(AppContext.BaseDirectory, "osk-exit.signal");
-        foreach (var stale in new[] { closeSignalPath, showSignalPath, exitSignalPath })
+        // Close and exit signals left by a previous run are stale and must go. A show signal is not:
+        // the resident overlay takes several seconds to start, and a toggle pressed during that
+        // window writes its signal before the watcher exists. Deleting it here swallowed the very
+        // first press, which is exactly why the overlay seemed hard to open at the beginning.
+        foreach (var stale in new[] { closeSignalPath, exitSignalPath })
         {
             try { if (File.Exists(stale)) File.Delete(stale); } catch { }
+        }
+
+        if (File.Exists(showSignalPath))
+        {
+            Log("A show signal was already waiting; honouring it.");
         }
         Log($"Signal paths under {AppContext.BaseDirectory} (prewarm={prewarm})");
 
@@ -113,17 +202,25 @@ public static class Program
                         File.Delete(showSignalPath);
                         Log("Show signal detected.");
                         // Re-read the mode: the user may have changed it in the GUI while resident.
-                        var mode = OskSettings.Load().TypingMode;
+                        var reloaded = OskSettings.Load();
+                        ApplyKeyboardLayout(reloaded);
+                        var mode = reloaded.TypingMode;
                         try
                         {
                             form.Invoke(() =>
                             {
                                 form.SetTypingMode(mode == OskTypingMode.Daisywheel);
+                                // Before showing: the field moves between one use and the next, so
+                                // the board is placed against the caret each time rather than once.
+                                form.ScalePercent = _pendingScale;
+                                form.Floating = _pendingFloating;
+                                form.UpdatePlacement();
                                 form.Show();
                                 form.BringToFront();
                                 // The overlay is layered and never activates, so no external probe
                                 // can tell whether it is on screen. Report it ourselves.
-                                Log($"Overlay shown. Visible={form.Visible} mode={mode}");
+                                Log($"Overlay shown. Visible={form.Visible} mode={mode} " +
+                                    $"placement={form.LastPlacement} at ({form.BoardX:F0},{form.BoardY:F0})");
                             });
                         }
                         catch { }
@@ -344,6 +441,13 @@ public static class Program
                     leftKey = KeyboardLayout.FindKeyAt(row, KeyboardLayout.ColumnFor(frame.LeftPad.X, isLeftPad: true, row));
                 }
 
+                // The sticks aim at the same keyboard, each from its own half. Added beside the pads
+                // rather than instead of them: a Steam Controller has both, and a hand that reaches
+                // for either should be answered. A pad already under a finger keeps priority, since
+                // it is the more precise of the two and the one being deliberately used.
+                rightKey ??= StickKey(frame.RightStick, leftStick: false);
+                leftKey ??= StickKey(frame.LeftStick, leftStick: true);
+
                 // While a pad is pressed the key under it is latched, so the small shift that pressing
                 // always causes cannot land the keystroke on a neighbour.
                 rightKey = s.LatchRight(rightKey, frame.RightPad.IsPressed, frame.Timestamp);
@@ -373,7 +477,7 @@ public static class Program
                         int rightRow = Math.Clamp((int)(rawRy / kh), 0, KeyboardLayout.Rows - 1);
                         double rawRx = KeyboardLayout.CursorXFor(frame.RightPad.X, isLeftPad: false, rightRow, kw);
                         s.EaseRight(rawRx, rawRy);
-                        s.Form.SetRightCursor(s.SmoothRightX, boardY + s.SmoothRightY);
+                        s.Form.SetRightCursor(s.Form.BoardX + s.SmoothRightX, boardY + s.SmoothRightY);
                         s.Form.HighlightKey(rightKey);
                     }
                     else
@@ -388,7 +492,7 @@ public static class Program
                         int leftRow = Math.Clamp((int)(rawLy / kh), 0, KeyboardLayout.Rows - 1);
                         double rawLx = KeyboardLayout.CursorXFor(frame.LeftPad.X, isLeftPad: true, leftRow, kw);
                         s.EaseLeft(rawLx, rawLy);
-                        s.Form.SetLeftCursor(s.SmoothLeftX, boardY + s.SmoothLeftY);
+                        s.Form.SetLeftCursor(s.Form.BoardX + s.SmoothLeftX, boardY + s.SmoothLeftY);
                         s.Form.HighlightLeftKey(leftKey);
                     }
                     else
@@ -400,8 +504,16 @@ public static class Program
                 catch (ObjectDisposedException) { break; }
                 catch (InvalidOperationException) { break; }
 
-                bool rightPressed = frame.RightPad.IsPressed;
-                bool leftPressed = frame.LeftPad.IsPressed;
+                // A trigger commits the key its own half has selected, exactly as a pad click does.
+                // Or-ed with the pad rather than replacing it: a Steam Controller has both, and
+                // whichever the hand reaches for should work without a mode to choose first.
+                //
+                // Half travel, not full: a trigger has a long throw, and waiting for the bottom
+                // would make committing feel heavier than clicking a pad.
+                const double TriggerCommitPoint = 0.5;
+
+                bool rightPressed = frame.RightPad.IsPressed || frame.RightTrigger >= TriggerCommitPoint;
+                bool leftPressed = frame.LeftPad.IsPressed || frame.LeftTrigger >= TriggerCommitPoint;
 
                 if (Settings.ValidateOnRelease)
                 {
@@ -474,7 +586,7 @@ public static class Program
     /// Daisywheel frame: the left pad direction selects the petal, ABXY selects the slot, and the
     /// left pad click toggles shift. The overlay is closed from the core, on the Menu button.
     /// </summary>
-    private static void HandleDaisywheelFrame(LoopState s, SteamControllerState frame)
+    private static void HandleDaisywheelFrame(LoopState s, ControllerState frame)
     {
         // The button that opened the overlay is usually still held on the first frame. Latch the
         // starting state so its release is not read as a keypress.
@@ -596,5 +708,33 @@ public static class Program
                     shift = ShiftMode.Off;
                 break;
         }
+    }
+
+    /// <summary>
+    /// The key a stick is pointing at, or null when it is resting.
+    /// </summary>
+    /// <remarks>
+    /// Resting means no selection at all rather than the anchor's key. With both sticks live at
+    /// once, a stick left alone would otherwise keep a key permanently lit on its half, and the
+    /// trigger would commit it by accident.
+    ///
+    /// The dead zone is larger than the pointer's. Aiming at a key is a deliberate push, not a
+    /// continuous motion, and a stick that drifts at rest — the Xbox pad on this machine sits near
+    /// 1.5% — must never light a letter.
+    /// </remarks>
+    private static KeyDef? StickKey(NormalizedStick stick, bool leftStick)
+    {
+        const double SelectionDeadZone = 0.25;
+
+        if (Math.Sqrt(stick.X * stick.X + stick.Y * stick.Y) < SelectionDeadZone)
+        {
+            return null;
+        }
+
+        var anchors = StickAnchorLayout.Build(KeyboardLayout.WidestRow, KeyboardLayout.Rows);
+        var index = Math.Min(StickAnchorLayout.AnchorFor(leftStick), anchors.Count - 1);
+
+        var cell = StickAnchorLayout.Resolve(anchors[index], stick.X, stick.Y, KeyboardLayout.Rows);
+        return KeyboardLayout.FindKeyAt(cell.Row, cell.Column);
     }
 }

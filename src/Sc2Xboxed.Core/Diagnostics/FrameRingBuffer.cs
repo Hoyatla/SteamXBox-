@@ -26,7 +26,7 @@ public sealed class FrameRingBuffer
 
     public int Capacity => _lines.Length;
 
-    public void Add(SteamControllerState state)
+    public void Add(ControllerState state)
     {
         var line = Format(state);
 
@@ -64,7 +64,7 @@ public sealed class FrameRingBuffer
         }
     }
 
-    private static string Format(SteamControllerState state)
+    private static string Format(ControllerState state)
     {
         return string.Format(
             CultureInfo.InvariantCulture,

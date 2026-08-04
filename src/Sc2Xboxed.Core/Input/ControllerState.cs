@@ -1,6 +1,6 @@
 namespace Sc2Xboxed.Core.Input;
 
-public readonly record struct SteamControllerState(
+public readonly record struct ControllerState(
     TimeSpan Timestamp,
     SteamControllerButtons Buttons,
     NormalizedStick LeftStick,
@@ -10,9 +10,9 @@ public readonly record struct SteamControllerState(
     TouchpadSample LeftPad,
     TouchpadSample RightPad)
 {
-    public static SteamControllerState Empty(TimeSpan timestamp)
+    public static ControllerState Empty(TimeSpan timestamp)
     {
-        return new SteamControllerState(
+        return new ControllerState(
             timestamp,
             SteamControllerButtons.None,
             NormalizedStick.Center,
@@ -23,7 +23,7 @@ public readonly record struct SteamControllerState(
             TouchpadSample.Released);
     }
 
-    public SteamControllerState Normalize()
+    public ControllerState Normalize()
     {
         return this with
         {

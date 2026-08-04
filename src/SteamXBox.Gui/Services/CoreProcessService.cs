@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using SteamXBox.Gui.Models;
 
 namespace SteamXBox.Gui.Services;
 

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>IconFetch</RootNamespace>
+    <!-- Standalone helper, deliberately outside the solution: it is not part of the product. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

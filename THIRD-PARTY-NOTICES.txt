@@ -1,0 +1,84 @@
+SteamXBox — Mentions relatives aux composants tiers
+Copyright (c) 2026 Hoyatla. Tous droits réservés.
+
+SteamXBox est un logiciel propriétaire (voir LICENSE). Il utilise les composants
+tiers ci-dessous, qui restent régis par leurs licences respectives. Ces licences
+sont toutes permissives : aucune n'impose l'ouverture du code de SteamXBox. Elles
+exigent en revanche que les mentions suivantes accompagnent toute distribution,
+et ce fichier est ce qui satisfait cette obligation.
+
+
+-------------------------------------------------------------------------------
+COMPOSANTS LIÉS AUX BINAIRES
+-------------------------------------------------------------------------------
+
+HIDSharp 2.6.4 — Apache License 2.0
+Copyright 2010-2025 James F. Bellinger <http://software.seekye.com/hidsharp>
+https://www.apache.org/licenses/LICENSE-2.0
+
+  Lecture des périphériques HID : Steam Controller et DualSense.
+
+  Distribué « en l'état », sans garantie ni condition d'aucune sorte, expresse
+  ou implicite. Voir la licence pour les termes régissant les autorisations et
+  les limites.
+
+
+Nefarius.ViGEm.Client 1.21.256 — MIT
+Copyright (c) Nefarius Software Solutions e.U. and Contributors
+https://github.com/nefarius/ViGEm.NET
+
+CommunityToolkit.Mvvm 8.4.0 — MIT
+Copyright (c) .NET Foundation and Contributors
+https://github.com/CommunityToolkit/dotnet
+
+  Licence MIT — texte intégral :
+
+  L'autorisation est accordée, à titre gratuit, à toute personne obtenant une
+  copie de ce logiciel et des fichiers de documentation associés, de commercer
+  sans restriction, y compris les droits d'utiliser, copier, modifier, fusionner,
+  publier, distribuer, sous-licencier et/ou vendre des copies du logiciel, sous
+  réserve que la mention de copyright ci-dessus et la présente autorisation
+  figurent dans toutes les copies ou parties substantielles du logiciel.
+
+  LE LOGICIEL EST FOURNI « EN L'ÉTAT », SANS GARANTIE D'AUCUNE SORTE.
+
+
+-------------------------------------------------------------------------------
+PILOTES INSTALLÉS SÉPARÉMENT
+-------------------------------------------------------------------------------
+
+Ces composants ne sont pas liés à SteamXBox ni redistribués par lui. Ils sont
+installés indépendamment par l'utilisateur et pilotés, pour HidHide, par
+invocation d'un exécutable distinct. Ils sont recensés ici pour mémoire.
+
+ViGEmBus — BSD-3-Clause
+Copyright (c) Nefarius Software Solutions e.U.
+https://github.com/nefarius/ViGEmBus
+
+  Manette Xbox 360 virtuelle.
+
+HidHide — MIT
+Copyright (c) Eric Korff de Gidts
+https://github.com/nefarius/HidHide
+
+  Masquage des périphériques HID physiques vis-à-vis des autres applications.
+
+
+-------------------------------------------------------------------------------
+RESSOURCES GRAPHIQUES
+-------------------------------------------------------------------------------
+
+Les jeux d'icônes, thèmes et curseurs conservent chacun leur licence, dont le
+texte accompagne les fichiers concernés :
+
+  Library/Icons/*/LICENSE.txt
+  Plugins/*/LICENSE.txt
+
+RÈGLE POUR TOUT AJOUT — SteamXBox étant un produit commercial fermé, seules les
+licences suivantes sont acceptables pour une nouvelle ressource graphique :
+
+  MIT, Apache 2.0, BSD, CC0, CC-BY
+
+Sont exclues, car elles imposeraient le partage à l'identique ou l'ouverture des
+travaux dérivés : CC-BY-SA, GPL, LGPL, et toute licence à usage non commercial
+(NC). La licence doit être vérifiée avant intégration, pas après.

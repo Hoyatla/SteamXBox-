@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -34,8 +34,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SteamXBox.Shell\SteamXBox.Shell.csproj" />
     <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
     <ProjectReference Include="..\Sc2Xboxed.Hid\Sc2Xboxed.Hid.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Windows\Sc2Xboxed.Windows.csproj" />
   </ItemGroup>
 
 </Project>

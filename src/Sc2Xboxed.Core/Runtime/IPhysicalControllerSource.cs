@@ -4,5 +4,5 @@ namespace Sc2Xboxed.Core.Runtime;
 
 public interface IPhysicalControllerSource : IAsyncDisposable
 {
-    IAsyncEnumerable<SteamControllerState> ReadFramesAsync(CancellationToken cancellationToken);
+    IAsyncEnumerable<ControllerState> ReadFramesAsync(CancellationToken cancellationToken);
 }
