@@ -53,7 +53,8 @@ launch; you can override it in the Settings tab.
 
 Licences
 --------
-See COPYING-GPL-3.0.txt and LICENSE-LGPL-3.0.txt.
+SteamXBox is proprietary software, all rights reserved. See LICENSE.
+Third-party components keep their own licenses; see THIRD-PARTY-NOTICES.txt.
 
 Project page: https://github.com/Hoyatla/SteamXBox
 Community:    https://discord.gg/MmmvB5s3E

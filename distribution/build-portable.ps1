@@ -23,8 +23,8 @@ New-Item -ItemType Directory -Path $outputRoot | Out-Null
 
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $outputRoot "SteamXBox.exe")
 Copy-Item -LiteralPath (Join-Path $workspaceRoot "USAGE.txt") -Destination (Join-Path $outputRoot "USAGE.txt")
-Copy-Item -LiteralPath (Join-Path $workspaceRoot "LICENSE") -Destination (Join-Path $outputRoot "LICENSE-LGPL-3.0.txt")
-Copy-Item -LiteralPath (Join-Path $workspaceRoot "COPYING") -Destination (Join-Path $outputRoot "COPYING-GPL-3.0.txt")
+Copy-Item -LiteralPath (Join-Path $workspaceRoot "LICENSE") -Destination (Join-Path $outputRoot "LICENSE")
+Copy-Item -LiteralPath (Join-Path $workspaceRoot "THIRD-PARTY-NOTICES.txt") -Destination (Join-Path $outputRoot "THIRD-PARTY-NOTICES.txt")
 Copy-Item -Path (Join-Path $portableTemplateRoot "*.cmd") -Destination $outputRoot
 
 if (Test-Path -LiteralPath $zipPath) {

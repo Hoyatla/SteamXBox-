@@ -1,0 +1,57 @@
+SteamXBox — Licence propriétaire
+Copyright (c) 2026 Hoyatla. Tous droits réservés.
+
+TOUS DROITS RÉSERVÉS
+
+Ce logiciel, son code source, sa documentation, ses ressources graphiques et
+tout élément associé (« le Logiciel ») sont la propriété exclusive de Hoyatla et
+sont protégés par le droit d'auteur ainsi que par les traités internationaux
+relatifs à la propriété intellectuelle.
+
+Aucune licence, expresse ou implicite, n'est accordée. En particulier, et sans
+que cette liste soit limitative, il est interdit, sans autorisation écrite
+préalable et expresse du titulaire des droits :
+
+  - de copier, reproduire ou distribuer le Logiciel, en tout ou en partie ;
+  - de le modifier, l'adapter, le traduire ou d'en créer des œuvres dérivées ;
+  - de le décompiler, le désassembler ou d'en faire de l'ingénierie inverse,
+    sauf dans la stricte mesure permise par une disposition légale impérative ;
+  - de le vendre, le louer, le prêter, le sous-licencier ou de le mettre à
+    disposition de tiers, à titre gratuit ou onéreux ;
+  - d'en retirer ou d'en altérer les mentions de propriété.
+
+La mise à disposition publique du code source, notamment sur une plateforme
+d'hébergement, ne vaut ni renonciation à ces droits ni octroi d'une licence.
+
+ABSENCE DE GARANTIE
+
+Le Logiciel est fourni « en l'état », sans garantie d'aucune sorte, expresse ou
+implicite, y compris et sans limitation les garanties de qualité marchande,
+d'adéquation à un usage particulier et d'absence de contrefaçon. Le titulaire
+des droits ne saurait être tenu responsable de tout dommage, direct ou indirect,
+résultant de l'utilisation ou de l'impossibilité d'utiliser le Logiciel.
+
+
+COMPOSANTS TIERS
+
+Les droits réservés ci-dessus portent sur le Logiciel lui-même. Ils ne s'étendent
+pas aux composants tiers qu'il utilise ou distribue, lesquels restent régis par
+leurs licences respectives, dont les termes doivent continuer d'être respectés et
+les mentions conservées.
+
+Ces composants et leurs licences sont recensés dans :
+
+  - Library/Icons/*/LICENSE.txt    jeux d'icônes
+  - Plugins/*/LICENSE.txt          ressources de thèmes et curseurs
+  - les dépendances NuGet déclarées par chaque projet
+
+Toute redistribution du Logiciel doit conserver ces fichiers de licence et les
+attributions qu'ils exigent.
+
+
+VERSIONS ANTÉRIEURES
+
+Les versions du Logiciel diffusées avant l'entrée en vigueur de la présente
+licence l'ont été sous GNU LGPL v3. Ce changement de licence ne vaut que pour
+l'avenir : les exemplaires déjà reçus sous LGPL v3 demeurent régis par cette
+licence, conformément à ses termes.

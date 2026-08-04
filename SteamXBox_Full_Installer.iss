@@ -61,8 +61,8 @@ Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "ChangeLog.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "README.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "USAGE.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "COPYING-GPL-3.0.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "LICENSE-LGPL-3.0.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Icon
 Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
