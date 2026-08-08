@@ -8,16 +8,30 @@ namespace Sc2Xboxed.Core.Mapping;
 /// <param name="WheelNotches">Wheel detents, positive upwards.</param>
 public readonly record struct StickPointerOutput(int PixelsX, int PixelsY, int WheelNotches);
 
-/// <summary>Feel of a stick driving the pointer.</summary>
-/// <param name="DeadZone">Below this magnitude the stick is treated as centred.</param>
+/// <summary>
+/// Feel of the two sticks. They do different jobs and are tuned apart.
+/// </summary>
+/// <remarks>
+/// One dead zone and one curve used to serve both, which cannot be right: the right stick points and
+/// the left stick scrolls. Pointing wants a wide, fine range — a direction the pointer follows, with
+/// resolution near the centre for aiming and speed at the edge for crossing the screen. Scrolling
+/// wants a firm threshold and something close to linear, because a thumb resting on a stick should
+/// produce no scroll at all and a deliberate push should produce a predictable rate. Tuning one to
+/// feel right made the other feel wrong, every time, and the setting that fixed it did not exist.
+/// </remarks>
+/// <param name="DeadZone">Below this magnitude the pointing stick is treated as centred.</param>
 /// <param name="PixelsPerSecond">Pointer speed at full deflection.</param>
-/// <param name="Curve">Exponent applied to the magnitude; 1 is linear, higher is finer near centre.</param>
+/// <param name="Curve">Exponent applied to the pointing magnitude; 1 is linear, higher is finer near centre.</param>
 /// <param name="NotchesPerSecond">Wheel detents per second at full deflection.</param>
+/// <param name="WheelDeadZone">Below this magnitude the scrolling stick is treated as centred.</param>
+/// <param name="WheelCurve">Exponent applied to the scrolling magnitude.</param>
 public sealed record StickPointerSettings(
     double DeadZone = 0.15,
     double PixelsPerSecond = 1400,
     double Curve = 2.0,
-    double NotchesPerSecond = 12);
+    double NotchesPerSecond = 12,
+    double WheelDeadZone = 0.25,
+    double WheelCurve = 1.2);
 
 /// <summary>
 /// Drives the pointer and the wheel from two sticks, for controllers that have no trackpads.
@@ -71,7 +85,7 @@ public static class StickPointerMapper
 
         if (rightStickPointer)
         {
-            var (px, py) = Velocity(state.RightStick, settings);
+            var (px, py) = Velocity(state.RightStick, settings.DeadZone, settings.Curve);
             carry.X += px * settings.PixelsPerSecond * seconds;
             carry.Y += py * settings.PixelsPerSecond * seconds;
         }
@@ -87,7 +101,7 @@ public static class StickPointerMapper
         {
             // Only the vertical axis of the left stick scrolls. Horizontal wheel exists, but binding
             // it here would make a diagonal push scroll sideways by accident on every vertical flick.
-            var (_, wy) = Velocity(state.LeftStick, settings);
+            var (_, wy) = Velocity(state.LeftStick, settings.WheelDeadZone, settings.WheelCurve);
             carry.Wheel += -wy * settings.NotchesPerSecond * seconds;
         }
         else
@@ -117,16 +131,16 @@ public static class StickPointerMapper
     /// The magnitude is also rescaled after the dead zone is removed, so the stick still reaches
     /// full speed at its physical limit rather than losing the first fifteen percent of its travel.
     /// </remarks>
-    private static (double X, double Y) Velocity(NormalizedStick stick, StickPointerSettings settings)
+    private static (double X, double Y) Velocity(NormalizedStick stick, double deadZone, double curve)
     {
         var magnitude = Math.Sqrt(stick.X * stick.X + stick.Y * stick.Y);
-        if (magnitude <= settings.DeadZone)
+        if (magnitude <= deadZone)
         {
             return (0, 0);
         }
 
-        var scaled = Math.Min(1.0, (magnitude - settings.DeadZone) / (1.0 - settings.DeadZone));
-        var speed = Math.Pow(scaled, settings.Curve);
+        var scaled = Math.Min(1.0, (magnitude - deadZone) / (1.0 - deadZone));
+        var speed = Math.Pow(scaled, curve);
 
         // Y is inverted once, here: the sticks report up as positive, screens count down as
         // positive. Doing it at the call site is how one of the two axes ends up inverted.

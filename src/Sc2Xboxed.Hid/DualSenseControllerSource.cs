@@ -31,6 +31,24 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
     /// <summary>DualSense (PS5). The Edge reports a different product id and is not handled here.</summary>
     public const int DualSenseProductId = 0x0CE6;
 
+    /// <summary>
+    /// How long an unchanging controller may stay silent before a frame is sent anyway.
+    /// </summary>
+    /// <remarks>
+    /// Dropping repeated states cuts the load massively, and it broke the power-off chord outright:
+    /// Menu + View has to be <i>held</i> for two seconds, and the detector counts that time frame by
+    /// frame. A thumb holding two buttons perfectly still produces identical states, every one of
+    /// them was dropped, and the two seconds never accumulated. The same is true of every other
+    /// time-based rule here — the mode chord, the trackpad's inertia — which all need to keep being
+    /// told that time is passing.
+    ///
+    /// <para>
+    /// So a still controller still speaks, at 20 Hz instead of 800. That is thirty frames inside a
+    /// two second hold, plenty for any of them, and one fortieth of the work.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan IdleHeartbeat = TimeSpan.FromMilliseconds(50);
+
     private readonly string? _devicePath;
     private readonly int _readTimeoutMs;
     private readonly Action<string>? _log;
@@ -104,6 +122,10 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
         var lastButtons = SteamControllerButtons.None;
         var lastLength = -1;
         var lastStick = (0, 0, 0, 0);
+
+        // The last state handed out, timestamp stripped, so a repeat can be recognised.
+        ControllerState previous = default;
+        var lastYielded = TimeSpan.MinValue;
 
         using (stream)
         {
@@ -191,6 +213,24 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                                 + $"R=({state.RightStick.X:F2},{state.RightStick.Y:F2})");
                         }
 
+                        // A repeat of the previous state is not news. See the same guard in
+                        // TritonSteamControllerSource: the pad reports at its own rate whether
+                        // anything moved or not, and each repeat used to run the whole mapper for a
+                        // state already handled. Compared on the parsed state with the timestamp
+                        // removed — the raw report carries a counter that moves on its own.
+                        //
+                        // This one earns less than the Steam Controller's: a DualSense stick sits on
+                        // analogue noise, so consecutive states genuinely differ by a least
+                        // significant bit and are correctly let through. The guard is here for when
+                        // the pad is truly still.
+                        var current = state with { Timestamp = default };
+                        if (previous == current && state.Timestamp - lastYielded < IdleHeartbeat)
+                        {
+                            continue;
+                        }
+
+                        previous = current;
+                        lastYielded = state.Timestamp;
                         yield return state;
                     }
                 }
@@ -239,27 +279,22 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                 return false;
             }
 
-            var report = DualSensePowerOff.Build();
-            try
-            {
-                lock (_activeStreamGate)
-                {
-                    _activeStream.SetFeature(report);
-                }
+            // Through the guard, not straight to the link. BluetoothLink.Cut takes any interface
+            // path, so calling it directly leaves the one general-purpose way to disconnect any
+            // Bluetooth device on the machine reachable from ordinary code. Everything goes through
+            // DualSenseShutdown so that stays the only door — including this class, which has no
+            // more right to the shortcut than anyone else.
+            //
+            // The identity is built here because this source is a DualSense by construction; the
+            // guard is there to stop somebody else pointing the same mechanism at a headset.
+            var path = _devicePath ?? "";
+            var identity = new ControllerIdentity(
+                ControllerKind.DualSense,
+                ControllerIdentityFactory.FromHidPath(path),
+                "Manette PS5",
+                Slot: -1);
 
-                return true;
-            }
-            catch (Exception exception)
-            {
-                _log?.Invoke(
-                    $"DualSense power-off not delivered: {exception.GetType().Name}: {exception.Message} "
-                    + "(Windows can refuse Bluetooth feature reports; cutting the link instead).");
-            }
-
-            // Windows does not reliably deliver the feature report over Bluetooth HID, so the link
-            // itself is cut and the controller powers itself off the way it does when it loses the
-            // connection. On this machine this is the path that actually switches the pad off.
-            if (BluetoothLink.Cut(_devicePath ?? "", _log))
+            if (DualSenseShutdown.PowerOff(identity, path, _log))
             {
                 _log?.Invoke("DualSense Bluetooth link cut; the controller is powering itself off.");
                 return true;

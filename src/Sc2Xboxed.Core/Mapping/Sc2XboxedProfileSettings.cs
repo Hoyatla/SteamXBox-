@@ -36,6 +36,24 @@ public sealed record Sc2XboxedProfileSettings
 
     public double GamepadStickDeadZone { get; init; } = 0.018;
 
+    /// <summary>Pointer speed at full stick deflection, in pixels per second.</summary>
+    /// <remarks>
+    /// For a controller driving the desktop pointer from a stick rather than a trackpad. It was a
+    /// hardcoded constant shared by every controller until the profile gained a key for it, so a
+    /// DualSense and an Xbox pad could not be tuned apart and the GUI had nothing to bind to.
+    /// </remarks>
+    public double StickPointerSpeed { get; init; } = 1400.0;
+
+    /// <summary>
+    /// Exponent applied to stick deflection before it becomes speed. 1 is linear.
+    /// </summary>
+    /// <remarks>
+    /// Above 1 the first part of the travel is finer than the last, which is what makes a stick
+    /// usable for pointing: aiming needs resolution near the centre, crossing the screen needs speed
+    /// at the edge, and a linear stick gives neither.
+    /// </remarks>
+    public double StickPointerCurve { get; init; } = 2.0;
+
     // ---- What each control drives ----
     // Previously hardcoded in ProfileMapper while the profile editor wrote a "motions" section that
     // nothing ever read, so the three dropdowns had no effect at all.

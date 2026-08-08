@@ -73,6 +73,13 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource, INa
             var buffer = new byte[Math.Max(1, device.GetMaxInputReportLength())];
             var streamGate = new object();
 
+            // The last state handed out, timestamp stripped, so a repeat can be recognised.
+            ControllerState previous = default;
+            var lastYielded = TimeSpan.MinValue;
+
+            // How long an unchanging controller may stay silent before a frame is sent anyway.
+            var IdleHeartbeat = TimeSpan.FromMilliseconds(50);
+
             try
             {
                 lock (_stateGate)
@@ -112,6 +119,30 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource, INa
                     var report = buffer.AsSpan(0, bytesRead);
                     if (_parser.TryParse(report, TimeSpan.FromTicks(Environment.TickCount64 * TimeSpan.TicksPerMillisecond), out var state))
                     {
+                        // A repeat of the previous state is not news. The controller keeps reporting
+                        // at its own rate whether anything moved or not — measured at around 800
+                        // reports a second — and every one of them used to run the whole profile
+                        // mapper, the trackball, the arbiter and the haptics for a state already
+                        // handled. That is the machine mobilised to say nothing changed.
+                        //
+                        // Compared on the parsed state with the timestamp removed, never on the raw
+                        // bytes: the report carries a packet counter that moves on its own, so byte
+                        // equality would match nothing. And never on a judgement about what the
+                        // frame "means" — an earlier attempt at filtering by intent silenced the
+                        // pipe completely. Equal states are equal; there is nothing to interpret.
+                        // Still speaking when still: a held chord, the mode switch and the trackpad's
+                        // inertia are all counted frame by frame, so a controller that goes silent
+                        // stops time for them. Dropping every repeat broke the power-off chord — two
+                        // buttons held perfectly still produce identical states, and the two second
+                        // hold never accumulated. 20 Hz instead of 800 keeps them all fed.
+                        var current = state with { Timestamp = default };
+                        if (previous == current && state.Timestamp - lastYielded < IdleHeartbeat)
+                        {
+                            continue;
+                        }
+
+                        previous = current;
+                        lastYielded = state.Timestamp;
                         yield return state;
                     }
                 }

@@ -504,6 +504,20 @@ static ControllerProfileBook LoadControllerProfiles(string fallbackProfile, Diag
 /// was built from the profile the bridge was launched with, so the assignments were recorded,
 /// displayed, and never applied — a setting that looks like it works and does nothing.
 /// </remarks>
+/// <summary>
+/// How one controller's sticks drive the pointer, taken from that controller's own profile.
+/// </summary>
+/// <remarks>
+/// All three come from the profile now, none from a constant. They used to disagree: the mapper's
+/// default dead zone is 0.15 while the profile on disk said 0.06, so a quarter of the stick's usable
+/// travel was thrown away and the setting in the GUI changed nothing.
+/// </remarks>
+static StickPointerSettings StickPointerFor(ProfileMapper mapper)
+    => new(
+        DeadZone: mapper.Settings.StickDeadZone,
+        PixelsPerSecond: mapper.Settings.StickPointerSpeed,
+        Curve: mapper.Settings.StickPointerCurve);
+
 static ProfileMapper BuildMapperFor(
     string controllerId,
     ControllerProfileBook book,
@@ -747,12 +761,18 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     // the user's side, is a setting that silently does nothing until they think to relaunch.
     var profileBookStamp = ControllerProfilesTimestamp();
 
-    var sessions = new ControllerSessionSet(id => new ControllerSession(
-        BuildMapperFor(id, profileBook, loadedSettings, log),
-        new InputModeHandler(initialMode, switchButtons, TimeSpan.FromMilliseconds(350)),
-        BuildXboxMapperFor(id, profileBook, log))
+    var sessions = new ControllerSessionSet(id =>
     {
-        Id = id,
+        var mapper = BuildMapperFor(id, profileBook, loadedSettings, log);
+
+        return new ControllerSession(
+            mapper,
+            new InputModeHandler(initialMode, switchButtons, TimeSpan.FromMilliseconds(350)),
+            BuildXboxMapperFor(id, profileBook, log))
+        {
+            Id = id,
+            StickPointer = StickPointerFor(mapper),
+        };
     });
 
     // The session of whichever controller sent the frame in hand. Reassigned once per frame, so
@@ -932,22 +952,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         SteamControllerButtons.Menu | SteamControllerButtons.View;
     var powerOffRequested = false;
 
-    // Pointer and wheel state for a controller with no trackpads. The carry holds the sub-pixel
-    // remainder between frames: without it a slow stick rounds to zero every frame and the pointer
-    // never moves at all, which reads as broken rather than as slow.
-    var stickPointerSettings = new StickPointerSettings();
-
     // Previous output mode, so the transition into and out of Xbox can be acted on rather than
     // the state merely observed. A pad created on entry has to be released on exit.
     var lastOutputMode = initialMode;
-    // The one pointer, shared between however many controllers push it. Two at once cancel: the
-    // pointer stalls rather than picking a winner or drifting somewhere neither asked for.
-    var pointerArbiter = new PointerArbiter();
-    var lastPointerFlush = DateTimeOffset.UtcNow;
-
-    // Eight milliseconds: one poll interval. Long enough for two controllers' frames to land in the
-    // same window and be recognised as contention, short enough to be invisible to one player.
-    var PointerWindow = TimeSpan.FromMilliseconds(8);
 
     // What the virtual pad actually received, drained into the per-second line. Counted here rather
     // than in the shared counters because they only mean anything in Xbox mode.
@@ -1341,55 +1348,50 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             var stickOutput = StickPointerMapper.Map(
                                 forProfile,
                                 elapsed,
-                                stickPointerSettings,
+                                session.StickPointer,
                                 rightStickPointer: profileMapper.Settings.RightStickMode == StickMotionMode.Pointer,
                                 leftStickWheel: profileMapper.Settings.LeftStickMode != StickMotionMode.None,
                                 ref session.Carry);
 
-                            // Offered rather than applied. The desktop has one pointer and every
-                            // controller may push it, so what one pad wants is only known to be what the
-                            // pointer does once the others have had their say for this window. The
-                            // pads' own motion and wheel ride the same offer under the same controller,
-                            // so a hand on the pad and a hand on the stick agree instead of cancelling.
-                            pointerArbiter.Offer(
-                                frameSource,
-                                stickOutput.PixelsX + profileMapper.EmittedPixelsX,
-                                stickOutput.PixelsY + profileMapper.EmittedPixelsY,
-                                stickOutput.WheelNotches + profileMapper.SignedWheelNotches,
-                                profileMapper.HorizontalWheelNotches);
+                            // Applied straight away, by this controller, for this frame. No shared
+                            // window, no arbitration, nothing belonging to another device in the
+                            // path.
+                            //
+                            // There used to be a PointerArbiter here: contributions from every
+                            // controller were collected over an 8 ms window and, if two of them had
+                            // moved, both were dropped and the pointer froze. It was a deliberate
+                            // rule for two players fighting over one pointer, and it made a single
+                            // user's controller unusable — a trackpad still gliding on its inertia
+                            // counts as a mover for seconds after the finger left, and every push of
+                            // the DualSense stick landed in that window and was cancelled.
+                            //
+                            // Each physical device is an independent input. Whichever one moves,
+                            // moves the pointer. None of them can block another.
+                            //
+                            // The rate limiting is the movement itself, not a clock: the sub-pixel
+                            // carry inside the mappers only yields a whole pixel once one has been
+                            // travelled, so a resting stick produces no call at all.
+                            var px = stickOutput.PixelsX + profileMapper.EmittedPixelsX;
+                            var py = stickOutput.PixelsY + profileMapper.EmittedPixelsY;
+                            var wheel = stickOutput.WheelNotches + profileMapper.SignedWheelNotches;
+                            var hwheel = profileMapper.HorizontalWheelNotches;
 
-                            // A window, not a frame. Resolving per frame would defeat the arbitration
-                            // entirely: frames from two controllers arrive one after another, never
-                            // together, so each would be the sole contender in its own turn and both
-                            // would be obeyed.
-                            // Wall clock, not the frame timestamp. Each source counts from the moment
-                            // its own stream opened, so two controllers write two unrelated clocks into
-                            // one shared variable and the window is never measured against a coherent
-                            // base. The arbiter then accumulates motion and almost never applies it:
-                            // a stick at full deflection, a peak of 0.97, and no mouse event at all.
-                            var flushNow = DateTimeOffset.UtcNow;
-                            if (flushNow - lastPointerFlush >= PointerWindow)
+                            if (px != 0 || py != 0)
                             {
-                                lastPointerFlush = flushNow;
-                                var (px, py, wheel, hwheel) = pointerArbiter.Resolve();
+                                InputHelper.MouseMoveRelative(px, py);
+                                counters.MouseMotion(px, py);
+                            }
 
-                                if (px != 0 || py != 0)
-                                {
-                                    InputHelper.MouseMoveRelative(px, py);
-                                    counters.MouseMotion(px, py);
-                                }
+                            if (wheel != 0)
+                            {
+                                // InputHelper applies WHEEL_DELTA (120) itself; the mappers count detents.
+                                InputHelper.MouseWheel(wheel);
+                                counters.Wheel(Math.Abs(wheel));
+                            }
 
-                                if (wheel != 0)
-                                {
-                                    // InputHelper applies WHEEL_DELTA (120) itself; the mappers count detents.
-                                    InputHelper.MouseWheel(wheel);
-                                    counters.Wheel(Math.Abs(wheel));
-                                }
-
-                                if (hwheel != 0)
-                                {
-                                    InputHelper.MouseHorizontalWheel(hwheel);
-                                }
+                            if (hwheel != 0)
+                            {
+                                InputHelper.MouseHorizontalWheel(hwheel);
                             }
                         }
                         else
@@ -1703,12 +1705,15 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                         // faster, and from outside the two are identical — duplicate readers share
                         // an identity and collapse into a single session, so the controller list
                         // stays reassuringly correct either way.
-                        summary += $" | readers={multi.ActiveReaders} enum={multi.Enumerations}"
-                                 + $" deadzone={stickPointerSettings.DeadZone:F2}";
+                        summary += $" | readers={multi.ActiveReaders} enum={multi.Enumerations}";
 
                         foreach (var tracked in sessions.All)
                         {
+                            // The dead zone moved onto the per-controller line with the settings it
+                            // belongs to. One figure for the whole machine was a summary of nothing
+                            // once each controller carried its own.
                             summary += $" | {Shorten(tracked.Id)} peak=({tracked.PeakX:F2},{tracked.PeakY:F2})"
+                                     + $" dz={tracked.StickPointer.DeadZone:F2}"
                                      + $" gap={tracked.LastGapMs:F1}ms";
 
                             tracked.PeakX = 0;
@@ -2011,54 +2016,12 @@ static void RunPowerOffProbe(string[] args)
 /// </remarks>
 static void RunDualSensePowerOffProbe()
 {
-    var device = Sc2Xboxed.Hid.DualSenseControllerSource.Discover(Console.WriteLine).FirstOrDefault();
-    if (device is null)
-    {
-        Console.WriteLine("No DualSense found. Stop SteamXBox first, then run this as administrator.");
-        return;
-    }
-
-    Console.WriteLine($"Device: {device.DevicePath}");
-
-    if (!device.TryOpen(out var stream))
-    {
-        Console.WriteLine("Could not open the device. Stop SteamXBox first, then run this as administrator.");
-        return;
-    }
-
-    var report = Sc2Xboxed.Core.Input.DualSensePowerOff.Build();
-    Console.WriteLine($"Report ({report.Length} bytes): {string.Join(" ", report.Select(b => b.ToString("X2")))}");
-
-    using (stream)
-    {
-        stream.WriteTimeout = 500;
-
-        try
-        {
-            stream.SetFeature(report);
-            Console.WriteLine("SetFeature accepted by Windows.");
-        }
-        catch (Exception exception)
-        {
-            Console.WriteLine($"Windows refused the report: {exception.GetType().Name}: {exception.Message}");
-            return;
-        }
-    }
-
-    for (var i = 0; i < 40; i++)
-    {
-        Thread.Sleep(250);
-        if (!Sc2Xboxed.Hid.DualSenseControllerSource.Discover().Any())
-        {
-            Console.WriteLine($"The controller went offline after {(i + 1) * 0.25:F2}s — it powered off.");
-            return;
-        }
-    }
-
-    Console.WriteLine("The controller is still present. If it is still on, Windows accepted the report");
-    Console.WriteLine("but the controller ignored it, or held the PS button is the only path on this machine.");
+    // A DualSense has no power-off command. It switches itself off when it loses its Bluetooth
+    // link, so the only probe worth running is the one that drops the link. This name is kept
+    // because it is what the command line offers, and what the user is actually asking for.
+    Console.WriteLine("A DualSense has no power-off report; dropping its Bluetooth link instead.");
+    RunDualSenseBtCut();
 }
-
 static void RunDualSenseBtCut()
 {
     var device = Sc2Xboxed.Hid.DualSenseControllerSource.Discover(Console.WriteLine).FirstOrDefault();
@@ -2071,7 +2034,16 @@ static void RunDualSenseBtCut()
     Console.WriteLine($"Device: {device.DevicePath}");
     Console.WriteLine("Cutting the Bluetooth link to the controller...");
 
-    if (!Sc2Xboxed.Windows.BluetoothLink.Cut(device.DevicePath, Console.WriteLine))
+    // Through the guard like everything else. A diagnostic that takes the shortcut is still a
+    // shortcut, and it is the one somebody copies when they want to disconnect something that is
+    // not a controller.
+    var probed = new ControllerIdentity(
+        ControllerKind.DualSense,
+        ControllerIdentityFactory.FromHidPath(device.DevicePath),
+        "Manette PS5",
+        Slot: -1);
+
+    if (!Sc2Xboxed.Windows.DualSenseShutdown.PowerOff(probed, device.DevicePath, Console.WriteLine))
     {
         Console.WriteLine("No Bluetooth link was cut. See the lines above for why.");
         return;

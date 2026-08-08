@@ -280,6 +280,12 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <!-- Le pointeur du bureau : trois reglages distincts de ceux
+                                         au-dessus, qui ne concernent que la manette virtuelle. -->
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Stick gauche'}" VerticalAlignment="Center"
@@ -314,6 +320,39 @@
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
                                                Text="{Binding XboxStickDeadZoneDisplay}"/>
                                     <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickDeadZonePercent}"/>
+                                </DockPanel>
+
+                                <!-- Les trois au-dessus reglent la manette virtuelle envoyee aux jeux.
+                                     Les trois ci-dessous reglent le pointeur du bureau, qui est un
+                                     autre chemin : une manette sans pave tactile pointe avec son stick
+                                     droit, et ces valeurs etaient des constantes du programme,
+                                     identiques pour toutes les manettes et invisibles ici. -->
+                                <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,4"
+                                           Text="{loc:T Text='Stick droit : pointeur du bureau'}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Vitesse'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding StickPointerSpeedDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickPointerSpeedPercent}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:T Text='Courbe'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="7" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding StickPointerCurveDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickPointerCurvePercent}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:T Text='Dead zone'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="8" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding StickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickDeadZonePercent}"/>
                                 </DockPanel>
                             </Grid>
                         </StackPanel>

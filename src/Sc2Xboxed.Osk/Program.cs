@@ -297,7 +297,7 @@ public static class Program
     {
         ApplyKeyboardLayout(Settings);
 
-        var form = new OverlayForm { ScalePercent = _pendingScale, Floating = _pendingFloating };
+        var form = new OverlayForm { ScalePercent = _pendingScale, Floating = _pendingFloating, Log = Log };
         form.SetTypingMode(Settings.TypingMode == OskTypingMode.Daisywheel);
         Log($"Overlay form created. TypingMode={Settings.TypingMode}");
 

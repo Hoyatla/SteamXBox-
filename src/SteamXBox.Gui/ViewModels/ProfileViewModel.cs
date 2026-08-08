@@ -199,6 +199,8 @@ public partial class ProfileViewModel : ObservableObject
         nameof(RightPadSensitivityPercent), nameof(RightPadSensitivityDisplay),
         nameof(LeftPadSensitivityPercent), nameof(LeftPadSensitivityDisplay),
         nameof(StickDeadZonePercent), nameof(StickDeadZoneDisplay),
+        nameof(StickPointerSpeedPercent), nameof(StickPointerSpeedDisplay),
+        nameof(StickPointerCurvePercent), nameof(StickPointerCurveDisplay),
         nameof(XboxStickDeadZonePercent), nameof(XboxStickDeadZoneDisplay),
         nameof(XboxStickCurvePercent), nameof(XboxStickCurveDisplay),
         nameof(XboxStickSensitivityPercent), nameof(XboxStickSensitivityDisplay),
@@ -365,6 +367,33 @@ public partial class ProfileViewModel : ObservableObject
             nameof(StickDeadZonePercent), nameof(StickDeadZoneDisplay));
     }
     public string StickDeadZoneDisplay => $"{StickDeadZonePercent:0} %";
+
+    // How the stick drives the desktop pointer, for the families that have no trackpad. Both were
+    // constants in the runtime until now: every controller pointed at the same speed with the same
+    // curve, and there was nothing here to bind to.
+    private const double StickPointerSpeedMin = 200.0, StickPointerSpeedMax = 4000.0;
+    private const double StickPointerCurveMin = 1.0, StickPointerCurveMax = 3.0;
+
+    public double StickPointerSpeedPercent
+    {
+        get => GetPercent(p => p.StickPointerSpeed, StickPointerSpeedMin, StickPointerSpeedMax);
+        set => SetPercent((p, v) => p.StickPointerSpeed = Math.Round(v), value, StickPointerSpeedMin, StickPointerSpeedMax,
+            nameof(StickPointerSpeedPercent), nameof(StickPointerSpeedDisplay));
+    }
+
+    /// <summary>Shown in pixels per second rather than as a percentage: it is a speed, and it is legible.</summary>
+    public string StickPointerSpeedDisplay =>
+        ActiveEdit is null ? "—" : $"{ActiveEdit.StickPointerSpeed:0} px/s";
+
+    public double StickPointerCurvePercent
+    {
+        get => GetPercent(p => p.StickPointerCurve, StickPointerCurveMin, StickPointerCurveMax);
+        set => SetPercent((p, v) => p.StickPointerCurve = Math.Round(v, 2), value, StickPointerCurveMin, StickPointerCurveMax,
+            nameof(StickPointerCurvePercent), nameof(StickPointerCurveDisplay));
+    }
+
+    public string StickPointerCurveDisplay =>
+        ActiveEdit is null ? "—" : $"{ActiveEdit.StickPointerCurve:0.00}";
 
     // Stick tuning on the stick-only families (PS5, Xbox). Same values as the Xbox tab, exposed
     // here so the Profils tab shows them where the pads would otherwise be — a stick has no pads,

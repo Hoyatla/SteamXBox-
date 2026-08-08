@@ -129,6 +129,8 @@ public sealed class ProfileMapper
 			bool invertX = ReadBool(root, "rightPadInvertX", false, origins);
 			double deadzone = ReadDouble(root, "stickDeadZone", 0.5, origins);
 			double gamepadDeadzone = ReadDouble(root, "xboxStickDeadZone", 0.08, origins);
+			double stickPointerSpeed = ReadDouble(root, "stickPointerSpeed", defaults.StickPointerSpeed, origins);
+			double stickPointerCurve = ReadDouble(root, "stickPointerCurve", defaults.StickPointerCurve, origins);
 			bool leftInvert = ReadBool(root, "leftPadInvertVertical", true, origins);
 			double leftSens = ReadDouble(root, "leftPadSensitivity", defaults.LeftPadScroll.WheelDeltaPerPadUnit, origins);
 
@@ -180,6 +182,8 @@ public sealed class ProfileMapper
 			{
 				StickDeadZone = deadzone,
 				GamepadStickDeadZone = gamepadDeadzone,
+				StickPointerSpeed = stickPointerSpeed,
+				StickPointerCurve = stickPointerCurve,
 				XboxButtons = xboxButtons,
 				XboxTuning = xboxTuning,
 				RightPadMode = rightPadMode,

@@ -33,14 +33,15 @@ public class OverlayPlacementTests
 
     /// <summary>The floating board goes to the left of the field, flush against it.</summary>
     [Fact]
-    public void PlacesLeftOfTheFieldWithTheBoardEdgeAsBoundary()
+    public void PlacesLeftOfTheFieldWithAGapFromTheText()
     {
         var field = new ScreenRect(900, 400, 300, 28);
 
         var result = OverlayPlacement.Place(BoardW, BoardH, field, Screen);
 
         Assert.Equal(PlacementKind.BesideField, result.Kind);
-        Assert.Equal(field.X, result.Bounds.Right);
+        // A gap, not flush. Edge to edge the frame still read as sitting on the text.
+        Assert.Equal(field.X - OverlayPlacement.Gap, result.Bounds.Right);
         Assert.False(result.Bounds.IntersectsWith(field), $"overlap: {result.Bounds}");
     }
 
@@ -65,7 +66,7 @@ public class OverlayPlacementTests
         var result = OverlayPlacement.Place(BoardW, BoardH, field, Screen);
 
         Assert.Equal(PlacementKind.BesideField, result.Kind);
-        Assert.Equal(field.Right, result.Bounds.X);
+        Assert.Equal(field.Right + OverlayPlacement.Gap, result.Bounds.X);
         Assert.False(result.Bounds.IntersectsWith(field), $"overlap: {result.Bounds}");
     }
 
@@ -307,7 +308,7 @@ public class OverlayPlacementTests
         var result = OverlayPlacement.Place(BoardW, BoardH, againstTheRightEdge, isCaret: true, Screen);
 
         Assert.Equal(PlacementKind.BesideField, result.Kind);
-        Assert.Equal(againstTheRightEdge.X, result.Bounds.Right);
+        Assert.Equal(againstTheRightEdge.X - OverlayPlacement.Gap, result.Bounds.Right);
     }
 
     /// <summary>A field wedged against the bottom leaves no room either side; it still must not be covered.</summary>

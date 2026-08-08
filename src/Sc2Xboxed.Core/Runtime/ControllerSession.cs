@@ -96,6 +96,17 @@ public sealed class ControllerSession
     /// <summary>Sub-pixel remainder of this controller's stick motion.</summary>
     public StickPointerCarry Carry;
 
+    /// <summary>
+    /// How this controller's sticks drive the pointer: dead zone, speed, curve.
+    /// </summary>
+    /// <remarks>
+    /// Per controller, and read from this controller's own profile. It used to be one instance built
+    /// once outside the loop from the hardcoded defaults — a dead zone of 0.15 while the profile on
+    /// disk said 0.06, the same speed and the same curve for a DualSense and an Xbox pad, and the
+    /// sensitivity controls in the GUI changing nothing at all because nothing ever read them.
+    /// </remarks>
+    public StickPointerSettings StickPointer { get; set; } = new();
+
     /// <summary>Timestamp of this controller's previous frame.</summary>
     public TimeSpan LastFrame { get; set; } = TimeSpan.Zero;
 

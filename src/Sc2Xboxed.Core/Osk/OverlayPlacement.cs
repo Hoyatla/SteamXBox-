@@ -80,13 +80,30 @@ public static class OverlayPlacement
         => Place(boardWidth, boardHeight, field, isCaret: false, workArea);
 
     /// <summary>
-    /// Places the board, keeping <paramref name="field"/> clear.
+    /// Where the keyboard goes when it is not floating: the bottom centre of the screen the user is
+    /// typing on.
+    /// </summary>
+    /// <remarks>
+    /// Fixed means fixed — the same place every time, so the eye and the thumb both learn it. The
+    /// only thing that varies is <i>which</i> screen: the caret decides that, because a keyboard
+    /// pinned to the primary monitor is useless to someone typing on the second one. The caller
+    /// resolves the work area from the caret and hands it in.
+    /// </remarks>
+    public static OverlayPlacementResult PlaceFixed(int boardWidth, int boardHeight, ScreenRect workArea)
+    {
+        var width = Math.Min(boardWidth, Math.Max(1, workArea.Width - (2 * ScreenMargin)));
+        var height = Math.Min(boardHeight, Math.Max(1, workArea.Height - (2 * ScreenMargin)));
+
+        return new OverlayPlacementResult(AtScreenBottom(width, height, workArea), PlacementKind.ScreenBottom);
+    }
+
+    /// <summary>
+    /// Places the floating board, keeping <paramref name="field"/> clear.
     /// </summary>
     /// <param name="isCaret">
     /// True when the rectangle is the caret itself. A caret is always avoided, however large the
     /// control around it: covering already-written text is acceptable, covering the place where the
-    /// next character appears is not. A rectangle that is only the focused control is ignored once it
-    /// grows past half the screen, because that is a document and dodging it leaves nowhere to go.
+    /// next character appears is not.
     /// </param>
     public static OverlayPlacementResult Place(
         int boardWidth, int boardHeight, ScreenRect field, bool isCaret, ScreenRect workArea)
@@ -115,7 +132,10 @@ public static class OverlayPlacement
         // Measured against a maximised Notepad, neither the Win32 caret nor UI Automation returns the
         // caret: both hand back the whole edit area. Placing to the side is the only rule that keeps
         // the board off the typing area without knowing where the caret is.
-        if (field.X - workArea.X >= width + ScreenMargin)
+        // A gap on the left as well as the right. Flush against the field, the board's own frame sat
+        // on the text's edge: the user asked for the frame to stay clear of the typing area, not
+        // merely out of it.
+        if (field.X - workArea.X >= width + Gap + ScreenMargin)
         {
             var y = Clamp(
                 field.Y + (field.Height / 2) - (height / 2),
@@ -123,7 +143,7 @@ public static class OverlayPlacement
                 workArea.Bottom - ScreenMargin - height);
 
             return new OverlayPlacementResult(
-                new ScreenRect(field.X - width, y, width, height),
+                new ScreenRect(field.X - Gap - width, y, width, height),
                 PlacementKind.BesideField);
         }
 
@@ -134,8 +154,23 @@ public static class OverlayPlacement
             return new OverlayPlacementResult(new ScreenRect(x, above, width, height), PlacementKind.AboveField);
         }
 
-        // No room above either: the right side, flush against the field as the left one was.
-        if (workArea.Right - field.Right >= width + ScreenMargin)
+        // No room above either. Two candidates are left, the right side and below, and which comes
+        // first depends on what the rectangle is.
+        //
+        // For a caret, below comes first, because the right is where the text is about to go. A
+        // caret is two pixels wide: measured as a rectangle it has almost the whole screen free to
+        // its right, and the placement looks excellent right up until the user types, at which point
+        // the line runs straight under the board. Writing runs left to right, so the space ahead of
+        // the caret is spoken for and the space below it is not — not yet, and by the time the text
+        // reaches it the caret will have moved and the board with it.
+        //
+        // For a field rectangle the right side keeps its priority: the rectangle is the whole
+        // control, its right edge is a real boundary, and nothing is going to be written past it.
+        var rightFits = workArea.Right - field.Right >= width + Gap + ScreenMargin;
+        var below = field.Bottom + Gap;
+        var belowFits = below + height <= workArea.Bottom - ScreenMargin;
+
+        OverlayPlacementResult Right()
         {
             var y = Clamp(
                 field.Y + (field.Height / 2) - (height / 2),
@@ -143,8 +178,23 @@ public static class OverlayPlacement
                 workArea.Bottom - ScreenMargin - height);
 
             return new OverlayPlacementResult(
-                new ScreenRect(field.Right, y, width, height),
+                new ScreenRect(field.Right + Gap, y, width, height),
                 PlacementKind.BesideField);
+        }
+
+        if (rightFits && !isCaret)
+        {
+            return Right();
+        }
+
+        if (belowFits)
+        {
+            return new OverlayPlacementResult(new ScreenRect(x, below, width, height), PlacementKind.BelowField);
+        }
+
+        if (rightFits)
+        {
+            return Right();
         }
 
         // Nowhere free. Overlap is now unavoidable, so pick the edge furthest from the top of the
@@ -162,6 +212,7 @@ public static class OverlayPlacement
             PlacementKind.Overlapping);
     }
 
+    /// <summary>
     private static ScreenRect AtScreenBottom(int width, int height, ScreenRect workArea)
         => new(
             workArea.X + ((workArea.Width - width) / 2),

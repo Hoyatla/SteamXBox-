@@ -8,14 +8,20 @@
         ShowActivated="False"
         Topmost="False"
         AllowsTransparency="True"
-        Background="Transparent">
+        Background="{x:Null}">
 
-    <!-- Un panneau flottant, pas un plein ecran : le bureau reste visible et le clavier/souris
-         physiques continuent de fonctionner pendant que SteamXBox tourne. La fenetre ne s'active
-         jamais elle-meme (ShowActivated="False"), donc au demarrage la frappe part toujours vers
-         l'application qui etait devant. Elle est transparente hors de cette carte et se deplace par
-         sa barre de titre. -->
-    <Border Style="{StaticResource CardBorder}">
+    <!-- Plein ecran fenetre : la fenetre occupe l'ecran mais reste une fenetre ordinaire, elle passe
+         derriere les autres et ne s'active jamais d'elle-meme (ShowActivated="False"), donc au
+         demarrage la frappe part toujours vers l'application qui etait devant.
+
+         Background="{x:Null}" et non "Transparent", et la difference n'est pas cosmetique : en WPF un
+         fond Transparent reste sensible au clic, seul un fond null laisse passer. Avec Transparent,
+         la surface maximisee avalait chaque clic tout en ayant l'air d'un bureau vide : impossible
+         de cliquer une autre fenetre pour la ramener devant, donc impossible de faire passer
+         celle-ci derriere. Avec null, le clic traverse partout sauf sur la carte elle-meme.
+
+         AllowsTransparency reste a True : c'est ce dont le theme a besoin pour son rendu. -->
+    <Border x:Name="Card" Style="{StaticResource CardBorder}">
         <StackPanel>
             <!-- Barre de titre : poignee de deplacement du panneau. -->
             <Border Background="{StaticResource BgDarkBrush}" CornerRadius="8,8,0,0"

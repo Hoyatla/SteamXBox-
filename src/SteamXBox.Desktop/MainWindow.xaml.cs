@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using SteamXBox.Desktop.ControlCentre;
 using Sc2Xboxed.Core.Diagnostics;
 using SteamXBox.Shell.Localization;
@@ -10,11 +11,11 @@ namespace SteamXBox.Desktop;
 /// The SteamXBox Desktop window, holding the control centre.
 /// </summary>
 /// <remarks>
-/// A floating panel, not a full screen: SteamXBox runs alongside the desktop, so the physical
-/// keyboard and mouse keep working everywhere else. The window never activates itself at startup
-/// (<c>ShowActivated="False"</c>), so typing keeps going to whatever was in front. Every tile is
-/// focusable so the arrow keys — and the gamepad mapped to them — walk the grid once the panel has
-/// the focus; the mouse still works, it is simply not what the layout is designed around.
+/// Fullscreen windowed: the environment fills the screen but stays an ordinary window, free to go
+/// behind the others. It never activates itself (<c>ShowActivated="False"</c>), so typing keeps
+/// going to whatever was in front. Every tile is focusable so the arrow keys — and the gamepad
+/// mapped to them — walk the grid once the window has the focus; the mouse still works, it is
+/// simply not what the layout is designed around.
 /// </remarks>
 public partial class MainWindow : Window
 {
@@ -41,13 +42,11 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Bottom-right corner, above the taskbar, so the panel sits out of the way of whatever the
-        // user is typing into. Positioned once at startup; the title bar then moves it anywhere.
         Reposition();
 
         // Focus the first tile so a gamepad or the arrow keys have somewhere to start once the
-        // panel has the focus. Guarded on the window being active: at startup the window is
-        // deliberately not activated, and this must never steal the foreground from the user.
+        // window has the focus. Guarded on the window being active: at startup it is deliberately
+        // not activated, and this must never steal the foreground from the user.
         if (IsActive)
         {
             Tiles.ApplyTemplate();
@@ -57,18 +56,133 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Spreads the environment over the screen, once it is already shown.
+    /// Spreads the environment over the work area, once the window is already shown.
     /// </summary>
     /// <remarks>
-    /// After <c>Show()</c>, not in the XAML. WPF refuses outright to display a window that declares
-    /// both <c>ShowActivated="False"</c> and <c>WindowState="Maximized"</c> — it throws at
-    /// <c>Show()</c> and the environment never appears at all. Both are wanted here: the overlay
-    /// covers the desktop, and it must never steal the foreground the moment it starts. Setting the
-    /// state after the window exists satisfies the pair.
+    /// The work area, not <c>WindowState.Maximized</c>. A borderless window
+    /// (<c>WindowStyle="None"</c>) maximises over the whole monitor, taskbar included — Windows
+    /// treats it as a fullscreen application and keeps the taskbar behind it. Sized to the work
+    /// area instead, the window stops where the taskbar begins, so the taskbar stays in front and
+    /// clickable, and clicking another window there is what puts this one behind.
     /// </remarks>
     private void Reposition()
     {
-        WindowState = WindowState.Maximized;
+        var work = SystemParameters.WorkArea;
+
+        WindowState = WindowState.Normal;
+        Left = work.Left;
+        Top = work.Top;
+        Width = work.Width;
+        Height = work.Height;
+    }
+
+    // ---- Letting the clicks through ----
+
+    private const int WM_NCHITTEST = 0x0084;
+    private const int HTTRANSPARENT = -1;
+
+    /// <summary>
+    /// Tells Windows that the empty part of the window is not there, as far as the mouse goes.
+    /// </summary>
+    /// <remarks>
+    /// <c>Background="{x:Null}"</c> alone is not enough, and believing it was cost several rounds of
+    /// this. A null background stops WPF's <i>internal</i> hit test — no element in the visual tree
+    /// is hit — but the window is still an HWND: Windows delivers the click to it, WPF answers
+    /// <c>HTCLIENT</c>, and the click dies there. Nothing reaches the window underneath, so no other
+    /// window can be brought forward and this one can never go behind.
+    ///
+    /// <para>
+    /// <c>HTTRANSPARENT</c> is the answer that means "keep looking below me". Windows then repeats
+    /// the hit test on the next window down and the click lands where the user aimed it.
+    /// </para>
+    ///
+    /// <para>
+    /// Per point rather than per window: <c>WS_EX_TRANSPARENT</c> would do the same thing for the
+    /// whole surface, which is what the on-screen keyboard uses, but here the tiles have to stay
+    /// clickable. The card's own rectangle answers the question — inside it the window keeps the
+    /// click, outside it the click goes through.
+    /// </para>
+    ///
+    /// <para>
+    /// A cached rectangle, and that part is not an optimisation. <c>WM_NCHITTEST</c> does not arrive
+    /// on click: Windows sends it on every mouse move, dozens of times a second. The first version
+    /// of this hook called <c>PointFromScreen</c> and <see cref="UIElement.InputHitTest"/> on each
+    /// one, walking the visual tree across a work-area-sized window — the pointer lagged, and device
+    /// changes lagged with it, because <c>WM_DEVICECHANGE</c> is broadcast to every top-level window
+    /// and one slow window delays the broadcast for the whole machine. Comparing four numbers costs
+    /// nothing and answers the same question.
+    /// </para>
+    /// </remarks>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+        {
+            source.AddHook(PassClicksThroughTheEmptyArea);
+        }
+
+        // Setting a flag is free; recomputing happens at most once per hit test that follows a
+        // layout pass, rather than on every mouse move.
+        LayoutUpdated += (_, _) => _cardBoundsStale = true;
+        LocationChanged += (_, _) => _cardBoundsStale = true;
+    }
+
+    private Rect _cardBounds = Rect.Empty;
+    private bool _cardBoundsStale = true;
+
+    private IntPtr PassClicksThroughTheEmptyArea(
+        IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != WM_NCHITTEST)
+        {
+            return IntPtr.Zero;
+        }
+
+        // Screen coordinates, packed as two signed 16-bit halves. Signed matters: a monitor left of
+        // the primary one has negative x, and reading it unsigned lands the point on the far right.
+        var packed = lParam.ToInt32();
+        var screenPoint = new Point((short)(packed & 0xFFFF), (short)((packed >> 16) & 0xFFFF));
+
+        if (_cardBoundsStale)
+        {
+            _cardBounds = CardScreenBounds();
+            _cardBoundsStale = false;
+        }
+
+        if (_cardBounds.IsEmpty || _cardBounds.Contains(screenPoint))
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+        return new IntPtr(HTTRANSPARENT);
+    }
+
+    /// <summary>The card's rectangle in physical screen pixels, or empty if it cannot be measured.</summary>
+    /// <remarks>
+    /// <c>PointToScreen</c> returns device pixels, which is the same space <c>WM_NCHITTEST</c> packs
+    /// its point in, so the two compare directly and the DPI never enters into it. Empty is the safe
+    /// answer while the visual has no presentation source: the window keeps the click rather than
+    /// dropping it somewhere unpredictable.
+    /// </remarks>
+    private Rect CardScreenBounds()
+    {
+        try
+        {
+            if (Card.ActualWidth <= 0 || Card.ActualHeight <= 0)
+            {
+                return Rect.Empty;
+            }
+
+            return new Rect(
+                Card.PointToScreen(new Point(0, 0)),
+                Card.PointToScreen(new Point(Card.ActualWidth, Card.ActualHeight)));
+        }
+        catch (InvalidOperationException)
+        {
+            return Rect.Empty;
+        }
     }
 
     // ---- Dragging ----

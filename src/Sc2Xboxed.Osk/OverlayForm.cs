@@ -37,6 +37,22 @@ public sealed class OverlayForm : Form
     private readonly object _lock = new();
     private readonly System.Windows.Forms.Timer _topMostTimer;
 
+    /// <summary>
+    /// Where to write placement decisions. Set by the host so they land in the overlay's log.
+    /// </summary>
+    /// <remarks>
+    /// The log recorded the layout, the scale and the floating flag, and then never said where the
+    /// board went or why. That is the one thing a placement bug is about, and its absence turned a
+    /// perfectly ordinary "it ran in fixed mode" into a report that nothing had been done — with no
+    /// way, from the log alone, to tell that apart from the placement rules failing.
+    /// </remarks>
+    /// <remarks>
+    /// Hidden from designer serialisation: this is a runtime hook, not a form property, and the
+    /// WinForms analyser rightly refuses a public delegate on a Control without saying so.
+    /// </remarks>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Action<string>? Log { get; set; }
+
     public double BoardX => _boardX;
     public double BoardY => _boardY;
     public double KeyW => _keyW;
@@ -113,10 +129,13 @@ public sealed class OverlayForm : Form
 
         if (!Floating)
         {
-            // Fixed mode: bottom of the monitor holding the foreground window, and nothing else moves
-            // it. An empty field is exactly the "nothing known" case the placement already handles.
-            var fixedArea = CaretLocator.ForegroundWorkArea();
-            var fixedPlacement = OverlayPlacement.Place(BoardWidth, BoardHeight, default, fixedArea);
+            // Fixed mode: bottom centre of the screen the caret is on, and nothing else moves it.
+            //
+            // The screen is chosen by the caret rather than by the foreground window. They are
+            // usually the same, but not always — a dialog can own the foreground while the field
+            // being typed into sits on the other monitor — and a keyboard pinned to the wrong screen
+            // is useless to the hand that asked for it.
+            var fixedPlacement = FixedPlacement();
 
             lock (_lock)
             {
@@ -127,19 +146,12 @@ public sealed class OverlayForm : Form
             }
 
             LastPlacement = fixedPlacement.Kind;
+            LogPlacement("show/fixed", fixedPlacement);
             Invalidate();
             return;
         }
 
-        var field = CaretLocator.FindActiveFieldDetailed();
-
-        // The monitor of the foreground window, not the primary one. With no caret to locate, the
-        // keyboard used to go home to monitor one while the user was typing on monitor two.
-        var work = field.Rect.IsEmpty
-            ? CaretLocator.ForegroundWorkArea()
-            : CaretLocator.WorkAreaFor(field.Rect);
-
-        var placement = OverlayPlacement.Place(BoardWidth, BoardHeight, field.Rect, field.IsCaret, work);
+        var placement = FloatingPlacement();
 
         lock (_lock)
         {
@@ -150,8 +162,57 @@ public sealed class OverlayForm : Form
         }
 
         LastPlacement = placement.Kind;
+        LogPlacement("show/floating", placement);
         Invalidate();
     }
+
+    /// <summary>
+    /// Where the pinned board belongs: the bottom centre of the screen the caret is on.
+    /// </summary>
+    private OverlayPlacementResult FixedPlacement()
+    {
+        // The screen is chosen by the caret rather than by the foreground window. They are usually
+        // the same, but not always — a dialog can own the foreground while the field being typed
+        // into sits on the other monitor — and a keyboard pinned to the wrong screen is useless to
+        // the hand that asked for it.
+        var caret = CaretLocator.FindActiveFieldDetailed();
+        var area = caret.Rect.IsEmpty
+            ? CaretLocator.ForegroundWorkArea()
+            : CaretLocator.WorkAreaFor(caret.Rect);
+
+        _lastWorkArea = area;
+        return OverlayPlacement.PlaceFixed(BoardWidth, BoardHeight, area);
+    }
+
+    /// <summary>
+    /// The work area measured at the last placement, for anything that must not ask again.
+    /// </summary>
+    /// <remarks>
+    /// Painting in particular. Measuring is a question put to the application being typed into, and
+    /// a repaint happens far too often to be allowed to ask one.
+    /// </remarks>
+    private ScreenRect _lastWorkArea;
+
+    /// <summary>Where the floating board belongs, given where the caret is right now.</summary>
+    private OverlayPlacementResult FloatingPlacement()
+    {
+        var field = CaretLocator.FindActiveFieldDetailed();
+
+        // The monitor of the foreground window, not the primary one. With no caret to locate, the
+        // keyboard used to go home to monitor one while the user was typing on monitor two.
+        var work = field.Rect.IsEmpty
+            ? CaretLocator.ForegroundWorkArea()
+            : CaretLocator.WorkAreaFor(field.Rect);
+
+        _lastWorkArea = work;
+        return OverlayPlacement.Place(BoardWidth, BoardHeight, field.Rect, field.IsCaret, work);
+    }
+
+    private void LogPlacement(string why, OverlayPlacementResult placement)
+        => Log?.Invoke(
+            $"Placement {why}: {placement.Kind} at "
+            + $"({placement.Bounds.X},{placement.Bounds.Y}) {placement.Bounds.Width}x{placement.Bounds.Height} "
+            + $"floating={Floating}");
 
     /// <summary>Where the board ended up last time, for the log.</summary>
     public PlacementKind LastPlacement { get; private set; } = PlacementKind.ScreenBottom;
@@ -235,6 +296,7 @@ public sealed class OverlayForm : Form
         };
         _topMostTimer.Start();
     }
+
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -397,7 +459,12 @@ public sealed class OverlayForm : Form
         using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
 
         // Centre sur l'ecran qui porte le champ actif, converti en coordonnees client.
-        var wheelArea = CaretLocator.WorkAreaFor(CaretLocator.FindActiveField());
+        //
+        // La zone est celle mesuree au dernier placement, pas une nouvelle interrogation. Appeler
+        // FindActiveField ici revenait a poser une question UI Automation a l'application visee a
+        // chaque repaint -- c'est-a-dire a chaque survol de touche -- et c'est elle qui repond, sur
+        // son propre thread d'interface. Un rendu ne doit rien demander a personne.
+        var wheelArea = _lastWorkArea;
         float centerX = (float)ToClientX(wheelArea.X + (wheelArea.Width / 2.0));
         float centerY = (float)ToClientY(wheelArea.Bottom - 250.0);
         float ringRadius = 165f;

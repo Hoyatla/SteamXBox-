@@ -110,6 +110,14 @@ public sealed class ProfileData
     [JsonPropertyName("stickDeadZone")]
     public double StickDeadZone { get; set; } = 0.06;
 
+    /// <summary>Pointer speed at full stick deflection, in pixels per second.</summary>
+    [JsonPropertyName("stickPointerSpeed")]
+    public double StickPointerSpeed { get; set; } = 1400.0;
+
+    /// <summary>Exponent applied to stick deflection before it becomes pointer speed; 1 is linear.</summary>
+    [JsonPropertyName("stickPointerCurve")]
+    public double StickPointerCurve { get; set; } = 2.0;
+
     [JsonPropertyName("xboxStickDeadZone")]
     public double XboxStickDeadZone { get; set; } = 0.018;
 
@@ -262,48 +270,29 @@ public sealed class ProfileData
                      .ToList();
     }
 
+    /// <summary>A copy that shares nothing with this one.</summary>
+    /// <remarks>
+    /// Memberwise, deliberately. This used to assign every property by hand, and the day two new
+    /// ones were added the list was not updated: the sliders moved, the display followed, and saving
+    /// wrote the defaults back because the clone in between had dropped them. A hand-written copy of
+    /// a growing settings object is a bug waiting for the next field, and it is invisible — nothing
+    /// fails, a value just quietly goes home.
+    ///
+    /// <para>
+    /// The three dictionaries are re-created because MemberwiseClone copies the references, which
+    /// would leave the copy editing the original's bindings. Every other property is a value type or
+    /// a string, and <c>FilePath</c> is computed from <c>Name</c> rather than stored, so renaming the
+    /// clone still sends it to its own file.
+    /// </para>
+    /// </remarks>
     public ProfileData Clone()
     {
-        return new ProfileData
-        {
-            Name = Name,
-            Mode = Mode,
-            Family = Family,
-            SwitchButton = SwitchButton,
-            RightPadSensitivity = RightPadSensitivity,
-            LeftPadSensitivity = LeftPadSensitivity,
-            LeftPadDeadZone = LeftPadDeadZone,
-            RightPadDeadZone = RightPadDeadZone,
-            LeftPadInvertVertical = LeftPadInvertVertical,
-            RightPadInvertX = RightPadInvertX,
-            RightPadInvertY = RightPadInvertY,
-            RightPadAcceleration = RightPadAcceleration,
-            LeftPadAcceleration = LeftPadAcceleration,
-            RightPadEdgeSpeed = RightPadEdgeSpeed,
-            FinePrecision = FinePrecision,
-            MinThrowTravel = MinThrowTravel,
-            RightPadInertia = RightPadInertia,
-            LeftPadInertia = LeftPadInertia,
-            LeftPadHapticForce = LeftPadHapticForce,
-            LeftPadHapticFrequency = LeftPadHapticFrequency,
-            RightPadHapticForce = RightPadHapticForce,
-            RightPadHapticFrequency = RightPadHapticFrequency,
-            LeftPadHorizontalScroll = LeftPadHorizontalScroll,
-            StickDeadZone = StickDeadZone,
-            XboxStickDeadZone = XboxStickDeadZone,
-            XboxStickCurve = XboxStickCurve,
-            XboxStickSensitivity = XboxStickSensitivity,
-            XboxTriggerThreshold = XboxTriggerThreshold,
-            XboxTriggerFullPoint = XboxTriggerFullPoint,
-            XboxVibrationEnabled = XboxVibrationEnabled,
-            XboxVibrationIntensity = XboxVibrationIntensity,
-            XboxHapticForwarding = XboxHapticForwarding,
-            XboxTriggerHapticsEnabled = XboxTriggerHapticsEnabled,
-            XboxTriggerHapticStrength = XboxTriggerHapticStrength,
-            XboxTriggerActuatorIndex = XboxTriggerActuatorIndex,
-            XboxButtons = new Dictionary<string, string>(XboxButtons),
-            Motions = new Dictionary<string, string>(Motions),
-            Buttons = new Dictionary<string, string>(Buttons),
-        };
+        var copy = (ProfileData)MemberwiseClone();
+
+        copy.XboxButtons = new Dictionary<string, string>(XboxButtons);
+        copy.Motions = new Dictionary<string, string>(Motions);
+        copy.Buttons = new Dictionary<string, string>(Buttons);
+
+        return copy;
     }
 }
