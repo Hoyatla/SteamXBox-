@@ -19,9 +19,14 @@ public sealed class HapticRequestSender : IAsyncDisposable
     private readonly CancellationTokenSource _cancellation = new();
     private Task? _worker;
 
-    public HapticRequestSender(Action<string>? log = null)
+    /// <summary>Pipe this sender writes to; one per keyboard.</summary>
+    private readonly string _pipeName;
+
+    /// <param name="pipeName">Pipe to write to. Defaults to the single-keyboard name.</param>
+    public HapticRequestSender(Action<string>? log = null, string? pipeName = null)
     {
         _log = log;
+        _pipeName = string.IsNullOrWhiteSpace(pipeName) ? HapticRequestWire.PipeName : pipeName;
         _queue = Channel.CreateBounded<HapticCommand>(new BoundedChannelOptions(QueueCapacity)
         {
             // A backlog of stale ticks is worse than a dropped one: keep the newest.
@@ -50,7 +55,7 @@ public sealed class HapticRequestSender : IAsyncDisposable
             NamedPipeClientStream? pipe = null;
             try
             {
-                pipe = new NamedPipeClientStream(".", HapticRequestWire.PipeName, PipeDirection.Out);
+                pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.Out);
                 await pipe.ConnectAsync(ReconnectDelayMs, cancellationToken).ConfigureAwait(false);
                 _log?.Invoke("Haptic request pipe connected.");
 

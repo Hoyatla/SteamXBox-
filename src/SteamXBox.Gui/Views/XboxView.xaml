@@ -32,32 +32,15 @@
                     <TextBlock Text="{loc:T Text='Boutons'}" FontSize="14" FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
     
-                    <!-- Profil de mapping, sur le modèle de l'onglet Profils : les changements sont
-                         écrits sur disque immédiatement, le runtime surveille le fichier. -->
-                    <Grid Margin="0,0,0,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <TextBlock Grid.Column="0" Text="{loc:T Text='Profil'}" VerticalAlignment="Center"
-                                   Margin="0,0,10,0" Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <ComboBox Grid.Column="1" Style="{StaticResource ComboBoxDark}"
-                                  ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}"
-                                  DisplayMemberPath="Name"/>
-    
-                        <TextBox Grid.Column="3" Style="{StaticResource TextBoxDark}" Width="130" Margin="10,0,6,0"
-                                 Text="{Binding NewProfileName, UpdateSourceTrigger=PropertyChanged}"/>
-                        <Button Grid.Column="4" Content="{loc:T Text='Nouveau'}" Padding="12,6" Margin="0,0,6,0"
-                                Style="{StaticResource SecondaryButton}" Command="{Binding CreateProfileCommand}"/>
-                        <Button Grid.Column="5" Content="{loc:T Text='Supprimer'}" Padding="12,6"
-                                Style="{StaticResource DangerButton}" Command="{Binding DeleteProfileCommand}"/>
-                    </Grid>
-    
+                    <!-- Depuis la fusion, le layout Xbox voyage dans le profil : il n'y a plus de
+                         profil Xbox séparé à choisir ni à sauvegarder ici. Tout est écrit par
+                         « Sauvegarder » de l'onglet Profils, en un seul fichier. -->
+                    <Border Background="#22000000" CornerRadius="4" Padding="10,8" Margin="0,0,0,14">
+                        <TextBlock Text="{loc:T Text='Ce layout est enregistré avec le profil de la manette : utilisez « Sauvegarder » dans l\'onglet Profils. Un seul fichier porte la configuration complète de la manette.'}"
+                                   FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextDimBrush}"/>
+                    </Border>
+
                     <TextBlock Text="{loc:T Text='Les boutons Steam et Quick Access ne sont pas remappables : ils pilotent SteamXBox lui-même.'}"
                                FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
                                Foreground="{StaticResource TextDimBrush}"/>

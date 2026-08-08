@@ -42,6 +42,8 @@ public sealed class ProfileMapper
 	private bool _firstFrame = true;
 	private double _mouseRemainderX;
 	private double _mouseRemainderY;
+	private int _wheelAccum;
+	private int _horizontalWheelAccum;
 
 	public bool CursorMoved { get; private set; }
 	public bool Scrolled { get; private set; }
@@ -52,6 +54,12 @@ public sealed class ProfileMapper
 	/// rather than a boolean so a fast flick does not feel identical to a single notch.
 	/// </summary>
 	public int WheelNotches { get; private set; }
+
+	/// <summary>Signed vertical wheel notches produced this frame, for pointer arbitration.</summary>
+	public int SignedWheelNotches { get; private set; }
+
+	/// <summary>Signed horizontal wheel notches produced this frame, for pointer arbitration.</summary>
+	public int HorizontalWheelNotches { get; private set; }
 
 	/// <summary>Whole pixels actually sent to the OS this frame, for diagnostics.</summary>
 	public int EmittedPixelsX { get; private set; }
@@ -144,6 +152,7 @@ public sealed class ProfileMapper
 			var rightPadMode = ReadPadMode(root, "RightPad", defaults.RightPadMode, origins);
 			var leftPadMode = ReadPadMode(root, "LeftPad", defaults.LeftPadMode, origins);
 			var leftStickMode = ReadStickMode(root, "LeftStick", defaults.LeftStickMode, origins);
+			var rightStickMode = ReadStickMode(root, "RightStick", defaults.RightStickMode, origins);
 
 			double rightAccel = ReadDouble(root, "rightPadAcceleration", defaults.RightPadTrackball.AccelerationExponent, origins);
 			double leftAccel = ReadDouble(root, "leftPadAcceleration", defaults.LeftPadScroll.AccelerationExponent, origins);
@@ -161,13 +170,22 @@ public sealed class ProfileMapper
 			double rightHapticForce = ReadDouble(root, "rightPadHapticForce", defaults.RightPadHaptics.Force, origins);
 			double rightHapticFreq = ReadDouble(root, "rightPadHapticFrequency", defaults.RightPadHaptics.Frequency, origins);
 
+			// Xbox360-mode layout, merged into the profile so one file carries the whole pad. A
+			// profile written before the merge has no section: fall back to the stored default Xbox
+			// profile so the tuning the user made in the Xbox tab survives the move.
+			var xboxButtons = ReadXboxButtons(root, origins);
+			var xboxTuning = ReadXboxTuning(root, origins);
+
 			var settings = defaults with
 			{
 				StickDeadZone = deadzone,
 				GamepadStickDeadZone = gamepadDeadzone,
+				XboxButtons = xboxButtons,
+				XboxTuning = xboxTuning,
 				RightPadMode = rightPadMode,
 				LeftPadMode = leftPadMode,
 				LeftStickMode = leftStickMode,
+				RightStickMode = rightStickMode,
 				LeftPadHaptics = new PadHapticSettings { Force = leftHapticForce, Frequency = leftHapticFreq },
 				RightPadHaptics = new PadHapticSettings { Force = rightHapticForce, Frequency = rightHapticFreq },
 				RightPadTrackball = defaults.RightPadTrackball with
@@ -244,6 +262,7 @@ public sealed class ProfileMapper
 		var parsed = raw?.Trim().ToLowerInvariant() switch
 		{
 			"arrowkeys" => StickMotionMode.ArrowKeys,
+			"pointer" or "souris" or "mouse" => StickMotionMode.Pointer,
 			"none" or "aucun" => StickMotionMode.None,
 			_ => (StickMotionMode?)null,
 		};
@@ -263,6 +282,73 @@ public sealed class ProfileMapper
 		}
 
 		return null;
+	}
+
+	/// <summary>
+	/// Reads the merged "xboxButtons" section. Absent on profiles written before the merge: the old
+	/// default Xbox profile is loaded instead, so nothing the user had tuned is silently lost.
+	/// </summary>
+	private static Dictionary<string, string> ReadXboxButtons(JsonElement root, List<ProfileValueOrigin> origins)
+	{
+		if (root.TryGetProperty("xboxButtons", out var section) && section.ValueKind == JsonValueKind.Object)
+		{
+			var stored = new Dictionary<string, string>();
+			foreach (var property in section.EnumerateObject())
+			{
+				if (property.Value.ValueKind == JsonValueKind.String)
+				{
+					stored[property.Name] = property.Value.GetString()!;
+				}
+			}
+
+			origins.Add(new ProfileValueOrigin("xboxButtons", $"{stored.Count} binding(s)", FromFile: true));
+			return stored;
+		}
+
+		origins.Add(new ProfileValueOrigin("xboxButtons", "legacy default", FromFile: false));
+		return XboxProfile.Load(XboxProfile.DefaultName).Buttons;
+	}
+
+	/// <summary>
+	/// Reads the Xbox tuning keys. The merged "xboxButtons" section is the marker of a post-merge
+	/// profile; without it the stored default Xbox profile's tuning is inherited, like the buttons.
+	/// </summary>
+	private static XboxTuning ReadXboxTuning(JsonElement root, List<ProfileValueOrigin> origins)
+	{
+		if (!root.TryGetProperty("xboxButtons", out var section) || section.ValueKind != JsonValueKind.Object)
+		{
+			origins.Add(new ProfileValueOrigin("xboxTuning", "legacy default", FromFile: false));
+			return XboxProfile.Load(XboxProfile.DefaultName).Tuning;
+		}
+
+		return new XboxTuning
+		{
+			StickDeadZone = ReadDouble(root, "xboxStickDeadZone", 0.018, origins),
+			StickCurve = ReadDouble(root, "xboxStickCurve", 1.0, origins),
+			StickSensitivity = ReadDouble(root, "xboxStickSensitivity", 1.0, origins),
+			TriggerThreshold = ReadDouble(root, "xboxTriggerThreshold", 0.0, origins),
+			TriggerFullPoint = ReadDouble(root, "xboxTriggerFullPoint", 1.0, origins),
+			VibrationEnabled = ReadBool(root, "xboxVibrationEnabled", true, origins),
+			VibrationIntensity = ReadDouble(root, "xboxVibrationIntensity", 1.0, origins),
+			HapticForwarding = ReadBool(root, "xboxHapticForwarding", false, origins),
+			TriggerHapticsEnabled = ReadBool(root, "xboxTriggerHapticsEnabled", false, origins),
+			TriggerHapticStrength = ReadDouble(root, "xboxTriggerHapticStrength", 0.6, origins),
+			TriggerActuatorIndex = ReadInt(root, "xboxTriggerActuatorIndex", 2, origins),
+		};
+	}
+
+	private static int ReadInt(JsonElement root, string key, int fallback, List<ProfileValueOrigin> origins)
+	{
+		if (root.TryGetProperty(key, out var element) &&
+			element.ValueKind == JsonValueKind.Number &&
+			element.TryGetInt32(out var value))
+		{
+			origins.Add(new ProfileValueOrigin(key, value.ToString(), FromFile: true));
+			return value;
+		}
+
+		origins.Add(new ProfileValueOrigin(key, fallback.ToString(), FromFile: false));
+		return fallback;
 	}
 
 	private static double ReadDouble(JsonElement root, string key, double fallback, List<ProfileValueOrigin> origins)
@@ -325,6 +411,8 @@ public sealed class ProfileMapper
 		_leftPadWasOskMode = false;
 		_mouseRemainderX = 0.0;
 		_mouseRemainderY = 0.0;
+		_wheelAccum = 0;
+		_horizontalWheelAccum = 0;
 	}
 
 	public void Map(ControllerState state)
@@ -335,9 +423,13 @@ public sealed class ProfileMapper
 		Scrolled = false;
 		PadClicked = false;
 		WheelNotches = 0;
+		SignedWheelNotches = 0;
+		HorizontalWheelNotches = 0;
 		EmittedPixelsX = 0;
 		EmittedPixelsY = 0;
 		OskToggleRequested = false;
+		_wheelAccum = 0;
+		_horizontalWheelAccum = 0;
 
 		if (_firstFrame)
 		{
@@ -367,11 +459,17 @@ public sealed class ProfileMapper
 			return;
 		}
 
+		// While the overlay is open the controller is an OSK, not a profile: the triggers and the
+		// sticks belong to the keyboard (a trigger commits a key, a stick aims at one), and a
+		// shortcut firing under the overlay is a ghost key in the middle of a word. The edges are
+		// still tracked so nothing fires on release once the overlay closes.
+		bool live = !OskActive;
+
 		bool rightTriggerDown = state.RightTrigger > 0.5;
 		bool leftTriggerDown = state.LeftTrigger > 0.5;
 
-		HandleEdge(ref _prevRightTriggerDown, rightTriggerDown, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
-		HandleEdge(ref _prevLeftTriggerDown, leftTriggerDown, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
+		HandleEdge(ref _prevRightTriggerDown, rightTriggerDown, live, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
+		HandleEdge(ref _prevLeftTriggerDown, leftTriggerDown, live, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
 
 		if (!OskActive)
 		{
@@ -382,51 +480,59 @@ public sealed class ProfileMapper
 			// Button down on press and up on release, so holding drags: resizing a window or selecting
 			// text needs the button to stay down while the finger moves. Emitting a complete click on
 			// release instead made both impossible.
-			HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed,
+			HandleEdge(ref _prevRightPadClick, rightSmooth.IsPressed, true,
 				() => { InputHelper.MouseLeftDown(); PadClicked = true; },
 				() => InputHelper.MouseLeftUp());
 
 			var leftFrame = MapPad(_settings.LeftPadMode, state.Timestamp, state.LeftPad, _leftTrackball, _leftScroll);
 			ApplyMouseFrame(leftFrame);
 			Scrolled = leftFrame.HasWheel;
-			WheelNotches = Math.Abs(leftFrame.WheelDelta) + Math.Abs(leftFrame.HorizontalWheelDelta);
-			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => InputHelper.MouseMiddleDown(), () => InputHelper.MouseMiddleUp());
+			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, true, () => InputHelper.MouseMiddleDown(), () => InputHelper.MouseMiddleUp());
+
+			// Wheel and motion are accumulated, not sent: the host routes them through the shared
+			// pointer arbiter so several controllers can push the one desktop pointer. The counts
+			// still describe what this controller produced, for haptics and the per-second line.
+			SignedWheelNotches = _wheelAccum;
+			HorizontalWheelNotches = _horizontalWheelAccum;
+			WheelNotches = Math.Abs(_wheelAccum) + Math.Abs(_horizontalWheelAccum);
 		}
 		else
 		{
-			HandleEdge(ref _prevRightPadClick, state.RightPad.IsPressed, () => { }, () => { });
-			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, () => { }, () => { });
+			HandleEdge(ref _prevRightPadClick, state.RightPad.IsPressed, true, () => { }, () => { });
+			HandleEdge(ref _prevLeftPadClick, state.LeftPad.IsPressed, true, () => { }, () => { });
 			_leftPadWasOskMode = InputHelper.IsOskRunning();
 		}
 
-		// Each of these is skipped when the profile assigns it to the precision hold, so a button
-		// cannot both modify sensitivity and fire a shortcut.
-		HandleEdge(ref _prevLB, state.Buttons.HasFlag(SteamControllerButtons.LeftBumper),
+		// The overlay is one input or the other: while it is open every button except the ones that
+		// close it (B, A, Menu in the daisywheel) is suspended. A shortcut fired under the overlay
+		// would be typed into whatever the user is writing — Alt-Tab while aiming at a letter, a
+		// volume notch while committing one. Edges are still tracked, so nothing fires on release.
+		HandleEdge(ref _prevLB, state.Buttons.HasFlag(SteamControllerButtons.LeftBumper), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_TAB }),
 			() => { });
-		HandleEdge(ref _prevRB, state.Buttons.HasFlag(SteamControllerButtons.RightBumper),
+		HandleEdge(ref _prevRB, state.Buttons.HasFlag(SteamControllerButtons.RightBumper), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, InputHelper.VK_TAB }),
 			() => { });
 
-		HandleEdge(ref _prevDPadUp, state.Buttons.HasFlag(SteamControllerButtons.DPadUp),
+		HandleEdge(ref _prevDPadUp, state.Buttons.HasFlag(SteamControllerButtons.DPadUp), live,
 			() => InputHelper.KeyDown(0xAF), () => InputHelper.KeyUp(0xAF));
-		HandleEdge(ref _prevDPadDown, state.Buttons.HasFlag(SteamControllerButtons.DPadDown),
+		HandleEdge(ref _prevDPadDown, state.Buttons.HasFlag(SteamControllerButtons.DPadDown), live,
 			() => InputHelper.KeyDown(0xAE), () => InputHelper.KeyUp(0xAE));
-		HandleEdge(ref _prevDPadLeft, state.Buttons.HasFlag(SteamControllerButtons.DPadLeft),
+		HandleEdge(ref _prevDPadLeft, state.Buttons.HasFlag(SteamControllerButtons.DPadLeft), live,
 			() => InputHelper.KeyTap(0xB1), () => { });
-		HandleEdge(ref _prevDPadRight, state.Buttons.HasFlag(SteamControllerButtons.DPadRight),
+		HandleEdge(ref _prevDPadRight, state.Buttons.HasFlag(SteamControllerButtons.DPadRight), live,
 			() => InputHelper.KeyTap(0xB0), () => { });
 
-		HandleEdge(ref _prevL4, state.Buttons.HasFlag(SteamControllerButtons.L4),
+		HandleEdge(ref _prevL4, state.Buttons.HasFlag(SteamControllerButtons.L4), live,
 			() => InputHelper.KeyTap(InputHelper.VK_SNAPSHOT), () => { });
-		HandleEdge(ref _prevR4, state.Buttons.HasFlag(SteamControllerButtons.R4),
+		HandleEdge(ref _prevR4, state.Buttons.HasFlag(SteamControllerButtons.R4), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, 0x47 }),
 			() => { });
 
-		HandleEdge(ref _prevL5, state.Buttons.HasFlag(SteamControllerButtons.L5),
+		HandleEdge(ref _prevL5, state.Buttons.HasFlag(SteamControllerButtons.L5), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, InputHelper.VK_MENU, 0x52 }),
 			() => { });
-		HandleEdge(ref _prevR5, state.Buttons.HasFlag(SteamControllerButtons.R5),
+		HandleEdge(ref _prevR5, state.Buttons.HasFlag(SteamControllerButtons.R5), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_F4 }),
 			() => { });
 
@@ -435,20 +541,20 @@ public sealed class ProfileMapper
 		// trigger on release.
 		bool daisywheelTyping = OskActive && DaisywheelActive;
 
-		HandleEdge(ref _prevX, state.Buttons.HasFlag(SteamControllerButtons.X),
+		HandleEdge(ref _prevX, state.Buttons.HasFlag(SteamControllerButtons.X), live,
 			() =>
 			{
 				if (!daisywheelTyping)
 					InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_LEFT });
 			}, () => { });
-		HandleEdge(ref _prevY, state.Buttons.HasFlag(SteamControllerButtons.Y),
+		HandleEdge(ref _prevY, state.Buttons.HasFlag(SteamControllerButtons.Y), live,
 			() =>
 			{
 				if (!daisywheelTyping)
 					InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_RIGHT });
 			}, () => { });
 
-		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A),
+		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A), true,
 			() =>
 			{
 				if (OskActive && !daisywheelTyping)
@@ -456,7 +562,7 @@ public sealed class ProfileMapper
 					OskToggleRequested = true;
 				}
 			}, () => { });
-		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B),
+		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B), true,
 			() =>
 			{
 				if (daisywheelTyping)
@@ -468,7 +574,7 @@ public sealed class ProfileMapper
 				System.Diagnostics.Debug.WriteLine($"[ProfileMapper] B pressed → OskToggleRequested=true, OskActive={OskActive}");
 			}, () => { });
 
-		HandleEdge(ref _prevMenu, state.Buttons.HasFlag(SteamControllerButtons.Menu),
+		HandleEdge(ref _prevMenu, state.Buttons.HasFlag(SteamControllerButtons.Menu), live || daisywheelTyping,
 			() =>
 			{
 				// Menu is the way out of the daisywheel, since B is a character there.
@@ -477,16 +583,16 @@ public sealed class ProfileMapper
 				else
 					InputHelper.KeyTap(0x5B);
 			}, () => { });
-		HandleEdge(ref _prevView, state.Buttons.HasFlag(SteamControllerButtons.View),
+		HandleEdge(ref _prevView, state.Buttons.HasFlag(SteamControllerButtons.View), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, 0x44 }),
 			() => { });
 
-		HandleEdge(ref _prevL3, state.Buttons.HasFlag(SteamControllerButtons.LeftStick),
+		HandleEdge(ref _prevL3, state.Buttons.HasFlag(SteamControllerButtons.LeftStick), live,
 			() => InputHelper.KeyTap(0x0D), () => { });
-		HandleEdge(ref _prevR3, state.Buttons.HasFlag(SteamControllerButtons.RightStick),
+		HandleEdge(ref _prevR3, state.Buttons.HasFlag(SteamControllerButtons.RightStick), live,
 			() => { }, () => { });
 
-		if (_settings.LeftStickMode == StickMotionMode.ArrowKeys)
+		if (live && _settings.LeftStickMode == StickMotionMode.ArrowKeys)
 		{
 			MapLeftStickArrows(state.LeftStick);
 		}
@@ -535,7 +641,9 @@ public sealed class ProfileMapper
 	};
 
 	/// <summary>
-	/// Sends a mouse frame, carrying the sub-pixel remainder across frames.
+	/// Accumulates a mouse frame into the frame's outputs, carrying the sub-pixel remainder across
+	/// frames. The host sends the pointer, through the shared arbiter, so nothing is written to the
+	/// OS here.
 	/// </summary>
 	/// <remarks>
 	/// SendInput only takes whole pixels. Truncating each frame independently discarded the
@@ -558,17 +666,16 @@ public sealed class ProfileMapper
 
 			if (stepX != 0 || stepY != 0)
 			{
-				InputHelper.MouseMoveRelative(stepX, stepY);
 				EmittedPixelsX += stepX;
 				EmittedPixelsY += stepY;
 			}
 		}
 
 		if (frame.HasWheel)
-			InputHelper.MouseWheel(frame.WheelDelta);
+			_wheelAccum += frame.WheelDelta;
 
 		if (frame.HasHorizontalWheel)
-			InputHelper.MouseHorizontalWheel(frame.HorizontalWheelDelta);
+			_horizontalWheelAccum += frame.HorizontalWheelDelta;
 	}
 
 	private void MapLeftStickArrows(NormalizedStick stick)
@@ -594,12 +701,15 @@ public sealed class ProfileMapper
 			InputHelper.KeyUp(InputHelper.VK_RIGHT);
 	}
 
-	private static void HandleEdge(ref bool prev, bool current, Action onDown, Action onUp)
+	private static void HandleEdge(ref bool prev, bool current, bool enabled, Action onDown, Action onUp)
 	{
-		if (current && !prev)
+		if (enabled && current && !prev)
 			onDown();
-		else if (!current && prev)
+		else if (enabled && !current && prev)
 			onUp();
+
+		// Tracked regardless of enabled: the flags must follow the physical state or a button
+		// released under the overlay would fire its shortcut the moment the overlay closes.
 		prev = current;
 	}
 }

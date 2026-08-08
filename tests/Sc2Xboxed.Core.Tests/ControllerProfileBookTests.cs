@@ -13,8 +13,8 @@ namespace Sc2Xboxed.Core.Tests;
 /// </remarks>
 public class ControllerProfileBookTests
 {
-    private const string SteamPad = "hid:vid&0228de_pid&1303_rev&0100_d1af66b5aa8d";
-    private const string OtherSteamPad = "hid:vid&0228de_pid&1303_rev&0100_aabbccddeeff";
+    private const string SteamPad = "bt:44464836686d";
+    private const string OtherSteamPad = "bt:90b685f7696f";
     private const string XboxSlot0 = "xinput-slot:0";
     private const string XboxSlot1 = "xinput-slot:1";
 

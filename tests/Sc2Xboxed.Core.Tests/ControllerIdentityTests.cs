@@ -35,6 +35,44 @@ public class ControllerIdentityTests
             ControllerIdentityFactory.FromHidPath(Col01),
             ControllerIdentityFactory.FromHidPath(Col01.ToUpperInvariant()));
 
+    // The path a real DualSense enumerates under, taken from the HID probe on the author's machine.
+    // No "&col" marker anywhere, which is what made the old normalisation a no-op on this pad.
+    private const string DualSense =
+        @"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid&0002054c_pid&0ce6#8&15f755c8&3&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
+
+    // The trailing GUID is the HID class interface: identical on every HID device, so it carries no
+    // identity and only makes the key sensitive to how the path is spelled.
+    [Fact]
+    public void TheClassInterfaceGuidIsNotPartOfTheKey()
+        => Assert.DoesNotContain("4d1e55b2", ControllerIdentityFactory.FromHidPath(DualSense));
+
+    [Fact]
+    public void ADualSenseKeepsItsVendorProductAndInstance()
+    {
+        var key = ControllerIdentityFactory.FromHidPath(DualSense);
+
+        Assert.Contains("vid&0002054c", key);
+        Assert.Contains("pid&0ce6", key);
+        Assert.Contains("15f755c8", key);
+    }
+
+    // What the duplicate reader came from: two enumerations of one pad must give one key.
+    [Fact]
+    public void TwoEnumerationsOfOneDualSenseGiveOneKey()
+        => Assert.Equal(
+            ControllerIdentityFactory.FromHidPath(DualSense),
+            ControllerIdentityFactory.FromHidPath(DualSense.ToUpperInvariant()));
+
+    [Fact]
+    public void TwoDualSensesStillGetDifferentKeys()
+        => Assert.NotEqual(
+            ControllerIdentityFactory.FromHidPath(DualSense),
+            ControllerIdentityFactory.FromHidPath(DualSense.Replace("15f755c8", "99aabbcc")));
+
+    [Fact]
+    public void ADualSenseKeyIsNotStableEither()
+        => Assert.False(ControllerIdentityFactory.IsStable(ControllerIdentityFactory.FromHidPath(DualSense)));
+
     [Fact]
     public void TheKeyCarriesTheVendorAndProduct()
     {
@@ -61,8 +99,8 @@ public class ControllerIdentityTests
         => Assert.False(string.IsNullOrEmpty(ControllerIdentityFactory.FromHidPath(empty)));
 
     [Fact]
-    public void AHidKeyIsStable()
-        => Assert.True(ControllerIdentityFactory.IsStable(ControllerIdentityFactory.FromHidPath(Col03)));
+    public void AHidKeyIsNotStable()
+        => Assert.False(ControllerIdentityFactory.IsStable(ControllerIdentityFactory.FromHidPath(Col03)));
 
     // The weakness is deliberate and marked: XInput offers a slot and nothing else, and slots are
     // handed out in connection order. Anything filed under one must be treated as provisional.
@@ -75,4 +113,13 @@ public class ControllerIdentityTests
         => Assert.NotEqual(
             ControllerIdentityFactory.FromXInputSlot(0),
             ControllerIdentityFactory.FromXInputSlot(1));
+
+    // What durability now means: a key built from something burned into the device.
+    [Fact]
+    public void ABluetoothAddressKeyIsStable()
+        => Assert.True(ControllerIdentityFactory.IsStable("bt:44464836686d"));
+
+    [Fact]
+    public void AUsbSerialKeyIsStable()
+        => Assert.True(ControllerIdentityFactory.IsStable("usb:vid_054c&pid_0ce6:a1b2c3d4"));
 }

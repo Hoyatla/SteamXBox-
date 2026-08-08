@@ -1,6 +1,7 @@
 using HidSharp;
 using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Runtime;
+using Sc2Xboxed.Windows;
 
 namespace Sc2Xboxed.Hid;
 
@@ -22,7 +23,7 @@ namespace Sc2Xboxed.Hid;
 /// the path.
 /// </para>
 /// </remarks>
-public sealed class DualSenseControllerSource : IPhysicalControllerSource
+public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowerControl
 {
     /// <summary>Sony Interactive Entertainment.</summary>
     public const int SonyVendorId = 0x054C;
@@ -33,6 +34,11 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource
     private readonly string? _devicePath;
     private readonly int _readTimeoutMs;
     private readonly Action<string>? _log;
+
+    private readonly object _stateGate = new();
+    private HidStream? _activeStream;
+    private object? _activeStreamGate;
+    private bool _isBluetooth;
 
     /// <param name="devicePath">A specific interface, or null to take the first DualSense found.</param>
     /// <param name="readTimeoutMs">
@@ -103,71 +109,177 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource
         {
             stream.ReadTimeout = _readTimeoutMs;
             var buffer = new byte[Math.Max(11, device.GetMaxInputReportLength())];
+            var streamGate = new object();
 
-            while (!cancellationToken.IsCancellationRequested)
+            // Held so <see cref="SendPowerOff"/> can write through the same stream the reads use.
+            // A feature report is a different pipe from the input report, but serialising them is
+            // what the Steam source does, and two writers on one handle is a race nobody needs.
+            lock (_stateGate)
             {
-                int read;
+                _activeStream = stream;
+                _activeStreamGate = streamGate;
+                _isBluetooth = IsBluetoothPath(device.DevicePath);
+            }
 
-                try
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    read = await Task.Run(() => stream.Read(buffer), cancellationToken).ConfigureAwait(false);
-                }
-                catch (TimeoutException)
-                {
-                    // Nobody is touching the pad. Not a fault, and not a reason to end the stream.
-                    continue;
-                }
-                catch (OperationCanceledException)
-                {
-                    yield break;
-                }
-                catch (Exception ex) when (ex is IOException or ObjectDisposedException)
-                {
-                    _log?.Invoke($"DualSense read ended: {ex.GetType().Name}: {ex.Message}");
-                    yield break;
-                }
+                    int read;
 
-                if (read <= 0)
-                {
-                    continue;
-                }
-
-                // Null for the feature and audio reports a DualSense also emits on this pipe.
-                if (DualSenseReportParser.Parse(
-                        buffer.AsSpan(0, read), DateTimeOffset.UtcNow - start) is { } state)
-                {
-                    // Raw bytes beside the decoded result, once per change rather than per frame.
-                    // "The mapping is wrong" cannot be acted on: it does not say which button, nor
-                    // whether the byte was misread or mapped to the wrong Xbox equivalent. One press
-                    // logged like this says both, and ends the guessing this project has already
-                    // paid for several times over.
-                    // Sticks as well as buttons. Logging only on button change never captured a
-                    // stick push at all, so "the stick does nothing" and "the stick moves and the
-                    // mapper ignores it" stayed indistinguishable. Quantised to a sixteenth so a
-                    // resting thumb does not produce a line per frame.
-                    var stickStep = (
-                        (int)(state.LeftStick.X * 16), (int)(state.LeftStick.Y * 16),
-                        (int)(state.RightStick.X * 16), (int)(state.RightStick.Y * 16));
-
-                    if (state.Buttons != lastButtons || read != lastLength || stickStep != lastStick)
+                    try
                     {
-                        lastButtons = state.Buttons;
-                        lastLength = read;
-                        lastStick = stickStep;
-
-                        _log?.Invoke(
-                            $"DualSense report id=0x{buffer[0]:X2} len={read} "
-                            + $"bytes=[{string.Join(" ", buffer.Take(Math.Min(read, 12)).Select(b => b.ToString("X2")))}] "
-                            + $"=> {state.Buttons} "
-                            + $"L=({state.LeftStick.X:F2},{state.LeftStick.Y:F2}) "
-                            + $"R=({state.RightStick.X:F2},{state.RightStick.Y:F2})");
+                        read = await Task.Run(
+                                () =>
+                                {
+                                    lock (streamGate)
+                                    {
+                                        return stream.Read(buffer);
+                                    }
+                                },
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (TimeoutException)
+                    {
+                        // Nobody is touching the pad. Not a fault, and not a reason to end the stream.
+                        continue;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        yield break;
+                    }
+                    catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+                    {
+                        _log?.Invoke($"DualSense read ended: {ex.GetType().Name}: {ex.Message}");
+                        yield break;
                     }
 
-                    yield return state;
+                    if (read <= 0)
+                    {
+                        continue;
+                    }
+
+                    // Null for the feature and audio reports a DualSense also emits on this pipe.
+                    if (DualSenseReportParser.Parse(
+                            buffer.AsSpan(0, read), DateTimeOffset.UtcNow - start) is { } state)
+                    {
+                        // Raw bytes beside the decoded result, once per change rather than per frame.
+                        // "The mapping is wrong" cannot be acted on: it does not say which button, nor
+                        // whether the byte was misread or mapped to the wrong Xbox equivalent. One press
+                        // logged like this says both, and ends the guessing this project has already
+                        // paid for several times over.
+                        // Sticks as well as buttons. Logging only on button change never captured a
+                        // stick push at all, so "the stick does nothing" and "the stick moves and the
+                        // mapper ignores it" stayed indistinguishable. Quantised to a sixteenth so a
+                        // resting thumb does not produce a line per frame.
+                        var stickStep = (
+                            (int)(state.LeftStick.X * 16), (int)(state.LeftStick.Y * 16),
+                            (int)(state.RightStick.X * 16), (int)(state.RightStick.Y * 16));
+
+                        if (state.Buttons != lastButtons || read != lastLength || stickStep != lastStick)
+                        {
+                            lastButtons = state.Buttons;
+                            lastLength = read;
+                            lastStick = stickStep;
+
+                            _log?.Invoke(
+                                $"DualSense report id=0x{buffer[0]:X2} len={read} "
+                                + $"bytes=[{string.Join(" ", buffer.Take(Math.Min(read, 12)).Select(b => b.ToString("X2")))}] "
+                                + $"=> {state.Buttons} "
+                                + $"L=({state.LeftStick.X:F2},{state.LeftStick.Y:F2}) "
+                                + $"R=({state.RightStick.X:F2},{state.RightStick.Y:F2})");
+                        }
+
+                        yield return state;
+                    }
+                }
+            }
+            finally
+            {
+                lock (_stateGate)
+                {
+                    _activeStream = null;
+                    _activeStreamGate = null;
                 }
             }
         }
     }
+
+    /// <summary>
+    /// Asks the controller to power off. Bluetooth only: a wired DualSense is powered by the cable.
+    /// </summary>
+    /// <remarks>
+    /// Returns false rather than throwing when there is no open stream (the pad is asleep or gone),
+    /// when the pad is on USB, where the command has no meaning, or when Windows refuses every
+    /// means of switching it off.
+    ///
+    /// <para>
+    /// The Bluetooth control report is the one proven to work on Linux — the same feature report
+    /// <c>dualsensectl</c> sends, built at the 48-byte length Windows presents the report at and
+    /// checksummed with the <c>0xA3</c> seed the controller verifies. Windows does not reliably
+    /// deliver feature reports over Bluetooth HID, though: HidD_SetFeature can refuse them outright
+    /// (error 0). When the report is refused, the Bluetooth link itself is cut through
+    /// <see cref="BluetoothLink"/> and the controller powers itself off, which is the behaviour
+    /// this machine is expected to land on.
+    /// </para>
+    /// </remarks>
+    public bool SendPowerOff()
+    {
+        lock (_stateGate)
+        {
+            if (_activeStream is null || _activeStreamGate is null)
+            {
+                return false;
+            }
+
+            if (!_isBluetooth)
+            {
+                _log?.Invoke("DualSense power-off skipped: it only works over Bluetooth, and this pad is wired.");
+                return false;
+            }
+
+            var report = DualSensePowerOff.Build();
+            try
+            {
+                lock (_activeStreamGate)
+                {
+                    _activeStream.SetFeature(report);
+                }
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                _log?.Invoke(
+                    $"DualSense power-off not delivered: {exception.GetType().Name}: {exception.Message} "
+                    + "(Windows can refuse Bluetooth feature reports; cutting the link instead).");
+            }
+
+            // Windows does not reliably deliver the feature report over Bluetooth HID, so the link
+            // itself is cut and the controller powers itself off the way it does when it loses the
+            // connection. On this machine this is the path that actually switches the pad off.
+            if (BluetoothLink.Cut(_devicePath ?? "", _log))
+            {
+                _log?.Invoke("DualSense Bluetooth link cut; the controller is powering itself off.");
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether the device path names a Bluetooth transport.
+    /// </summary>
+    /// <remarks>
+    /// Over Bluetooth the path reads <c>VID&amp;0002054C</c> — an ampersand instead of an
+    /// underscore, with a <c>0002</c> prefix from the Bluetooth transport — while over USB it reads
+    /// <c>VID_054C</c>. Matching the string is what this file already documents the difference as,
+    /// and getting it wrong is safe: at worst the pad is left on and told so.
+    /// </remarks>
+    private static bool IsBluetoothPath(string devicePath)
+        => devicePath.Contains("VID&0002", StringComparison.OrdinalIgnoreCase);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

@@ -13,7 +13,7 @@ public sealed record PadHapticSettings
     public static PadHapticSettings Default { get; } = new();
 
     /// <summary>Strength, 0-1. 0 disables this pad's haptics entirely.</summary>
-    public double Force { get; init; } = 0.5;
+    public double Force { get; init; } = 0.7;
 
     /// <summary>Rate, 0-1. Higher means pulses closer together.</summary>
     public double Frequency { get; init; } = 0.5;

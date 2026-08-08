@@ -46,9 +46,11 @@ public static class ControllerRoster
     /// numerical order. The roster feeds a list the user clicks on, and a list that reshuffles
     /// itself between two refreshes is one nobody can point at.
     /// </remarks>
+    /// <param name="dualSensePaths">Interface paths of every DualSense found.</param>
     public static IReadOnlyList<ControllerIdentity> Build(
         IEnumerable<string> hidPaths,
-        IEnumerable<int> occupiedXInputSlots)
+        IEnumerable<int> occupiedXInputSlots,
+        IEnumerable<string>? dualSensePaths = null)
     {
         var roster = new List<ControllerIdentity>();
 
@@ -66,6 +68,24 @@ public static class ControllerRoster
                     ControllerKind.SteamController,
                     key,
                     $"Steam Controller {roster.Count(r => r.Kind == ControllerKind.SteamController) + 1}",
+                    Slot: -1));
+            }
+        }
+
+        // A PlayStation pad is neither a Valve device nor an XInput one, so it was absent from every
+        // list the interface built — not hidden by a filter, simply never constructed. The user was
+        // told "aucune manette connectée" while holding one that the bridge was reading correctly.
+        // Deduplicated the same way, because a DualSense exposes several HID collections too.
+        foreach (var key in (dualSensePaths ?? [])
+                     .Select(ControllerIdentityFactory.FromHidPath)
+                     .OrderBy(k => k, StringComparer.Ordinal))
+        {
+            if (seen.Add(key))
+            {
+                roster.Add(new ControllerIdentity(
+                    ControllerKind.DualSense,
+                    key,
+                    $"Manette PS5 {roster.Count(r => r.Kind == ControllerKind.DualSense) + 1}",
                     Slot: -1));
             }
         }

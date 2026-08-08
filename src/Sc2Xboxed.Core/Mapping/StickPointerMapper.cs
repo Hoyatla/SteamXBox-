@@ -40,6 +40,14 @@ public static class StickPointerMapper
     /// <param name="state">Frame to read the sticks from.</param>
     /// <param name="elapsed">Time since the previous frame.</param>
     /// <param name="settings">Feel of the mapping.</param>
+    /// <param name="rightStickPointer">
+    /// Whether the right stick drives the pointer. A profile that switched its right stick off must
+    /// not move the cursor; a stick-only family cannot fall back to a pad that is not there.
+    /// </param>
+    /// <param name="leftStickWheel">
+    /// Whether the left stick scrolls. Kept separate so "Aucun" on the left stick stops both its
+    /// roles instead of leaving the wheel alive while the combobox says it does nothing.
+    /// </param>
     /// <param name="carry">
     /// Sub-pixel and sub-notch remainder carried between frames, updated in place. Without it a slow
     /// stick would round to zero on every frame and the pointer would never move at all — the
@@ -49,6 +57,8 @@ public static class StickPointerMapper
         ControllerState state,
         TimeSpan elapsed,
         StickPointerSettings settings,
+        bool rightStickPointer,
+        bool leftStickWheel,
         ref StickPointerCarry carry)
     {
         var seconds = elapsed.TotalSeconds;
@@ -59,14 +69,31 @@ public static class StickPointerMapper
             return new StickPointerOutput(0, 0, 0);
         }
 
-        var (px, py) = Velocity(state.RightStick, settings);
-        carry.X += px * settings.PixelsPerSecond * seconds;
-        carry.Y += py * settings.PixelsPerSecond * seconds;
+        if (rightStickPointer)
+        {
+            var (px, py) = Velocity(state.RightStick, settings);
+            carry.X += px * settings.PixelsPerSecond * seconds;
+            carry.Y += py * settings.PixelsPerSecond * seconds;
+        }
+        else
+        {
+            // The stick is off: drop any remainder, or a disabled stick would fire one last blip
+            // the next time it is re-enabled.
+            carry.X = 0;
+            carry.Y = 0;
+        }
 
-        // Only the vertical axis of the left stick scrolls. Horizontal wheel exists, but binding it
-        // here would make a diagonal push scroll sideways by accident on every vertical flick.
-        var (_, wy) = Velocity(state.LeftStick, settings);
-        carry.Wheel += -wy * settings.NotchesPerSecond * seconds;
+        if (leftStickWheel)
+        {
+            // Only the vertical axis of the left stick scrolls. Horizontal wheel exists, but binding
+            // it here would make a diagonal push scroll sideways by accident on every vertical flick.
+            var (_, wy) = Velocity(state.LeftStick, settings);
+            carry.Wheel += -wy * settings.NotchesPerSecond * seconds;
+        }
+        else
+        {
+            carry.Wheel = 0;
+        }
 
         var outX = (int)carry.X;
         var outY = (int)carry.Y;

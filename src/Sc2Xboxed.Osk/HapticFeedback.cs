@@ -12,9 +12,13 @@ public sealed class HapticFeedback : IAsyncDisposable
 {
     private readonly HapticRequestSender _sender;
 
-    public HapticFeedback(Action<string>? log = null)
+    /// <param name="hapticPipeName">
+    /// Pipe to send on; one per keyboard. Two keyboards sharing it would send their key ticks to
+    /// each other's controller — the wrong hand buzzing, which is worse than no feedback at all.
+    /// </param>
+    public HapticFeedback(Action<string>? log = null, string? hapticPipeName = null)
     {
-        _sender = new HapticRequestSender(log);
+        _sender = new HapticRequestSender(log, hapticPipeName);
         _sender.Start();
     }
 

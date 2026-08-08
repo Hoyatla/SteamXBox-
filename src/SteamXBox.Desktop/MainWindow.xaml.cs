@@ -10,10 +10,11 @@ namespace SteamXBox.Desktop;
 /// The SteamXBox Desktop window, holding the control centre.
 /// </summary>
 /// <remarks>
-/// Built to be driven without a pointer. Every tile is focusable, the arrow keys walk the grid and
-/// Enter activates — the vocabulary a gamepad produces once its stick and face buttons are mapped
-/// to those keys, so the same window serves the controller and the keyboard without a second code
-/// path. The mouse still works; it is simply not what the layout is designed around.
+/// A floating panel, not a full screen: SteamXBox runs alongside the desktop, so the physical
+/// keyboard and mouse keep working everywhere else. The window never activates itself at startup
+/// (<c>ShowActivated="False"</c>), so typing keeps going to whatever was in front. Every tile is
+/// focusable so the arrow keys — and the gamepad mapped to them — walk the grid once the panel has
+/// the focus; the mouse still works, it is simply not what the layout is designed around.
 /// </remarks>
 public partial class MainWindow : Window
 {
@@ -40,11 +41,64 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Focus the first tile so a gamepad or the arrow keys have somewhere to start. Without this
-        // the window opens with focus on nothing and the first press appears to do nothing at all.
-        Tiles.ApplyTemplate();
-        Tiles.UpdateLayout();
-        MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        // Bottom-right corner, above the taskbar, so the panel sits out of the way of whatever the
+        // user is typing into. Positioned once at startup; the title bar then moves it anywhere.
+        Reposition();
+
+        // Focus the first tile so a gamepad or the arrow keys have somewhere to start once the
+        // panel has the focus. Guarded on the window being active: at startup the window is
+        // deliberately not activated, and this must never steal the foreground from the user.
+        if (IsActive)
+        {
+            Tiles.ApplyTemplate();
+            Tiles.UpdateLayout();
+            MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        }
+    }
+
+    /// <summary>
+    /// Spreads the environment over the screen, once it is already shown.
+    /// </summary>
+    /// <remarks>
+    /// After <c>Show()</c>, not in the XAML. WPF refuses outright to display a window that declares
+    /// both <c>ShowActivated="False"</c> and <c>WindowState="Maximized"</c> — it throws at
+    /// <c>Show()</c> and the environment never appears at all. Both are wanted here: the overlay
+    /// covers the desktop, and it must never steal the foreground the moment it starts. Setting the
+    /// state after the window exists satisfies the pair.
+    /// </remarks>
+    private void Reposition()
+    {
+        WindowState = WindowState.Maximized;
+    }
+
+    // ---- Dragging ----
+
+    private Point _dragOrigin;
+    private bool _dragging;
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragOrigin = e.GetPosition(this);
+        _dragging = true;
+        Mouse.Capture((IInputElement)sender);
+    }
+
+    private void TitleBar_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+
+        var current = e.GetPosition(this);
+        Left += current.X - _dragOrigin.X;
+        Top += current.Y - _dragOrigin.Y;
+    }
+
+    private void TitleBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragging = false;
+        Mouse.Capture(null);
     }
 
     private void Tile_Click(object sender, RoutedEventArgs e)
@@ -73,8 +127,8 @@ public partial class MainWindow : Window
 
             // The remaining keystroke action still needs this window out of the way: it goes to
             // whatever is in front, and the clipboard history has to paste into the application the
-            // user was actually in. Hidden rather than minimised — the overlay refuses to minimise,
-            // and a hidden window also releases the foreground.
+            // user was actually in. Hidden rather than closed — the window keeps its position and
+            // comes back where it was.
             if (action.YieldsForeground)
             {
                 Hide();
@@ -93,9 +147,7 @@ public partial class MainWindow : Window
             // with no way back is indistinguishable from a crash.
             if (!IsVisible)
             {
-                Show();
-                WindowState = WindowState.Maximized;
-                Activate();
+                OverlayShower.Show(this);
                 UiLog.Window(nameof(MainWindow), "restored", "after a tile failed while hidden");
             }
 
@@ -116,53 +168,18 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Keeps the overlay covering the desktop.
-    /// </summary>
-    /// <remarks>
-    /// The title bar buttons are gone, but that is not enough: Win+D, Win+M, clicking the taskbar
-    /// button and "show the desktop" all minimise a window without asking it. An overlay that
-    /// vanishes on any of those is not an overlay, so the state is put straight back.
-    /// </remarks>
-    /// <summary>
     /// Quits when the overlay itself is closed by anything other than its own button.
     /// </summary>
     /// <remarks>
     /// Alt+F4 and "close window" from the taskbar bypass the ✕. Under
     /// <see cref="System.Windows.ShutdownMode.OnExplicitShutdown"/> nothing else would end the
-    /// process, leaving it running with no window at all — which is the opposite failure to the one
-    /// just fixed, and just as confusing.
+    /// process, leaving it running with no window at all.
     /// </remarks>
     protected override void OnClosed(EventArgs e)
     {
         UiLog.Window(nameof(MainWindow), "closed", "quitting SteamXBox");
         base.OnClosed(e);
         App.Quit();
-    }
-
-    protected override void OnStateChanged(EventArgs e)
-    {
-        if (WindowState == WindowState.Minimized)
-        {
-            // Recorded because it is invisible by design: the overlay flicks back to maximised, so
-            // whatever asked it to minimise leaves no other trace of having tried.
-            UiLog.Window(nameof(MainWindow), "minimise refused", "overlay must keep covering the desktop");
-            WindowState = WindowState.Maximized;
-        }
-
-        base.OnStateChanged(e);
-    }
-
-    /// <summary>
-    /// The title bar is inert.
-    /// </summary>
-    /// <remarks>
-    /// No dragging and no double-click to restore: a window that fills the screen has nowhere to be
-    /// dragged to, and restoring it down is exactly what it must not do. Kept as a handler rather
-    /// than removed from the XAML so the bar stays a real title bar if the overlay ever becomes
-    /// resizable again.
-    /// </remarks>
-    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
     }
 
     /// <summary>

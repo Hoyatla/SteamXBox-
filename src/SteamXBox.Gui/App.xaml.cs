@@ -78,11 +78,36 @@ public partial class App : Application
         {
             UiLog.Info("launcher mode: opening the environment and standing down");
             LaunchDesktop();
+
+            // The environment brings the bridge up, so an attached controller is taken in charge on
+            // its own. Nothing opens the configuration window here, deliberately: "start
+            // automatically when the controller is detected" is about the controller working, not
+            // about a window appearing. A settings window that opens by itself on every boot is a
+            // nuisance, and I briefly made it do exactly that by misreading the request.
+            if (SettingsSvc.Settings.AutoStart)
+            {
+                UiLog.Info($"auto-start is on; {AttachedControllerCount()} controller(s) attached");
+            }
+
             Shutdown();
             return;
         }
 
         UiLog.Info("configuration mode: opening the controller settings window");
+
+        // One configuration window, ever. The Controller tile calls this executable again with
+        // --config each time it is clicked, and nothing stopped a second window from opening on top
+        // of the first — two views of the same settings file, each holding its own copy in memory,
+        // where whichever saved last silently reverted the other.
+        _configInstance = new System.Threading.Mutex(true, @"Global\SteamXBox.Gui.Config", out var isFirst);
+
+        if (!isFirst)
+        {
+            UiLog.Info("a configuration window is already open; bringing it to the front");
+            BringExistingConfigWindowToFront();
+            Shutdown();
+            return;
+        }
 
         ProfileSvc = new ProfileService();
         ProfileSvc.LoadAll();
@@ -122,6 +147,126 @@ public partial class App : Application
         // the exception must surface rather than be swallowed.
         new MainWindow().Show();
         UiLog.Window(nameof(MainWindow), "shown", "on the built-in theme after the skin was rejected");
+    }
+
+    /// <summary>
+    /// How many controllers are attached, across all three families.
+    /// </summary>
+    /// <remarks>
+    /// All three, deliberately. A count that only saw Valve devices is what made the old status
+    /// card read "déconnecté" with a DualSense in hand, and an auto-start that inherited the same
+    /// blindness would never fire for anyone using a PlayStation or Xbox pad — the two the feature
+    /// is most likely to be wanted for.
+    /// </remarks>
+    private static int AttachedControllerCount()
+    {
+        var count = 0;
+
+        try
+        {
+            count += new Sc2Xboxed.Hid.SteamHidDiscovery().ListValveDevices().Count;
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("counting Valve devices", ex);
+        }
+
+        try
+        {
+            count += Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots().Count;
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("counting XInput slots", ex);
+        }
+
+        try
+        {
+            count += Sc2Xboxed.Hid.DualSenseControllerSource.Discover().Count;
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("counting DualSense devices", ex);
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Opens the configuration window as a separate process.
+    /// </summary>
+    /// <remarks>
+    /// A new process rather than a window in this one: this instance is the launcher and is about to
+    /// shut down. The single-instance mutex on the configuration path means a window already open is
+    /// raised instead of duplicated, so this is safe to call without checking first.
+    /// </remarks>
+    private static void LaunchConfigWindow()
+    {
+        try
+        {
+            var executable = Environment.ProcessPath;
+            if (executable is null)
+            {
+                return;
+            }
+
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(executable, "--config") { UseShellExecute = false });
+
+            UiLog.Info("configuration window opened by auto-start");
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("opening the configuration window on auto-start", ex);
+        }
+    }
+
+    /// <summary>Held for the lifetime of the one configuration window.</summary>
+    private static System.Threading.Mutex? _configInstance;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr handle);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr handle, int command);
+
+    /// <summary>
+    /// Raises the configuration window that is already open.
+    /// </summary>
+    /// <remarks>
+    /// Restored before being raised: a minimised window accepts the foreground request and stays
+    /// minimised, so the click would appear to do nothing at all — which is worse than opening a
+    /// second window, because at least that was visible.
+    /// </remarks>
+    private static void BringExistingConfigWindowToFront()
+    {
+        const int Restore = 9;
+
+        try
+        {
+            var self = Environment.ProcessId;
+
+            foreach (var other in System.Diagnostics.Process.GetProcessesByName("SteamXBox"))
+            {
+                using (other)
+                {
+                    if (other.Id == self || other.MainWindowHandle == IntPtr.Zero)
+                    {
+                        continue;
+                    }
+
+                    ShowWindow(other.MainWindowHandle, Restore);
+                    SetForegroundWindow(other.MainWindowHandle);
+                    return;
+                }
+            }
+
+            UiLog.Warn("no existing configuration window found to raise");
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("raising the existing configuration window", ex);
+        }
     }
 
     /// <summary>Why the external skin was rejected, or null when none was.</summary>

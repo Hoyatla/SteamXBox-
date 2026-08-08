@@ -26,6 +26,18 @@
                                 CommandParameter="{Binding}"
                                 Margin="0,0,8,0" Padding="0" Cursor="Hand"
                                 BorderThickness="0" Background="Transparent">
+                            <Button.ContextMenu>
+                                <!--
+                                    A ContextMenu lives outside the visual tree, so its DataContext is
+                                    pointed at the chip being right-clicked (the PlacementTarget) rather
+                                    than inherited. The handlers in the code-behind read it back.
+                                -->
+                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
+                                                  RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="Renommer…" Click="RenameMenuItem_Click"/>
+                                    <MenuItem Header="Réinitialiser le nom" Click="ResetNameMenuItem_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="Chip" CornerRadius="8" Padding="14,8"

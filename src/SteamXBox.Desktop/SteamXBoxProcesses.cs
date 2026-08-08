@@ -84,8 +84,7 @@ internal static class SteamXBoxProcesses
         return Sc2Xboxed.Core.Runtime.CoreCommandLine.BuildRun(
             profile?.Name ?? Sc2Xboxed.Core.Runtime.CoreCommandLine.DefaultProfile,
             profile?.Mode ?? "profile",
-            profile?.SwitchButton ?? Sc2Xboxed.Core.Runtime.CoreCommandLine.DefaultSwitchButton,
-            settings.LastXboxProfile);
+            profile?.SwitchButton ?? Sc2Xboxed.Core.Runtime.CoreCommandLine.DefaultSwitchButton);
     }
 
     private static ProfileData? LoadActiveProfile(string? name)

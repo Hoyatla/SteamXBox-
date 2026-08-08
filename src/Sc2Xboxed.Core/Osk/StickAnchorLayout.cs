@@ -94,6 +94,30 @@ public static class StickAnchorLayout
     /// </remarks>
     public static KeyCell Resolve(StickAnchor anchor, double x, double y, int rows)
     {
+        var (column, row) = ResolveRaw(anchor, x, y, rows);
+
+        return new KeyCell(
+            Math.Clamp((int)Math.Round(column, MidpointRounding.AwayFromZero), anchor.FirstColumn, anchor.LastColumn),
+            Math.Clamp((int)Math.Round(row, MidpointRounding.AwayFromZero), 0, rows - 1));
+    }
+
+    /// <summary>
+    /// Resolves a stick position to its unrounded column and row.
+    /// </summary>
+    /// <remarks>
+    /// The intermediate values are kept for the overlay's selection hysteresis, which rounds them
+    /// with a hold band around each boundary; <see cref="Resolve"/> is this method followed by a
+    /// plain round.
+    /// </remarks>
+    public static (double Column, double Row) ResolveRaw(StickAnchor anchor, double x, double y, int rows)
+    {
+        // A stick's throw is a circle, but the band it points into is a square: pushed fully into
+        // a diagonal it only sits on the rim of the disc, which is the middle of the square's
+        // sides, never its corners. Stretch the push radially so the disc's rim lands on the
+        // square's rim — a full diagonal then reaches the corner key, and the whole band is what
+        // the stick can actually reach.
+        var push = DiscToSquare(Math.Clamp(x, -1, 1), Math.Clamp(y, -1, 1));
+
         // Each side is scaled to its own distance from the anchor, rather than both to half the
         // band. A band of six columns puts its anchor on column 2 while its middle is at 2.5, so a
         // symmetric scale leaves the far column reachable only at exactly full deflection — a knife
@@ -101,14 +125,28 @@ public static class StickAnchorLayout
         //
         // Uneven gain either side is the price, and it is the right one: rest lands on the anchor,
         // and both edges are reached with the same push.
-        var column = Reach(Math.Clamp(x, -1, 1), anchor.Home.Column, anchor.FirstColumn, anchor.LastColumn);
+        var column = Reach(push.X, anchor.Home.Column, anchor.FirstColumn, anchor.LastColumn);
 
         // Y is negated because sticks report up as positive while rows count downwards.
-        var row = Reach(-Math.Clamp(y, -1, 1), anchor.Home.Row, 0, rows - 1);
+        var row = Reach(-push.Y, anchor.Home.Row, 0, rows - 1);
 
-        return new KeyCell(
-            Math.Clamp((int)Math.Round(column, MidpointRounding.AwayFromZero), anchor.FirstColumn, anchor.LastColumn),
-            Math.Clamp((int)Math.Round(row, MidpointRounding.AwayFromZero), 0, rows - 1));
+        return (column, row);
+    }
+
+    /// <summary>
+    /// Stretches a point inside the unit disc outward onto the unit square, keeping each ray's
+    /// direction. Points on the disc's rim land on the square's rim; the centre stays put.
+    /// </summary>
+    private static (double X, double Y) DiscToSquare(double x, double y)
+    {
+        var extent = Math.Max(Math.Abs(x), Math.Abs(y));
+        if (extent <= double.Epsilon)
+            return (0.0, 0.0);
+
+        var radius = Math.Sqrt(x * x + y * y);
+        var stretch = radius / extent;
+
+        return (x * stretch, y * stretch);
     }
 
     /// <summary>Maps a -1..1 push onto the distance available on that side of the anchor.</summary>

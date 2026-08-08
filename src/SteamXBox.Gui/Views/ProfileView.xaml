@@ -65,7 +65,7 @@
         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
             <TextBlock Text="{loc:T Text='Profils'}" Style="{StaticResource HeaderText}" Margin="0,0,0,12"/>
 
-            <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfileItem}"
+            <ListBox ItemsSource="{Binding VisibleProfiles}" SelectedItem="{Binding SelectedProfileItem}"
                      ItemContainerStyle="{StaticResource ProfileListItemStyle}"
                      Background="Transparent" BorderThickness="0" FocusVisualStyle="{x:Null}">
                 <ListBox.ItemTemplate>
@@ -99,18 +99,8 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <Separator Background="{StaticResource BorderBrush}" Margin="0,12"/>
-
-            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                <TextBox Style="{StaticResource TextBoxDark}" Width="150"
-                         Text="{Binding NewProfileName, UpdateSourceTrigger=PropertyChanged}"
-                         VerticalContentAlignment="Center"/>
-                <Button Content="+" Command="{Binding CreateNewProfileCommand}"
-                        Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Padding="12,8"/>
-            </StackPanel>
-
             <TextBlock Text="{Binding StatusMessage}" FontSize="11"
-                       Foreground="{StaticResource AccentOrangeBrush}" Margin="0,4,0,0"
+                       Foreground="{StaticResource AccentOrangeBrush}" Margin="0,12,0,0"
                        TextWrapping="Wrap"/>
         </StackPanel>
 
@@ -124,64 +114,37 @@
             </StackPanel>
         </Border>
 
-        <!-- Right: Default read-only card -->
-        <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource CardBorder}"
-                Visibility="{Binding IsEditingDefault, Converter={StaticResource BoolToVis}}"
-                VerticalAlignment="Stretch">
-            <Grid Margin="40">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <StackPanel Grid.Row="0">
-                    <TextBlock Text="{loc:T Text='Profil par défaut'}" FontSize="18" FontWeight="Bold"
-                               Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center"
-                               Margin="0,0,0,8"/>
-                    <TextBlock Text="{loc:T Text='Le profil « Default » porte les réglages de référence. Il n\'est pas modifiable, mais peut être restauré.'}"
-                               FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"
-                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
-                    <Button Content="{loc:T Text='🔄  Restaurer les paramètres par défaut'}" Command="{Binding ResetToFactoryDefaultsCommand}"
-                            Style="{StaticResource PrimaryButton}" Padding="16,8" HorizontalAlignment="Center"
-                            Margin="0,0,0,16"/>
-                    <TextBlock Text="{loc:T Text='Valeurs par défaut'}" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                </StackPanel>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel TextElement.Foreground="{StaticResource TextSecondaryBrush}" TextElement.FontSize="12">
-                        <TextBlock Text="{loc:T Text='Mouvements :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBlock Text="{loc:T Text='Pad gauche → Scroll (4.8 crans/unité, dead zone 0.002)'}"/>
-                        <TextBlock Text="{loc:T Text='Pad droit → Trackball (380 px/unité, dead zone 0.00015)'}"/>
-                        <TextBlock Text="{loc:T Text='Stick gauche → Flèches directionnelles'}"/>
-                        <TextBlock Text="{loc:T Text='Inversion : pad gauche Y, pad droit Y'}"/>
-                        <TextBlock Text="{loc:T Text='Dead zone stick gauche : 0.06    stick droite : 0.018'}"/>
-                        <TextBlock Text=" " Margin="0,8,0,0"/>
-                        <TextBlock Text="{loc:T Text='Comportement :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBlock Text="{loc:T Text='Accélération : gauche 1.5, droite 2.0'}"/>
-                        <TextBlock Text="{loc:T Text='Inertie : gauche et droite 2.0 (glisse longue)'}"/>
-                        <TextBlock Text="{loc:T Text='Précision fine : 0.10    Seuil de lancer : 70 px'}"/>
-                        <TextBlock Text="{loc:T Text='Continuation en bord : 750 px/s'}"/>
-                        <TextBlock Text=" " Margin="0,8,0,0"/>
-                        <TextBlock Text="{loc:T Text='Boutons :'}" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <TextBlock Text="{loc:T Text='L4 → PrintScreen    R4 → Win+G'}"/>
-                        <TextBlock Text="{loc:T Text='L5 → Win+R          R5 → Alt+F4'}"/>
-                        <TextBlock Text="{loc:T Text='LB → Alt+Tab        RB → Win+Tab'}"/>
-                        <TextBlock Text="{loc:T Text='A → OSK Toggle      B → OSK Toggle'}"/>
-                        <TextBlock Text="{loc:T Text='X → Alt+←           Y → Alt+→'}"/>
-                        <TextBlock Text="{loc:T Text='L3 → Enter          R3 → Aucun'}"/>
-                        <TextBlock Text="{loc:T Text='Menu → Win          View → Win+D'}"/>
-                        <TextBlock Text="{loc:T Text='DPad ↑ → Volume+    DPad ↓ → Volume-'}"/>
-                        <TextBlock Text="{loc:T Text='DPad ← → Back       DPad → → Forward'}"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
-        </Border>
-
         <!-- Right: editor panel -->
         <ScrollViewer Grid.Row="1" Grid.Column="1"
                       Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
                       VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="4,0,0,0"
-                        Visibility="{Binding IsEditingDefault, Converter={StaticResource InvertedBoolToVis}}">
+            <StackPanel Margin="4,0,0,0">
+
+                <!-- Editor header: who the current edit is for -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{loc:T Text='PROFIL DE LA MANETTE'}" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{Binding TargetName}" FontSize="18" FontWeight="Bold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Text="{Binding TargetContext}" FontSize="13"
+                                   Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextDimBrush}"
+                                   TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Visibility="{Binding IsDefaultEdit, Converter={StaticResource BoolToVis}}"
+                                   Text="{loc:T Text='Modifier ce profil crée ou écrase le profil de la manette sélectionnée ; « Default » n\'est jamais modifié.'}"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="{loc:T Text='🔄  Restaurer les paramètres par défaut'}"
+                            Command="{Binding ResetToFactoryDefaultsCommand}"
+                            Style="{StaticResource SecondaryButton}" Padding="12,8"
+                            VerticalAlignment="Top" Margin="12,0,0,0"
+                            Visibility="{Binding IsDefaultEdit, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
 
                 <!-- Action buttons row -->
                 <Grid Margin="0,0,0,16">
@@ -191,12 +154,14 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Content="{loc:T Text='Sauvegarder'}" Command="{Binding SaveProfileCommand}"
-                            Style="{StaticResource PrimaryButton}" Margin="0,0,4,0" Height="36" FontSize="13"/>
+                            Style="{StaticResource PrimaryButton}" Margin="0,0,4,0" Height="36" FontSize="13"
+                            IsEnabled="{Binding HasTarget}"/>
                     <Button Grid.Column="1" Content="{loc:T Text='Appliquer'}" Command="{Binding ApplyProfileCommand}"
-                            Style="{StaticResource SecondaryButton}" Margin="4,0" Height="36" FontSize="13"/>
-                    <Button Grid.Column="2" Content="{loc:T Text='Supprimer'}" Command="{Binding DeleteActiveProfileCommand}"
-                            CommandParameter="{Binding ActiveEdit}"
-                            Style="{StaticResource DangerButton}" Margin="4,0,0,0" Height="36" FontSize="13"/>
+                            Style="{StaticResource SecondaryButton}" Margin="4,0" Height="36" FontSize="13"
+                            IsEnabled="{Binding HasTarget}"/>
+                    <Button Grid.Column="2" Content="{loc:T Text='Supprimer'}" Command="{Binding DeleteSelectedControllerProfileCommand}"
+                            Style="{StaticResource DangerButton}" Margin="4,0,0,0" Height="36" FontSize="13"
+                            IsEnabled="{Binding HasTarget}"/>
                 </Grid>
 
                 <!-- The "Paramètres généraux" card lived here and held only a Profile/Xbox360 mode
@@ -300,6 +265,62 @@
                         <TextBlock Text="{loc:T Text='Mouvements'}" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
 
+                        <!-- Stick-only families (PS5, Xbox): a stick has no trackpads, so the card
+                             shows only the rows that act on the sticks. Pad-only rows would be a
+                             lie about what this controller can do. -->
+                        <StackPanel Visibility="{Binding IsStickFamily, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Stick gauche'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                          ItemsSource="{Binding LeftStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionLeftStick}"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Stick droite'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                          ItemsSource="{Binding RightStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionRightStick}"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:T Text='Sensibilité sticks'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding XboxStickSensitivityDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickSensitivityPercent}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:T Text='Courbe sticks'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="3" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding XboxStickCurveDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickCurvePercent}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:T Text='Dead zone sticks'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding XboxStickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickDeadZonePercent}"/>
+                                </DockPanel>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Pad families (Steam): the full card. -->
+                        <StackPanel Visibility="{Binding IsPadFamily, Converter={StaticResource BoolToVis}}">
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="140"/>
@@ -387,20 +408,17 @@
                             <ComboBox Grid.Row="5" Grid.Column="1" Style="{StaticResource ComboBoxDark}" Margin="0,4,12,4"
                                       ItemsSource="{Binding LeftStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionLeftStick}"/>
 
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="{loc:T Text='Stick droite'}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
+                                      ItemsSource="{Binding RightStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionRightStick}"/>
+
                             <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Dead zone stick'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,12,4">
                                 <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
                                            Text="{Binding StickDeadZoneDisplay}"/>
                                 <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickDeadZonePercent}"/>
-                            </DockPanel>
-
-                            <TextBlock Grid.Row="6" Grid.Column="2" Text="{loc:T Text='Dead zone stick'}" VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <DockPanel Grid.Row="6" Grid.Column="3" Margin="0,4,0,4">
-                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
-                                           Text="{Binding XboxStickDeadZoneDisplay}"/>
-                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickDeadZonePercent}"/>
                             </DockPanel>
 
                         </Grid>
@@ -531,6 +549,7 @@
                         <TextBlock Text="{loc:T Text='Précision fine : force de la réduction sur un petit geste. Portée précision : distance sur laquelle elle s\'applique avant de revenir à la normale. Seuil de lancer : en dessous, relâcher ne projette pas le curseur. Anti-frôlement : distance qu\'un nouveau contact doit parcourir avant d\'agir.'}"
                                    FontSize="11" Foreground="{StaticResource TextDimBrush}" Margin="0,8,0,0"
                                    TextWrapping="Wrap"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

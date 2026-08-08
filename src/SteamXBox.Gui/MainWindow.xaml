@@ -62,22 +62,13 @@
                                 Margin="0,0,0,6"
                                 ToolTip="{loc:T Text='Rejoindre le Discord'}"/>
 
-                        <Border Style="{StaticResource StatusCard}">
-                            <StackPanel>
-                                <TextBlock Text="{loc:T Text='Status'}" FontSize="10" Foreground="{StaticResource TextDimBrush}"
-                                           FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding StatusText}" FontSize="12" FontWeight="SemiBold"
-                                           Foreground="{Binding IsCoreRunning, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource StatusCard}" Margin="0,6,0,0">
-                            <StackPanel>
-                                <TextBlock Text="{loc:T Text='Device'}" FontSize="10" Foreground="{StaticResource TextDimBrush}"
-                                           FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding DeviceName}" FontSize="11"
-                                           Foreground="{Binding IsDeviceConnected, Converter={x:Static views:StatusToColorConverter.Instance}}"/>
-                            </StackPanel>
-                        </Border>
+                        <!--
+                            Les cartes Status et Device ont été retirées. Elles répondaient à la même
+                            question que la bande de manettes — qu'est-ce qui est branché — depuis une
+                            détection séparée qui ne voyait que les périphériques Valve. Elles
+                            affichaient donc « déconnecté » avec une DualSense en main, à côté d'une
+                            liste qui la montrait. Deux vérités concurrentes valent moins qu'une.
+                        -->
                     </StackPanel>
 
                     <!-- RadioButtons, not Buttons: the group gives the active tab a real checked

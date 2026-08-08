@@ -20,16 +20,15 @@ namespace Sc2Xboxed.Core.Runtime;
 public static class CoreCommandLine
 {
     /// <summary>Arguments for a normal run: virtual gamepad up, mapping loaded.</summary>
-    /// <param name="profileName">Profile whose mapping the core loads.</param>
+    /// <param name="profileName">Profile whose mapping and Xbox layout the core loads.</param>
     /// <param name="mode">Starting mode, <c>profile</c> or <c>xbox360</c>.</param>
     /// <param name="switchButton">Button that toggles between the two modes.</param>
-    /// <param name="xboxProfile">Button mapping used while in Xbox mode.</param>
-    public static string BuildRun(string profileName, string mode, string switchButton, string xboxProfile)
+    public static string BuildRun(string profileName, string mode, string switchButton)
     {
         // Quoted: profile names are user-chosen and routinely contain spaces. Unquoted, "Mon profil"
         // arrives as two arguments and the core loads a profile that does not exist.
         return $"xbox-run --restart --start-mode {Normalise(mode)} --switch-button {Fallback(switchButton, DefaultSwitchButton)} "
-             + $"--profile \"{Fallback(profileName, DefaultProfile)}\" --xbox-profile \"{Fallback(xboxProfile, DefaultProfile)}\"";
+             + $"--profile \"{Fallback(profileName, DefaultProfile)}\"";
     }
 
     /// <summary>Profile used when none is recorded yet.</summary>

@@ -14,12 +14,18 @@ public sealed class HapticRequestReceiver : IAsyncDisposable
     private readonly CancellationTokenSource _cancellation = new();
     private Task? _worker;
 
+    /// <summary>Pipe this receiver listens on; one per keyboard.</summary>
+    private readonly string _pipeName;
+
+    /// <param name="pipeName">Pipe to listen on. Defaults to the single-keyboard name.</param>
     public HapticRequestReceiver(
         Func<HapticCommand, CancellationToken, ValueTask> onRequest,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        string? pipeName = null)
     {
         _onRequest = onRequest;
         _log = log;
+        _pipeName = string.IsNullOrWhiteSpace(pipeName) ? HapticRequestWire.PipeName : pipeName;
     }
 
     public void Start()
@@ -34,7 +40,7 @@ public sealed class HapticRequestReceiver : IAsyncDisposable
             try
             {
                 using var server = new NamedPipeServerStream(
-                    HapticRequestWire.PipeName,
+                    _pipeName,
                     PipeDirection.In,
                     1,
                     PipeTransmissionMode.Byte,

@@ -17,9 +17,8 @@ public class OverlayPlacementTests
         => OverlayPlacement.Place(BoardW, BoardH, field, screen ?? Screen).Bounds;
 
     /// <summary>
-    /// Beside is the default. Neither the Win32 caret nor UI Automation reliably returns the caret,
-    /// so the board keeps clear of the whole field sideways rather than guessing at a safe line
-    /// inside it.
+    /// Beside is preferred over above, and the left side over the right: the board's frame edge is
+    /// the boundary with the field.
     /// </summary>
     [Fact]
     public void SitsBesideAFieldWhenThereIsRoom()
@@ -30,6 +29,44 @@ public class OverlayPlacementTests
 
         Assert.Equal(PlacementKind.BesideField, result.Kind);
         Assert.False(result.Bounds.IntersectsWith(field));
+    }
+
+    /// <summary>The floating board goes to the left of the field, flush against it.</summary>
+    [Fact]
+    public void PlacesLeftOfTheFieldWithTheBoardEdgeAsBoundary()
+    {
+        var field = new ScreenRect(900, 400, 300, 28);
+
+        var result = OverlayPlacement.Place(BoardW, BoardH, field, Screen);
+
+        Assert.Equal(PlacementKind.BesideField, result.Kind);
+        Assert.Equal(field.X, result.Bounds.Right);
+        Assert.False(result.Bounds.IntersectsWith(field), $"overlap: {result.Bounds}");
+    }
+
+    /// <summary>No room on the left: the board goes above, centred on the field.</summary>
+    [Fact]
+    public void GoesAboveWhenThereIsNoRoomLeft()
+    {
+        var field = new ScreenRect(100, 400, 300, 28);
+
+        var result = OverlayPlacement.Place(BoardW, BoardH, field, Screen);
+
+        Assert.Equal(PlacementKind.AboveField, result.Kind);
+        Assert.True(result.Bounds.Bottom <= field.Y, $"still over the field: {result.Bounds}");
+    }
+
+    /// <summary>No room left and none above: the board goes to the right, flush against the field.</summary>
+    [Fact]
+    public void GoesRightWhenThereIsNoRoomLeftOrAbove()
+    {
+        var field = new ScreenRect(100, 0, 300, 28);
+
+        var result = OverlayPlacement.Place(BoardW, BoardH, field, Screen);
+
+        Assert.Equal(PlacementKind.BesideField, result.Kind);
+        Assert.Equal(field.Right, result.Bounds.X);
+        Assert.False(result.Bounds.IntersectsWith(field), $"overlap: {result.Bounds}");
     }
 
     /// <summary>The case the old layout got wrong: a field low on the screen.</summary>
@@ -88,7 +125,10 @@ public class OverlayPlacementTests
         Assert.True(Math.Abs(fieldCentre - boardCentre) <= 2, $"not aligned: {boardCentre} vs {fieldCentre}");
     }
 
-    /// <summary>No caret information: behave exactly as the overlay always did.</summary>
+    /// <summary>
+    /// No caret information: behave exactly as the overlay always did — centred at the bottom of the
+    /// active screen's work area, which is the fixed (non-floating) mode's placement.
+    /// </summary>
     [Fact]
     public void FallsBackToTheScreenBottomWithoutAField()
     {
@@ -96,6 +136,10 @@ public class OverlayPlacementTests
 
         Assert.Equal(PlacementKind.ScreenBottom, result.Kind);
         Assert.True(result.Bounds.Bottom <= Screen.Bottom);
+
+        var screenCentre = Screen.X + (Screen.Width / 2);
+        var boardCentre = result.Bounds.X + (result.Bounds.Width / 2);
+        Assert.True(Math.Abs(screenCentre - boardCentre) <= 1, $"not centred: {result.Bounds}");
     }
 
     /// <summary>
@@ -254,16 +298,16 @@ public class OverlayPlacementTests
         Assert.False(result.Bounds.IntersectsWith(documentColumn), $"still on the text: {result.Bounds}");
     }
 
-    /// <summary>Beside means the side with more room, not always the right.</summary>
+    /// <summary>Beside means the left side first, whatever the room on the right.</summary>
     [Fact]
-    public void ChoosesTheSideWithMoreRoom()
+    public void PrefersTheLeftSideWhenItFits()
     {
         var againstTheRightEdge = new ScreenRect(1300, 0, 600, 1080);
 
         var result = OverlayPlacement.Place(BoardW, BoardH, againstTheRightEdge, isCaret: true, Screen);
 
         Assert.Equal(PlacementKind.BesideField, result.Kind);
-        Assert.True(result.Bounds.Right <= againstTheRightEdge.X, $"expected a move to the left: {result.Bounds}");
+        Assert.Equal(againstTheRightEdge.X, result.Bounds.Right);
     }
 
     /// <summary>A field wedged against the bottom leaves no room either side; it still must not be covered.</summary>

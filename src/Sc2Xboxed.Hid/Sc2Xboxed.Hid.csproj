@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Windows\Sc2Xboxed.Windows.csproj" />
   </ItemGroup>
 
   <ItemGroup>

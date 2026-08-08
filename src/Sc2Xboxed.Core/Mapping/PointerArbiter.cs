@@ -29,7 +29,7 @@ namespace Sc2Xboxed.Core.Mapping;
 /// </remarks>
 public sealed class PointerArbiter
 {
-    private readonly Dictionary<string, (int X, int Y, int Wheel)> _pending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int X, int Y, int Wheel, int HorizontalWheel)> _pending = new(StringComparer.Ordinal);
 
     /// <summary>Controllers that asked to move the pointer since the last resolution.</summary>
     public int Contenders => _pending.Count(p => p.Value.X != 0 || p.Value.Y != 0);
@@ -42,37 +42,43 @@ public sealed class PointerArbiter
     /// makes contention invisible: two controllers each moving a little would both be obeyed in
     /// turn, and the pointer would jitter between two intents instead of refusing to take either.
     /// </remarks>
-    public void Offer(string controllerId, int pixelsX, int pixelsY, int wheelNotches)
+    public void Offer(string controllerId, int pixelsX, int pixelsY, int wheelNotches, int horizontalWheelNotches = 0)
     {
-        if (pixelsX == 0 && pixelsY == 0 && wheelNotches == 0)
+        if (pixelsX == 0 && pixelsY == 0 && wheelNotches == 0 && horizontalWheelNotches == 0)
         {
             return;
         }
 
         _pending.TryGetValue(controllerId, out var current);
-        _pending[controllerId] = (current.X + pixelsX, current.Y + pixelsY, current.Wheel + wheelNotches);
+        _pending[controllerId] = (
+            current.X + pixelsX,
+            current.Y + pixelsY,
+            current.Wheel + wheelNotches,
+            current.HorizontalWheel + horizontalWheelNotches);
     }
 
     /// <summary>
     /// What the pointer should actually do, and clears the slate for the next window.
     /// </summary>
     /// <remarks>
-    /// The wheel is arbitrated separately from the motion. They are different surfaces of the same
+    /// The wheels are arbitrated separately from the motion. They are different surfaces of the same
     /// desktop and one is far more often incidental — a thumb resting on a stick produces scroll
     /// long before it produces travel — so letting a stray notch block another player's pointer
     /// would make contention look like a fault.
     /// </remarks>
-    public (int PixelsX, int PixelsY, int Wheel) Resolve()
+    public (int PixelsX, int PixelsY, int Wheel, int HorizontalWheel) Resolve()
     {
         var movers = _pending.Where(p => p.Value.X != 0 || p.Value.Y != 0).ToList();
         var scrollers = _pending.Where(p => p.Value.Wheel != 0).ToList();
+        var horizontalScrollers = _pending.Where(p => p.Value.HorizontalWheel != 0).ToList();
 
         var motion = movers.Count == 1 ? (movers[0].Value.X, movers[0].Value.Y) : (0, 0);
         var wheel = scrollers.Count == 1 ? scrollers[0].Value.Wheel : 0;
+        var horizontalWheel = horizontalScrollers.Count == 1 ? horizontalScrollers[0].Value.HorizontalWheel : 0;
 
         _pending.Clear();
 
-        return (motion.Item1, motion.Item2, wheel);
+        return (motion.Item1, motion.Item2, wheel, horizontalWheel);
     }
 
     /// <summary>Forgets a controller's pending motion, for one that has gone away mid-push.</summary>

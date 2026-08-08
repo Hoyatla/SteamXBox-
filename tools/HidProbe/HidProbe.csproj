@@ -9,6 +9,7 @@
     <!-- Deliberately not part of the solution: a read-only bench instrument, not product code. -->
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Sc2Xboxed.Windows\Sc2Xboxed.Windows.csproj" />
     <PackageReference Include="HidSharp" Version="2.6.4" />
   </ItemGroup>
 </Project>

@@ -22,7 +22,10 @@ public enum PlacementKind
     /// <summary>Above it, because there was not enough room below.</summary>
     AboveField,
 
-    /// <summary>To one side, because the field spans the height of the screen.</summary>
+    /// <summary>
+    /// To one side of the field. The left is preferred, the right only when there is no room
+    /// above either.
+    /// </summary>
     BesideField,
 
     /// <summary>
@@ -46,9 +49,11 @@ public readonly record struct OverlayPlacementResult(ScreenRect Bounds, Placemen
 /// field and the keys, and a field near the bottom — a chat box, a search bar in a taskbar app —
 /// disappears behind the keyboard entirely.
 ///
-/// So the board is sized to its own content and moved to the field. Below it by preference, above it
-/// when there is no room, and never overlapping it. When nothing is known about the field, it falls
-/// back to the bottom of the screen, which is where it always used to be.
+/// So the board is sized to its own content and moved to the field. To its left by preference, with
+/// the board's own frame edge acting as the boundary so the field is never covered; above it when
+/// there is no room on the left; to its right when there is no room above either. When nothing is
+/// known about the field, it falls back to the bottom of the screen, which is where it always used
+/// to be.
 /// </remarks>
 public static class OverlayPlacement
 {
@@ -99,33 +104,47 @@ public static class OverlayPlacement
             return new OverlayPlacementResult(AtScreenBottom(width, height, workArea), PlacementKind.ScreenBottom);
         }
 
-        // Centred on the field horizontally: the hands are already there, and it keeps the keyboard
-        // visually attached to what it is typing into.
+        // Centred on the field horizontally, used by every placement that sits above or below it.
         var x = Clamp(
             field.X + (field.Width / 2) - (width / 2),
             workArea.X + ScreenMargin,
             workArea.Right - ScreenMargin - width);
 
-        // Beside first, deliberately. Measured against a maximised Notepad, neither the Win32 caret
-        // nor UI Automation returns the caret: both hand back the whole edit area. Placing below or
-        // above "the field" then means placing inside the text. Going to the side is the only rule
-        // that keeps the board off the typing area without knowing where the caret is.
-        var beside = PlaceBeside(field, workArea, width, height);
-        if (beside is not null)
+        // Beside first, and the left side first of all. The board's frame edge is the boundary with
+        // the field: the board sits flush against the field's left and never covers a line of text.
+        // Measured against a maximised Notepad, neither the Win32 caret nor UI Automation returns the
+        // caret: both hand back the whole edit area. Placing to the side is the only rule that keeps
+        // the board off the typing area without knowing where the caret is.
+        if (field.X - workArea.X >= width + ScreenMargin)
         {
-            return new OverlayPlacementResult(beside.Value, PlacementKind.BesideField);
+            var y = Clamp(
+                field.Y + (field.Height / 2) - (height / 2),
+                workArea.Y + ScreenMargin,
+                workArea.Bottom - ScreenMargin - height);
+
+            return new OverlayPlacementResult(
+                new ScreenRect(field.X - width, y, width, height),
+                PlacementKind.BesideField);
         }
 
-        var below = field.Bottom + Gap;
-        if (below + height <= workArea.Bottom - ScreenMargin)
-        {
-            return new OverlayPlacementResult(new ScreenRect(x, below, width, height), PlacementKind.BelowField);
-        }
-
+        // No room on the left: above, centred on the field.
         var above = field.Y - Gap - height;
         if (above >= workArea.Y + ScreenMargin)
         {
             return new OverlayPlacementResult(new ScreenRect(x, above, width, height), PlacementKind.AboveField);
+        }
+
+        // No room above either: the right side, flush against the field as the left one was.
+        if (workArea.Right - field.Right >= width + ScreenMargin)
+        {
+            var y = Clamp(
+                field.Y + (field.Height / 2) - (height / 2),
+                workArea.Y + ScreenMargin,
+                workArea.Bottom - ScreenMargin - height);
+
+            return new OverlayPlacementResult(
+                new ScreenRect(field.Right, y, width, height),
+                PlacementKind.BesideField);
         }
 
         // Nowhere free. Overlap is now unavoidable, so pick the edge furthest from the top of the
@@ -141,40 +160,6 @@ public static class OverlayPlacement
         return new OverlayPlacementResult(
             new ScreenRect(x, overlapY, width, height),
             PlacementKind.Overlapping);
-    }
-
-    /// <summary>
-    /// Places the board to the left or right of the field, on the side with more room.
-    /// Returns null when neither side can hold it.
-    /// </summary>
-    private static ScreenRect? PlaceBeside(ScreenRect field, ScreenRect workArea, int width, int height)
-    {
-        var y = Clamp(
-            field.Y + (field.Height / 2) - (height / 2),
-            workArea.Y + ScreenMargin,
-            workArea.Bottom - ScreenMargin - height);
-
-        var roomRight = workArea.Right - field.Right;
-        var roomLeft = field.X - workArea.X;
-        var needed = width + Gap + ScreenMargin;
-
-        // The wider side first, so the board keeps as much clearance as the screen allows.
-        if (roomRight >= roomLeft)
-        {
-            if (roomRight >= needed)
-            {
-                return new ScreenRect(field.Right + Gap, y, width, height);
-            }
-
-            return roomLeft >= needed ? new ScreenRect(field.X - Gap - width, y, width, height) : null;
-        }
-
-        if (roomLeft >= needed)
-        {
-            return new ScreenRect(field.X - Gap - width, y, width, height);
-        }
-
-        return roomRight >= needed ? new ScreenRect(field.Right + Gap, y, width, height) : null;
     }
 
     private static ScreenRect AtScreenBottom(int width, int height, ScreenRect workArea)

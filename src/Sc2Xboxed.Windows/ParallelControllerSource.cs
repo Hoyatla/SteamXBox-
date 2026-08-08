@@ -34,12 +34,39 @@ public sealed class ParallelControllerSource : IMultiControllerSource
 {
     private readonly List<(ControllerIdentity Identity, IPhysicalControllerSource Source)> _children;
     private readonly Action<string>? _log;
+    private readonly Action<ControllerIdentity>? _onLeft;
     private readonly Func<IReadOnlyList<(ControllerIdentity Identity, IPhysicalControllerSource Source)>>? _rescan;
     private readonly TimeSpan _rescanInterval;
     private readonly List<Task> _liveReaders = [];
+    private readonly List<Task> _allReaders = [];
+    private int _enumerations;
+
+    /// <summary>
+    /// Reader tasks still running, and how many times the stream has been enumerated.
+    /// </summary>
+    /// <remarks>
+    /// Counted because a frame rate that climbs on its own has exactly two explanations and they
+    /// need opposite fixes: several readers on one device, or one reader per device with the device
+    /// simply emitting faster. From outside they look identical — the controller list stays correct
+    /// either way, because duplicate readers all carry the same identity and collapse into one
+    /// session.
+    ///
+    /// <see cref="Enumerations"/> is the sharper of the two. This class exposes an iterator, and an
+    /// iterator re-entered builds a second channel and a second watcher while the first set of
+    /// readers keeps running. Nothing stops them, so their number can only grow.
+    /// </remarks>
+    public int ActiveReaders => _allReaders.Count(t => !t.IsCompleted);
+
+    /// <inheritdoc cref="ActiveReaders"/>
+    public int Enumerations => _enumerations;
 
     /// <param name="children">Each controller, with the source that reads it.</param>
     /// <param name="log">Optional diagnostic sink.</param>
+    /// <param name="onLeft">
+    /// Invoked from the reader's own task when a controller's stream ends. The sink uses it to
+    /// release the controller's virtual pad so a game does not keep a phantom player whose pad went
+    /// away.
+    /// </param>
     /// <param name="rescan">
     /// Re-enumerates what is attached. Supplied rather than performed here so this class stays
     /// unaware of how controllers are discovered; null disables hot-plug entirely.
@@ -48,11 +75,13 @@ public sealed class ParallelControllerSource : IMultiControllerSource
     public ParallelControllerSource(
         IEnumerable<(ControllerIdentity Identity, IPhysicalControllerSource Source)> children,
         Action<string>? log = null,
+        Action<ControllerIdentity>? onLeft = null,
         Func<IReadOnlyList<(ControllerIdentity Identity, IPhysicalControllerSource Source)>>? rescan = null,
         TimeSpan? rescanInterval = null)
     {
         _children = children.ToList();
         _log = log;
+        _onLeft = onLeft;
         _rescan = rescan;
         _rescanInterval = rescanInterval ?? TimeSpan.FromSeconds(3);
     }
@@ -70,10 +99,17 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         ChannelWriter<ControllerFrame> writer,
         CancellationToken cancellationToken)
     {
-        var known = _children.Select(c => c.Identity.Id).ToHashSet(StringComparer.Ordinal);
-
         while (!cancellationToken.IsCancellationRequested)
         {
+            // Recomputed each round rather than kept, so a controller that left is genuinely
+            // forgotten and switching it back on brings it back. A set held across rounds made a
+            // departure permanent for the rest of the session.
+            HashSet<string> known;
+            lock (_children)
+            {
+                known = _children.Select(c => c.Identity.Id).ToHashSet(StringComparer.Ordinal);
+            }
+
             try
             {
                 await Task.Delay(_rescanInterval, cancellationToken).ConfigureAwait(false);
@@ -99,7 +135,9 @@ public sealed class ParallelControllerSource : IMultiControllerSource
             {
                 known.Add(child.Identity.Id);
                 _children.Add(child);
-                _liveReaders.Add(PumpAsync(child.Identity, child.Source, writer, cancellationToken));
+                var pump = PumpAsync(child.Identity, child.Source, writer, cancellationToken);
+                _liveReaders.Add(pump);
+                _allReaders.Add(pump);
                 _log?.Invoke($"controller arrived: {child.Identity.DisplayName} [{child.Identity.Id}]");
             }
         }
@@ -107,6 +145,28 @@ public sealed class ParallelControllerSource : IMultiControllerSource
 
     public IReadOnlyList<ControllerIdentity> Controllers
         => _children.Select(c => c.Identity).ToList();
+
+    /// <summary>
+    /// Asks one controller to power itself off.
+    /// </summary>
+    /// <param name="identity">The controller whose frame triggered the chord. Not "any attached pad":
+    /// with several players, only the one whose buttons were held should go to sleep.</param>
+    /// <returns>True when the command was handed to the device; false when the controller was gone,
+    /// does not support power-off (an Xbox pad), or refused.</returns>
+    /// <remarks>
+    /// The matching controller could have left between the frame arriving and this call. Locking
+    /// does not help with that — a device can always disappear mid-stream — so this reports the
+    /// absence as false rather than throwing, which is the same answer the sources give when they
+    /// have no open stream.
+    /// </remarks>
+    public bool TrySendPowerOff(ControllerIdentity identity)
+    {
+        lock (_children)
+        {
+            var child = _children.FirstOrDefault(c => c.Identity.Id == identity.Id);
+            return child.Source is IPowerControl power && power.SendPowerOff();
+        }
+    }
 
     public async IAsyncEnumerable<ControllerFrame> ReadAllAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -127,9 +187,13 @@ public sealed class ParallelControllerSource : IMultiControllerSource
             FullMode = BoundedChannelFullMode.DropOldest,
         });
 
+        _enumerations++;
+
         var readers = _children
             .Select(child => PumpAsync(child.Identity, child.Source, channel.Writer, cancellationToken))
             .ToList();
+
+        _allReaders.AddRange(readers);
 
         // Hot-plug. Without it a controller switched on after the bridge started is never read at
         // all, and the only remedy is restarting the Core by hand — which is what "no controller is
@@ -213,6 +277,30 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         catch (Exception ex)
         {
             _log?.Invoke($"controller {identity.DisplayName} stopped: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            // Removed once its stream ends. The set only ever grew before: a controller that went
+            // away stayed listed for the rest of the session, and — worse — the arrivals watcher
+            // still considered it known, so switching it back on never brought it back.
+            lock (_children)
+            {
+                _children.RemoveAll(c => c.Identity.Id == identity.Id);
+            }
+
+            _log?.Invoke($"controller left: {identity.DisplayName} [{identity.Id}]");
+
+            // Let the consumer release whatever that controller owned — its virtual pad above all.
+            // Without this a pad whose controller went to sleep stays visible to games as a player
+            // who never presses anything.
+            try
+            {
+                _onLeft?.Invoke(identity);
+            }
+            catch (Exception ex)
+            {
+                _log?.Invoke($"releasing {identity.DisplayName} after departure: {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 

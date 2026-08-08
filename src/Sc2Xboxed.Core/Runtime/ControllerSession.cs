@@ -1,3 +1,4 @@
+using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Mapping;
 
 namespace Sc2Xboxed.Core.Runtime;
@@ -39,11 +40,27 @@ namespace Sc2Xboxed.Core.Runtime;
 /// </remarks>
 public sealed class ControllerSession
 {
-    public ControllerSession(ProfileMapper profileMapper, InputModeHandler modeSwitcher)
+    public ControllerSession(
+        ProfileMapper profileMapper,
+        InputModeHandler modeSwitcher,
+        DefaultSteamControllerMapper? xboxMapper = null)
     {
         ProfileMapper = profileMapper;
         ModeSwitcher = modeSwitcher;
+        XboxMapper = xboxMapper ?? new DefaultSteamControllerMapper();
     }
+
+    /// <summary>
+    /// What this controller sends a game in Xbox mode.
+    /// </summary>
+    /// <remarks>
+    /// Per controller for two reasons at once. It carries the button layout and tuning, which are
+    /// the point of "one Xbox profile per controller" — held statically, one layout served the whole
+    /// process and every assignment was recorded, displayed, persisted and ignored. And it is
+    /// stateful across frames like everything else here, so sharing it would blur two players'
+    /// inputs into one even with identical layouts.
+    /// </remarks>
+    public DefaultSteamControllerMapper XboxMapper { get; }
 
     /// <summary>Desktop mapping, and the button edges it detects.</summary>
     public ProfileMapper ProfileMapper { get; }
@@ -58,11 +75,50 @@ public sealed class ControllerSession
     /// </remarks>
     public InputModeHandler ModeSwitcher { get; }
 
+    /// <summary>
+    /// Power-off chord detection for this controller.
+    /// </summary>
+    /// <remarks>
+    /// Per controller for the same reason the mode chord is: Menu + View held by one player must not
+    /// be interrupted by a second controller's idle frames. Before this was per session, a pad sat
+    /// next to the one holding the chord reset <c>_heldSince</c> every frame of its own, so a two
+    /// second hold never accumulated — the chord read as never fired. The power-off it triggers is
+    /// still applied to this controller only.
+    /// </remarks>
+    public ButtonChordDetector PowerOffChordDetector { get; set; } = new(
+        SteamControllerButtons.Menu | SteamControllerButtons.View,
+        TimeSpan.FromSeconds(2));
+
+    /// <summary>Withholds the chord buttons of this controller until they resolve into a chord or a press.</summary>
+    public ChordButtonGate PowerOffChordGate { get; set; } = new(
+        SteamControllerButtons.Menu | SteamControllerButtons.View);
+
     /// <summary>Sub-pixel remainder of this controller's stick motion.</summary>
     public StickPointerCarry Carry;
 
     /// <summary>Timestamp of this controller's previous frame.</summary>
     public TimeSpan LastFrame { get; set; } = TimeSpan.Zero;
+
+    /// <summary>Which controller this session belongs to, for the diagnostics.</summary>
+    public string Id { get; init; } = "";
+
+    /// <summary>
+    /// Largest right-stick deflection seen since the last counter line, and the last frame gap.
+    /// </summary>
+    /// <remarks>
+    /// Per controller for the same reason everything else here is, and it was the last measurement
+    /// still pooled across all of them. A single peak over every pad answers "did any stick move",
+    /// which is not the question: with a phantom pad reporting zeros beside a real one, the pooled
+    /// figure can read zero while a stick is at full deflection — and it did, which is what sent
+    /// this investigation after the wrong suspect.
+    /// </remarks>
+    public double PeakX { get; set; }
+
+    /// <inheritdoc cref="PeakX"/>
+    public double PeakY { get; set; }
+
+    /// <inheritdoc cref="PeakX"/>
+    public double LastGapMs { get; set; }
 }
 
 /// <summary>

@@ -11,6 +11,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\Sc2Xboxed.Hid\Sc2Xboxed.Hid.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Windows\Sc2Xboxed.Windows.csproj" />
     <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
     <ProjectReference Include="..\SteamXBox.Plugins\SteamXBox.Plugins.csproj" />
   </ItemGroup>

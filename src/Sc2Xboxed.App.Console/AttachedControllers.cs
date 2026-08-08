@@ -54,6 +54,9 @@ public static class AttachedControllers
         string forcedKind = "",
         Action<string>? log = null)
     {
+        // The durable identity comes from the Windows device tree; Core must not know how.
+        ControllerIdentityFactory.DurableKeyResolver ??= path => DeviceTree.DurableKeyFor(path, log);
+
         var opened = new List<(ControllerIdentity, IPhysicalControllerSource)>();
 
         var wantsSteam = forcedKind is "" or "steam";
@@ -137,5 +140,71 @@ public static class AttachedControllers
         }
 
         return opened;
+    }
+
+    /// <summary>
+    /// Whether any controller of the kinds <paramref name="forcedKind"/> allows is attached right now.
+    /// </summary>
+    /// <remarks>
+    /// The enumeration-only counterpart of <see cref="Open"/>. The wait loops use it rather than
+    /// <see cref="Open"/> itself because building a full source just to detect a controller would
+    /// open streams that have to be closed again — and the XInput probe stays intersected with the
+    /// physical snapshot so our own virtual pads are never mistaken for a returning controller.
+    ///
+    /// The families that a powered-off or reconnected controller belongs to are all three: Steam,
+    /// PlayStation and Xbox. Detecting only the Valve one is what left the Core standing by forever
+    /// after a Steam Controller was switched off and a DualSense switched on instead.
+    /// </remarks>
+    public static bool AnyAttached(
+        IReadOnlyCollection<int> physicalSlots,
+        string forcedKind = "",
+        Action<string>? log = null)
+    {
+        if (forcedKind is "" or "steam")
+        {
+            try
+            {
+                if (new SteamHidDiscovery(log).FindPreferredControllerDevice() is not null)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // A family that fails to enumerate must not hide the others.
+            }
+        }
+
+        if (forcedKind is "" or "dualsense")
+        {
+            try
+            {
+                if (DualSenseControllerSource.Discover(log).Count > 0)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // A family that fails to enumerate must not hide the others.
+            }
+        }
+
+        if (forcedKind is "" or "xinput")
+        {
+            try
+            {
+                if (XInputControllerSource.ConnectedSlots().Any(physicalSlots.Contains))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // A family that fails to enumerate must not hide the others.
+            }
+        }
+
+        return false;
     }
 }

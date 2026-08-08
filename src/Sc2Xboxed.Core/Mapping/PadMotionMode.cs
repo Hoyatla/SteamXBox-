@@ -13,11 +13,14 @@ public enum PadMotionMode
     None,
 }
 
-/// <summary>What the left stick drives in Profile mode.</summary>
+/// <summary>What the sticks drive in Profile mode.</summary>
 public enum StickMotionMode
 {
     /// <summary>Holds the arrow keys while pushed past the dead zone.</summary>
     ArrowKeys,
+
+    /// <summary>Drives the mouse pointer (right stick) or the wheel (left stick).</summary>
+    Pointer,
 
     None,
 }

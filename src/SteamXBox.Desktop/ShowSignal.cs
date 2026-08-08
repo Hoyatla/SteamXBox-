@@ -42,9 +42,7 @@ internal static class ShowSignal
             _timer!.Stop();
             _timer = null;
 
-            window.Show();
-            window.WindowState = WindowState.Maximized;
-            window.Activate();
+            OverlayShower.Show(window);
         };
 
         _timer.Start();

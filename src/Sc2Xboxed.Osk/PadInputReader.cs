@@ -4,21 +4,28 @@ using Sc2Xboxed.Core.Input;
 
 namespace Sc2Xboxed.Osk;
 
+/// <summary>One decoded frame from the pad pipe, with the kind of controller it came from.</summary>
+public readonly record struct OskPadFrame(OskControllerKind Kind, ControllerState State);
+
 public sealed class PadInputReader : IAsyncDisposable
 {
-    private const string PipeName = "SteamXBox_OskPad";
+    private readonly string _pipeName;
+
+    /// <param name="pipeName">Pipe to read. Must match what the bridge serves for this keyboard.</param>
+    public PadInputReader(string? pipeName = null)
+        => _pipeName = string.IsNullOrWhiteSpace(pipeName) ? "SteamXBox_OskPad" : pipeName;
     private NamedPipeClientStream? _pipe;
 
     public bool IsOpen => _pipe is not null && _pipe.IsConnected;
 
-    public async IAsyncEnumerable<ControllerState> ReadFramesAsync(
+    public async IAsyncEnumerable<OskPadFrame> ReadFramesAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                _pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.In);
+                _pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.In);
                 await _pipe.ConnectAsync(5000, cancellationToken).ConfigureAwait(false);
                 break;
             }
@@ -41,6 +48,11 @@ public sealed class PadInputReader : IAsyncDisposable
             catch (OperationCanceledException) { yield break; }
             catch (EndOfStreamException) { yield break; }
             catch (IOException) { yield break; }
+
+            // The same bytes the sender dumped, before a single one is decoded here. Compared side
+            // by side, these two lines say whether the values survive the wire — which no amount of
+            // reading decoded doubles at either end could establish.
+            Program.Log($"read  [45..76] {Convert.ToHexString(buffer, 45, 32)}");
 
             int offset = 0;
 
@@ -71,10 +83,12 @@ public sealed class PadInputReader : IAsyncDisposable
             var leftTrigger = ReadDouble(buffer, ref offset);
             var rightTrigger = ReadDouble(buffer, ref offset);
 
+            var kind = (OskControllerKind)buffer[offset++];
+
             var right = new TouchpadSample(rightTouched, rightX, rightY, 0.0, rightPressed);
             var left = new TouchpadSample(leftTouched, leftX, leftY, 0.0, leftPressed);
 
-            yield return new ControllerState(
+            yield return new OskPadFrame(kind, new ControllerState(
                 TimeSpan.FromMilliseconds(Environment.TickCount64),
                 buttons,
                 leftStick,
@@ -82,7 +96,7 @@ public sealed class PadInputReader : IAsyncDisposable
                 leftTrigger,
                 rightTrigger,
                 left,
-                right);
+                right));
         }
     }
 

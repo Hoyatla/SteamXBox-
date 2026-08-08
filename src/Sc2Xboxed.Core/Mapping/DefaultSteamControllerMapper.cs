@@ -63,15 +63,38 @@ public sealed class DefaultSteamControllerMapper
     }
 
     /// <summary>
-    /// The active Xbox360-mode button mapping. Defaults to the built-in one, so nothing changes
-    /// until a profile is loaded over it.
+    /// This mapper's Xbox360-mode button mapping.
     /// </summary>
-    public static XboxButtonMap ButtonMap { get; set; } = XboxButtonMap.Default;
+    /// <remarks>
+    /// Per instance, so each controller can send a game its own layout — which is the whole of what
+    /// "un profil Xbox par manette" means. It was static, and a static here meant one layout for the
+    /// entire process: the assignment could be recorded, displayed and persisted, and every pad went
+    /// on emitting whatever profile the bridge had been launched with.
+    ///
+    /// It defaults to <see cref="DefaultButtonMap"/>, which the startup path still sets once. A
+    /// mapper built before any profile is chosen therefore behaves exactly as before, and only a
+    /// mapper deliberately given its own map departs from it.
+    /// </remarks>
+    public XboxButtonMap ButtonMap { get; set; } = DefaultButtonMap;
 
-    /// <summary>Active stick, trigger and vibration tuning for Xbox360 mode.</summary>
-    public static XboxTuning Tuning { get; set; } = new();
+    /// <summary>This mapper's stick, trigger and vibration tuning for Xbox360 mode.</summary>
+    /// <inheritdoc cref="ButtonMap"/>
+    public XboxTuning Tuning { get; set; } = DefaultTuning;
 
-    public static Xbox360Buttons MapButtons(SteamControllerButtons buttons) => ButtonMap.Apply(buttons);
+    /// <summary>
+    /// What a mapper starts with when nothing has been chosen for it.
+    /// </summary>
+    /// <remarks>
+    /// Still process-wide, and legitimately so: it is the profile the bridge was launched with, the
+    /// answer for every controller that has none of its own. What was wrong was not having a shared
+    /// default — it was having <i>only</i> a shared value.
+    /// </remarks>
+    public static XboxButtonMap DefaultButtonMap { get; set; } = XboxButtonMap.Default;
+
+    /// <inheritdoc cref="DefaultButtonMap"/>
+    public static XboxTuning DefaultTuning { get; set; } = new();
+
+    public static Xbox360Buttons MapButtons(SteamControllerButtons buttons) => DefaultButtonMap.Apply(buttons);
 
     private double ApplyDeadZone(double value)
     {

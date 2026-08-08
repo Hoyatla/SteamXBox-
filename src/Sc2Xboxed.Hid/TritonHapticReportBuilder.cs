@@ -170,4 +170,27 @@ public sealed class TritonHapticReportBuilder
         report[7] = 0;
         return report;
     }
+
+    /// <summary>
+    /// Builds a rumble report addressed to one or both halves directly, bypassing the actuator
+    /// mapping. Used by the format-identification diagnostic: on this firmware the pulse report's
+    /// side byte only ever drove the right pad, so the left pad may be reachable only through the
+    /// rumble report's left half rather than a pulse side byte.
+    /// </summary>
+    public byte[] BuildRawRumble(bool leftHalf, bool rightHalf, ushort intensity, int reportLength)
+    {
+        reportLength = Math.Max(10, reportLength);
+        var report = new byte[reportLength];
+        report[0] = ReportHapticRumble;
+        report[1] = 0;
+        report[2] = 0;
+        report[3] = (byte)(intensity & 0xFF);
+        report[4] = (byte)(intensity >> 8);
+        report[5] = leftHalf ? (byte)(intensity & 0xFF) : (byte)0;
+        report[6] = leftHalf ? (byte)(intensity >> 8) : (byte)0;
+        report[7] = rightHalf ? (byte)(intensity & 0xFF) : (byte)0;
+        report[8] = rightHalf ? (byte)(intensity >> 8) : (byte)0;
+        report[9] = 0;
+        return report;
+    }
 }

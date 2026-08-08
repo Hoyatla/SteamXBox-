@@ -30,7 +30,11 @@ public partial class ControllerSlotItem : ObservableObject
 
     public required ControllerIdentity Identity { get; init; }
 
-    public string DisplayName => Identity.DisplayName;
+    /// <summary>
+    /// What the chip says, renaming allowed: the name the user gave this pad, or its real one when
+    /// it has none. Observable so a rename shows up on the chip the moment it is saved.
+    /// </summary>
+    [ObservableProperty] private string _displayName = "";
 
     /// <summary>Whether this controller will still be recognised tomorrow.</summary>
     /// <remarks>
@@ -53,10 +57,16 @@ public partial class ControllerStripViewModel : ObservableObject
     private readonly ControllerProfileStore _store;
     private ControllerProfileBook _book;
 
+    // Remembered numbers, so "Manette 1" is the same pad tomorrow rather than whichever one was
+    // switched on first.
+    private readonly ControllerSlotBook _slots;
+
     public ControllerStripViewModel(string defaultProfile)
     {
         _store = new ControllerProfileStore();
         _book = _store.Load(defaultProfile);
+        _slots = _store.LoadSlots(DateTimeOffset.Now);
+        _names = _store.LoadNames();
         Refresh();
     }
 
@@ -100,6 +110,11 @@ public partial class ControllerStripViewModel : ObservableObject
 
     [ObservableProperty] private string _statusMessage = "";
 
+    // The names the user gave their controllers, keyed by identity. Cosmetic: a pad that asks to be
+    // called "Papa" keeps answering to "Papa" in the strip, and the logs stay honest about which one
+    // is being described.
+    private readonly Dictionary<string, string> _names;
+
     /// <summary>Re-reads what is attached, keeping the current selection if it is still there.</summary>
     /// <remarks>
     /// Rebuilt rather than diffed: the list is at most four entries and is only refreshed when the
@@ -109,11 +124,14 @@ public partial class ControllerStripViewModel : ObservableObject
     /// </remarks>
     public void Refresh()
     {
+        ControllerIdentityFactory.DurableKeyResolver ??= path => Sc2Xboxed.Windows.DeviceTree.DurableKeyFor(path);
+
         var previous = Selected?.Identity.Id;
 
         var roster = ControllerRoster.Build(
             SafeHidPaths(),
-            Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots());
+            Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots(),
+            SafeDualSensePaths());
 
         Controllers.Clear();
 
@@ -121,17 +139,24 @@ public partial class ControllerStripViewModel : ObservableObject
         // my own addition and it was wrong: the user asked to see what is connected, and a pad that
         // vanishes when you change tab reads as a pad that disconnected. The family now only decides
         // which entries are emphasised, never which ones exist.
-        var number = 1;
+        // The remembered number, not the position in the list. Numbering by position renumbers
+        // everybody the moment somebody switches a controller on in a different order: the profiles
+        // stay filed correctly, but the number on the chip the user clicks is now someone else's.
+        var now = DateTimeOffset.Now;
+
         foreach (var identity in roster)
         {
             Controllers.Add(new ControllerSlotItem
             {
-                Number = number++,
+                Number = _slots.SlotFor(identity.Id, now),
                 Identity = identity,
+                DisplayName = _names.TryGetValue(identity.Id, out var name) ? name : identity.DisplayName,
                 ProfileName = _book.ProfileFor(identity.Id),
                 IsCurrentFamily = Family is null || identity.Kind == Family,
             });
         }
+
+        _store.SaveSlots(_slots);
 
         Selected = Controllers.FirstOrDefault(c => c.Identity.Id == previous)
                    ?? Controllers.FirstOrDefault();
@@ -162,6 +187,22 @@ public partial class ControllerStripViewModel : ObservableObject
         {
             // A HID enumeration that fails must not empty the Xbox pads out of the list too.
             UiLog.Failure("enumerating Valve HID devices", ex);
+            return [];
+        }
+    }
+
+    private static IEnumerable<string> SafeDualSensePaths()
+    {
+        try
+        {
+            return Sc2Xboxed.Hid.DualSenseControllerSource.Discover()
+                .Select(d => d.DevicePath)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            // A failed enumeration of one family must not empty the other two out of the list.
+            UiLog.Failure("enumerating DualSense devices", ex);
             return [];
         }
     }
@@ -215,4 +256,117 @@ public partial class ControllerStripViewModel : ObservableObject
 
     /// <summary>The profile a controller should run on.</summary>
     public string ProfileFor(string controllerId) => _book.ProfileFor(controllerId);
+
+    /// <summary>Asks the user what to call a controller, then remembers it.</summary>
+    /// <remarks>
+    /// The dialog is a view concern, but it is driven from here so the strip's own code-behind stays
+    /// a thin shell: persistence, the chip label and the log entry all live in one place, the same
+    /// way the strip already owns the profile assignments.
+    /// </remarks>
+    public void Rename(ControllerSlotItem item)
+    {
+        var current = _names.TryGetValue(item.Identity.Id, out var saved) ? saved : item.Identity.DisplayName;
+        var dialog = new SteamXBox.Gui.Views.RenameDialog(current)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var name = dialog.ControllerName?.Trim() ?? "";
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        _names[item.Identity.Id] = name;
+        _store.SaveNames(_names);
+        item.DisplayName = name;
+
+        MigrateProfileForRename(item.Identity.Id, current, name);
+
+        StatusMessage = $"Manette renommée : {name}";
+        UiLog.Action("rename controller", $"{item.Identity.Id} → {name}");
+    }
+
+    /// <summary>
+    /// Renaming a chip must not strand its profile under the old name. Saving always writes the
+    /// profile file under the controller's display name, so without this a rename left the old file
+    /// behind and the next save created a second one — two profiles for one pad, the stale one still
+    /// launching under <c>lastActiveProfile</c> while the editor worked on the new. Renamed here so
+    /// the file, the assignment and the active profile all move together.
+    /// </summary>
+    private void MigrateProfileForRename(string controllerId, string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName) ||
+            oldName.Equals(newName, StringComparison.OrdinalIgnoreCase) ||
+            oldName.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var service = App.ProfileSvc;
+        if (service is null)
+        {
+            return;
+        }
+
+        var assigned = _book.ProfileFor(controllerId);
+        var target = service.Profiles.FirstOrDefault(p =>
+            p.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase) ||
+            (!assigned.Equals("Default", StringComparison.OrdinalIgnoreCase) &&
+             !string.IsNullOrWhiteSpace(assigned) &&
+             p.Name.Equals(assigned, StringComparison.OrdinalIgnoreCase)));
+
+        var migrated = false;
+        if (target is not null && !target.Name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        {
+            var renamed = target.Clone();
+            renamed.Name = newName;
+            service.Save(renamed);
+            service.Delete(target);
+            migrated = true;
+        }
+
+        // The assignment follows the rename whenever it pointed at the old name — or at a profile we
+        // just moved — so the next save reuses the same file instead of creating a third one.
+        if (migrated || assigned.Equals(oldName, StringComparison.OrdinalIgnoreCase))
+        {
+            _book.Assign(controllerId, newName);
+            _store.Save(_book);
+        }
+
+        // The runtime launches the profile named in the settings. It must follow too, or the bridge
+        // keeps running the stale file under the old name after the rename.
+        var settingsService = App.SettingsSvc;
+        if (settingsService is not null &&
+            settingsService.Settings.LastActiveProfile.Equals(oldName, StringComparison.OrdinalIgnoreCase))
+        {
+            settingsService.Settings.LastActiveProfile = newName;
+            settingsService.Save();
+        }
+
+        if (App.MainVm.SelectedProfile?.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            App.MainVm.SelectedProfile =
+                service.Profiles.FirstOrDefault(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))
+                ?? service.ActiveProfile;
+        }
+    }
+
+    /// <summary>Forgets the name the user gave a controller, showing its real one again.</summary>
+    public void ResetName(ControllerSlotItem item)
+    {
+        if (_names.Remove(item.Identity.Id))
+        {
+            _store.SaveNames(_names);
+        }
+
+        item.DisplayName = item.Identity.DisplayName;
+        StatusMessage = $"Nom réinitialisé : {item.DisplayName}";
+        UiLog.Action("reset controller name", item.Identity.Id);
+    }
 }

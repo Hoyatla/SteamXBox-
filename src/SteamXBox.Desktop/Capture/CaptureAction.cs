@@ -55,9 +55,7 @@ internal static class CaptureAction
         {
             if (wasVisible)
             {
-                environment.Show();
-                environment.WindowState = WindowState.Maximized;
-                environment.Activate();
+                OverlayShower.Show(environment);
             }
         }
     }

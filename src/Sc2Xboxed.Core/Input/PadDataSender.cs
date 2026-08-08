@@ -2,9 +2,36 @@ using System.IO.Pipes;
 
 namespace Sc2Xboxed.Core.Input;
 
+/// <summary>
+/// What kind of controller drives the overlay keyboard.
+/// </summary>
+/// <remarks>
+/// The overlay is one window but two keyboards: a Steam Controller types on its touchpads, a
+/// pad that only has joysticks types on the sticks. The kind travels on every frame so the
+/// overlay can answer the controller that is actually feeding it, instead of keeping both input
+/// paths live and letting a resting thumb fight the other hand.
+/// </remarks>
+public enum OskControllerKind : byte
+{
+    /// <summary>A Valve controller: the touchpads type.</summary>
+    Steam = 0,
+
+    /// <summary>A pad with joysticks and no Steam touchpads: the sticks type.</summary>
+    Sticks = 1,
+}
+
 public sealed class PadDataSender : IAsyncDisposable
 {
-    private const string PipeName = "SteamXBox_OskPad";
+    /// <summary>Name of the pipe this sender serves; one per keyboard.</summary>
+    /// <remarks>
+    /// Injected rather than fixed. A constant here meant one keyboard for the whole machine: a
+    /// second controller asking for one would find the pipe already bound and silently get nothing.
+    /// </remarks>
+    private readonly string _pipeName;
+
+    /// <param name="pipeName">Pipe to serve. Defaults to the single-keyboard name that shipped before.</param>
+    public PadDataSender(string? pipeName = null)
+        => _pipeName = string.IsNullOrWhiteSpace(pipeName) ? "SteamXBox_OskPad" : pipeName;
     private readonly List<NamedPipeServerStream> _clients = new();
     private readonly object _lock = new();
     private bool _isRunning;
@@ -26,7 +53,7 @@ public sealed class PadDataSender : IAsyncDisposable
             try
             {
                 server = new NamedPipeServerStream(
-                    PipeName,
+                    _pipeName,
                     PipeDirection.Out,
                     1,
                     PipeTransmissionMode.Byte,
@@ -53,19 +80,22 @@ public sealed class PadDataSender : IAsyncDisposable
     /// stay there, and the overlay types whatever the misread bytes happen to mean. A version byte
     /// turns that into a clean disconnection.
     ///
-    /// Bumped when the sticks and triggers were added for controllers that have no trackpads.
+    /// Bumped when the sticks and triggers were added for controllers that have no trackpads, and
+    /// again when the controller kind was added so the overlay types on pads or sticks depending
+    /// on who is feeding it.
     /// </remarks>
-    public const byte ProtocolVersion = 2;
+    public const byte ProtocolVersion = 3;
 
     /// <summary>
     /// Fixed frame size: version, two touchpad samples, the button mask, then both sticks and both
-    /// triggers.
+    /// triggers, then the controller kind.
     /// </summary>
     /// <remarks>
     /// The overlay needs the buttons for daisywheel typing, where ABXY pick the character, and the
     /// sticks for a controller with no pads, where each stick aims at its own half of the keyboard.
+    /// The kind byte is appended after the triggers so the stick values keep their known offsets.
     /// </remarks>
-    public const int FrameSize = 1 + 44 + 48;
+    public const int FrameSize = 1 + 44 + 48 + 1;
 
     public void SendPadState(
         TouchpadSample rightPad,
@@ -74,7 +104,8 @@ public sealed class PadDataSender : IAsyncDisposable
         NormalizedStick leftStick,
         NormalizedStick rightStick,
         double leftTrigger,
-        double rightTrigger)
+        double rightTrigger,
+        OskControllerKind kind)
     {
         var buffer = new byte[FrameSize];
         var span = buffer.AsSpan();
@@ -101,6 +132,16 @@ public sealed class PadDataSender : IAsyncDisposable
         WriteDouble(span, ref offset, leftTrigger);
         WriteDouble(span, ref offset, rightTrigger);
 
+        span[offset++] = (byte)kind;
+
+        // The stick bytes as they leave, before anything can reinterpret them. Every measurement so
+        // far has been of doubles already decoded at one end or the other, which cannot show where
+        // they empty. Offsets 45..76 hold the four stick values and nothing else.
+        if (WireLog is { } wireLog)
+        {
+            wireLog($"write [45..76] {Convert.ToHexString(buffer, 45, 32)}");
+        }
+
         lock (_lock)
         {
             for (int i = _clients.Count - 1; i >= 0; i--)
@@ -118,6 +159,13 @@ public sealed class PadDataSender : IAsyncDisposable
             }
         }
     }
+
+    /// <summary>Optional sink for the raw wire bytes, set only while diagnosing.</summary>
+    /// <remarks>
+    /// Left null in normal use: dumping thirty-two bytes per frame at two hundred frames a second
+    /// would bury the log it is written into.
+    /// </remarks>
+    public static Action<string>? WireLog { get; set; }
 
     private static void WriteDouble(Span<byte> span, ref int offset, double value)
     {

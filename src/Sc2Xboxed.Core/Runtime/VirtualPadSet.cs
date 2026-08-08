@@ -26,6 +26,10 @@ namespace Sc2Xboxed.Core.Runtime;
 /// </remarks>
 public sealed class VirtualPadSet : IAsyncDisposable
 {
+    // The pad of a controller that goes away is released from a reader task while the main loop
+    // may be creating or submitting to other pads, so the dictionary is never touched without
+    // holding this. No await happens under the lock.
+    private readonly object _gate = new();
     private readonly Dictionary<string, IVirtualXbox360Sink> _pads = new(StringComparer.Ordinal);
     private readonly Func<IVirtualXbox360Sink> _factory;
     private readonly Action<string>? _log;
@@ -39,25 +43,54 @@ public sealed class VirtualPadSet : IAsyncDisposable
     }
 
     /// <summary>How many virtual pads are currently connected.</summary>
-    public int Count => _pads.Count;
+    public int Count
+    {
+        get { lock (_gate) return _pads.Count; }
+    }
 
     /// <summary>The controllers that have a virtual pad, in creation order.</summary>
-    public IReadOnlyCollection<string> ControllerIds => _pads.Keys.ToList();
+    public IReadOnlyCollection<string> ControllerIds
+    {
+        get { lock (_gate) return _pads.Keys.ToList(); }
+    }
 
     /// <summary>
     /// The virtual pad belonging to one controller, creating and connecting it on first use.
     /// </summary>
     public async ValueTask<IVirtualXbox360Sink> ForAsync(string controllerId, CancellationToken cancellationToken)
     {
-        if (_pads.TryGetValue(controllerId, out var existing))
+        lock (_gate)
         {
-            return existing;
+            if (_pads.TryGetValue(controllerId, out var existing))
+            {
+                return existing;
+            }
         }
 
         var pad = _factory();
         await pad.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        _pads[controllerId] = pad;
-        _log?.Invoke($"virtual pad {_pads.Count} connected for {controllerId}");
+
+        IVirtualXbox360Sink? redundant = null;
+        lock (_gate)
+        {
+            if (_pads.TryGetValue(controllerId, out var existing))
+            {
+                // The controller left and came back while ours was being connected. Hand out the
+                // pad that won and discard the one just built, outside the lock.
+                redundant = pad;
+                pad = existing;
+            }
+            else
+            {
+                _pads[controllerId] = pad;
+                _log?.Invoke($"virtual pad {_pads.Count} connected for {controllerId}");
+            }
+        }
+
+        if (redundant is not null)
+        {
+            await redundant.DisposeAsync().ConfigureAwait(false);
+        }
 
         return pad;
     }
@@ -71,7 +104,13 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// </remarks>
     public async ValueTask SubmitAllAsync(Xbox360Report report, CancellationToken cancellationToken)
     {
-        foreach (var pad in _pads.Values.ToList())
+        List<IVirtualXbox360Sink> pads;
+        lock (_gate)
+        {
+            pads = _pads.Values.ToList();
+        }
+
+        foreach (var pad in pads)
         {
             try
             {
@@ -93,9 +132,13 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// </remarks>
     public async ValueTask ForgetAsync(string controllerId)
     {
-        if (!_pads.Remove(controllerId, out var pad))
+        IVirtualXbox360Sink? pad;
+        lock (_gate)
         {
-            return;
+            if (!_pads.Remove(controllerId, out pad))
+            {
+                return;
+            }
         }
 
         try
@@ -114,7 +157,13 @@ public sealed class VirtualPadSet : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var id in _pads.Keys.ToList())
+        List<string> ids;
+        lock (_gate)
+        {
+            ids = _pads.Keys.ToList();
+        }
+
+        foreach (var id in ids)
         {
             await ForgetAsync(id).ConfigureAwait(false);
         }

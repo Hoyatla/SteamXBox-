@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Osk;
 using SteamXBox.Gui.Services;
 
@@ -11,25 +12,92 @@ namespace SteamXBox.Gui.ViewModels;
 public partial class ProfileViewModel : ObservableObject
 {
     private readonly ProfileService _service;
+    private bool _syncingSelection;
 
-    [ObservableProperty] private string _newProfileName = "";
     [ObservableProperty] private bool _isEditing;
     [ObservableProperty] private ProfileData? _activeEdit;
-    [ObservableProperty] private bool _isEditingDefault;
+    [ObservableProperty] private bool _isDefaultEdit;
     [ObservableProperty] private string _statusMessage = "";
-    [ObservableProperty] private string _activeProfileName = "";
     [ObservableProperty] private ProfileData? _selectedProfileItem;
+
+    /// <summary>Whether the controller selected at the top can receive a profile.</summary>
+    [ObservableProperty] private bool _hasTarget;
+
+    /// <summary>The controller the current edit will be saved under.</summary>
+    [ObservableProperty] private string _targetName = "";
+
+    /// <summary>What saving would do to the selected controller's profile.</summary>
+    [ObservableProperty] private string _targetContext = "";
 
     partial void OnSelectedProfileItemChanged(ProfileData? value)
     {
-        if (value != null)
-            StartEditing(value);
+        if (_syncingSelection || value is null) return;
+        StartEditing(value);
     }
 
     public ObservableCollection<ProfileData> Profiles => _service.Profiles;
 
+    /// <summary>The profiles of the tab's family: Default always, then the family's own.</summary>
+    /// <remarks>
+    /// Built from the shared collection, never a second source of truth. The family comes from the
+    /// tab the user opened — Steam, PS5 or Xbox — and each profile belongs to the family it was
+    /// written for, so a controller only ever sees the settings that make sense on it.
+    /// </remarks>
+    public ObservableCollection<ProfileData> VisibleProfiles { get; } = [];
+
+    private static string FamilyOf(ControllerKind kind) => kind switch
+    {
+        ControllerKind.SteamController => "Steam",
+        ControllerKind.DualSense => "DualSense",
+        ControllerKind.XInput => "XInput",
+        _ => "",
+    };
+
+    private void RebuildVisibleProfiles()
+    {
+        var family = Controllers.Family is { } kind ? FamilyOf(kind) : null;
+
+        VisibleProfiles.Clear();
+        foreach (var profile in _service.Profiles)
+        {
+            if (family is null || profile.Name == "Default" || profile.Family == family)
+                VisibleProfiles.Add(profile);
+        }
+
+        if (SelectedProfileItem is { } selected && !VisibleProfiles.Contains(selected))
+            SelectedProfileItem = null;
+    }
+
+    private void RefreshTarget()
+    {
+        var selected = Controllers.Selected;
+        HasTarget = selected is not null;
+        if (selected is null)
+        {
+            TargetName = "";
+            TargetContext = Strings.Current["Sélectionnez une manette en haut pour l'associer à ce profil."];
+            return;
+        }
+
+        TargetName = selected.DisplayName;
+        var hasProfile = _service.Profiles.Any(p => p.Name == selected.DisplayName && p.Name != "Default");
+        TargetContext = hasProfile
+            ? Strings.Current.Format("Profil « {0} » — il sera écrasé à la sauvegarde.", selected.DisplayName)
+            : Strings.Current["Aucun profil — il sera créé à la sauvegarde."];
+    }
+
     /// <summary>The connected controllers, shared with the other tab.</summary>
     public ControllerStripViewModel Controllers => ControllerStripViewModel.Shared;
+
+    /// <summary>
+    /// Whether the tab is editing a pad with sticks but no trackpads (DualSense, XInput). Those
+    /// families only get the stick rows of the Mouvements card; everything pad-specific is hidden.
+    /// </summary>
+    public bool IsStickFamily =>
+        Controllers.Family is ControllerKind.DualSense or ControllerKind.XInput;
+
+    /// <summary>The complement: Steam Controller (or no family selected), where the full card shows.</summary>
+    public bool IsPadFamily => !IsStickFamily;
 
     // ---- Wrapper properties for dictionary bindings ----
     // Buttons
@@ -55,15 +123,30 @@ public partial class ProfileViewModel : ObservableObject
     public string MotionRightPad  { get => GetMotion("RightPad");  set => SetMotion("RightPad", value); }
     public string MotionLeftPad   { get => GetMotion("LeftPad");   set => SetMotion("LeftPad", value); }
     public string MotionLeftStick { get => GetMotion("LeftStick"); set => SetMotion("LeftStick", value); }
+    public string MotionRightStick { get => GetMotion("RightStick"); set => SetMotion("RightStick", value); }
 
-    private string GetButton(string key) => ActiveEdit?.Buttons.GetValueOrDefault(key) ?? "";
+    private string GetButton(string key) =>
+        ActiveEdit is null ? "" : ActiveEdit.Buttons.GetValueOrDefault(key) ?? DefaultButtons.GetValueOrDefault(key) ?? "";
+
+    /// <summary>
+    /// The factory shortcut assignments, so a profile written without them (or with keys dropped by
+    /// an older build) still reads its default shortcuts instead of empty combos.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> DefaultButtons = new ProfileData().Buttons;
     private void SetButton(string key, string value)
     {
         if (ActiveEdit == null) return;
         ActiveEdit.Buttons[key] = value;
         OnPropertyChanged(ButtonPropName(key));
     }
-    private string GetMotion(string key) => ActiveEdit?.Motions.GetValueOrDefault(key) ?? "";
+    private string GetMotion(string key) =>
+        ActiveEdit?.Motions.GetValueOrDefault(key) ?? DefaultMotions.GetValueOrDefault(key) ?? "";
+
+    /// <summary>
+    /// The factory motion assignments, so a profile written without a key (like "RightStick" before
+    /// the stick had a role to bind) still reads its default instead of an empty combo.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> DefaultMotions = new ProfileData().Motions;
     private void SetMotion(string key, string value)
     {
         if (ActiveEdit == null) return;
@@ -79,6 +162,7 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(MotionPropName("RightPad"));
         OnPropertyChanged(MotionPropName("LeftPad"));
         OnPropertyChanged(MotionPropName("LeftStick"));
+        OnPropertyChanged(MotionPropName("RightStick"));
 
         foreach (var name in PercentPropertyNames) OnPropertyChanged(name);
     }
@@ -93,7 +177,6 @@ public partial class ProfileViewModel : ObservableObject
     private const double RightPadSensMin = 200.0, RightPadSensMax = 2000.0;
     private const double LeftPadSensMin = 1.0, LeftPadSensMax = 20.0;
     private const double StickDeadZoneMin = 0.0, StickDeadZoneMax = 1.0;
-    private const double XboxStickDeadZoneMin = 0.0, XboxStickDeadZoneMax = 0.30;
     private const double RightPadDeadZoneMin = 0.0, RightPadDeadZoneMax = 0.005;
     private const double LeftPadDeadZoneMin = 0.0, LeftPadDeadZoneMax = 0.005;
 
@@ -117,6 +200,8 @@ public partial class ProfileViewModel : ObservableObject
         nameof(LeftPadSensitivityPercent), nameof(LeftPadSensitivityDisplay),
         nameof(StickDeadZonePercent), nameof(StickDeadZoneDisplay),
         nameof(XboxStickDeadZonePercent), nameof(XboxStickDeadZoneDisplay),
+        nameof(XboxStickCurvePercent), nameof(XboxStickCurveDisplay),
+        nameof(XboxStickSensitivityPercent), nameof(XboxStickSensitivityDisplay),
         nameof(RightPadDeadZonePercent), nameof(RightPadDeadZoneDisplay),
         nameof(LeftPadDeadZonePercent), nameof(LeftPadDeadZoneDisplay),
         nameof(RightPadAccelerationPercent), nameof(RightPadAccelerationDisplay),
@@ -281,6 +366,13 @@ public partial class ProfileViewModel : ObservableObject
     }
     public string StickDeadZoneDisplay => $"{StickDeadZonePercent:0} %";
 
+    // Stick tuning on the stick-only families (PS5, Xbox). Same values as the Xbox tab, exposed
+    // here so the Profils tab shows them where the pads would otherwise be — a stick has no pads,
+    // and a pad-only card would be lying about what it is editing.
+    private const double XboxStickDeadZoneMin = 0.0, XboxStickDeadZoneMax = 0.5;
+    private const double XboxStickCurveMin = 0.2, XboxStickCurveMax = 3.0;
+    private const double XboxStickSensitivityMin = 0.25, XboxStickSensitivityMax = 3.0;
+
     public double XboxStickDeadZonePercent
     {
         get => GetPercent(p => p.XboxStickDeadZone, XboxStickDeadZoneMin, XboxStickDeadZoneMax);
@@ -288,6 +380,22 @@ public partial class ProfileViewModel : ObservableObject
             nameof(XboxStickDeadZonePercent), nameof(XboxStickDeadZoneDisplay));
     }
     public string XboxStickDeadZoneDisplay => $"{XboxStickDeadZonePercent:0} %";
+
+    public double XboxStickCurvePercent
+    {
+        get => GetPercent(p => p.XboxStickCurve, XboxStickCurveMin, XboxStickCurveMax);
+        set => SetPercent((p, v) => p.XboxStickCurve = Math.Round(v, 3), value, XboxStickCurveMin, XboxStickCurveMax,
+            nameof(XboxStickCurvePercent), nameof(XboxStickCurveDisplay));
+    }
+    public string XboxStickCurveDisplay => $"{XboxStickCurvePercent:0} %";
+
+    public double XboxStickSensitivityPercent
+    {
+        get => GetPercent(p => p.XboxStickSensitivity, XboxStickSensitivityMin, XboxStickSensitivityMax);
+        set => SetPercent((p, v) => p.XboxStickSensitivity = Math.Round(v, 3), value, XboxStickSensitivityMin, XboxStickSensitivityMax,
+            nameof(XboxStickSensitivityPercent), nameof(XboxStickSensitivityDisplay));
+    }
+    public string XboxStickSensitivityDisplay => $"{XboxStickSensitivityPercent:0} %";
 
     public double RightPadDeadZonePercent
     {
@@ -307,6 +415,7 @@ public partial class ProfileViewModel : ObservableObject
 
     partial void OnActiveEditChanged(ProfileData? value)
     {
+        IsDefaultEdit = value?.Name == "Default";
         NotifyAllWrappers();
     }
 
@@ -432,6 +541,9 @@ public partial class ProfileViewModel : ObservableObject
     public string[] RightPadOptions { get; } = ["Trackball", "Scroll", "None"];
     public string[] LeftPadOptions { get; } = ["Scroll", "Trackball", "None"];
     public string[] LeftStickOptions { get; } = ["ArrowKeys", "None"];
+    // The right stick drives the pointer on stick-only families (PS5/Xbox) which have no pads, so
+    // only pointer-or-nothing is offered — never a pad role.
+    public string[] RightStickOptions { get; } = ["Souris", "Aucun"];
     public string[] RearButtonOptions { get; } = ["PrintScreen", "Win+G", "Win+R", "Alt+F4", "OSK Toggle", "Aucun"];
     public string[] BumperOptions { get; } = ["Alt+Tab", "Win+Tab", "Aucun"];
     public string[] AOptions { get; } = ["OSK Toggle", "Enter", "Aucun"];
@@ -450,78 +562,108 @@ public partial class ProfileViewModel : ObservableObject
     public ProfileViewModel()
     {
         _service = App.ProfileSvc;
-        SyncActiveProfileName();
 
-        App.MainVm.PropertyChanged += (_, e) =>
+        // The test profile of the old design has no place under the per-controller model.
+        var testProfile = _service.Profiles.FirstOrDefault(p =>
+            p.Name.Equals("perso", StringComparison.OrdinalIgnoreCase));
+        if (testProfile is not null)
+            _service.Delete(testProfile);
+
+        _service.Profiles.CollectionChanged += (_, _) => RebuildVisibleProfiles();
+        Controllers.FamilyChanged += _ =>
         {
-            if (e.PropertyName == nameof(MainViewModel.SelectedProfile))
-                SyncActiveProfileName();
+            RebuildVisibleProfiles();
+            OnPropertyChanged(nameof(IsStickFamily));
+            OnPropertyChanged(nameof(IsPadFamily));
         };
+        Controllers.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ControllerStripViewModel.Selected))
+                RefreshTarget();
+        };
+
+        RebuildVisibleProfiles();
+        RefreshTarget();
     }
 
-    private void SyncActiveProfileName()
+    /// <summary>
+    /// Loads a profile into the editor. A Default edit becomes a working copy: the reference file is
+    /// never written, and saving always produces a profile named after the selected controller.
+    /// </summary>
+    private void StartEditing(ProfileData profile)
     {
-        var name = App.MainVm.SelectedProfile?.Name ?? "";
-        ActiveProfileName = name;
-        // Keep ListBox selection in sync
-        SelectedProfileItem = App.MainVm.SelectedProfile;
-    }
-
-    [RelayCommand]
-    private void CreateNewProfile()
-    {
-        if (string.IsNullOrWhiteSpace(NewProfileName)) return;
-        var name = NewProfileName.Trim();
-        if (name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        // A profile written by an older build may be missing shortcut keys (X, Y, R3 and friends
+        // were dropped). Backfill them from the factory defaults so the combos and the saved file
+        // carry the full set again, without touching assignments the user actually set.
+        foreach (var (key, value) in DefaultButtons)
         {
-            StatusMessage = Strings.Current["Impossible de créer un profil nommé 'Default'."];
-            return;
-        }
-        var source = App.MainVm.SelectedProfile ?? new ProfileData();
-        var p = _service.CreateNew(name, source);
-        NewProfileName = "";
-        SelectedProfileItem = p;
-        StatusMessage = Strings.Current["Nouveau profil créé à partir de la configuration actuelle."];
-    }
-
-    private void StartEditing(ProfileData? profile)
-    {
-        if (profile == null) return;
-
-        // Auto-save previous profile before switching
-        if (ActiveEdit != null && ActiveEdit != profile && ActiveEdit.Name != "Default")
-        {
-            _service.Save(ActiveEdit);
-            StatusMessage = Strings.Current.Format("Profil « {0} » sauvegardé automatiquement.", ActiveEdit.Name);
-        }
-        else
-        {
-            StatusMessage = "";
+            if (!profile.Buttons.ContainsKey(key))
+            {
+                profile.Buttons[key] = value;
+            }
         }
 
-        ActiveEdit = profile;
+        ActiveEdit = profile.Name == "Default" ? profile.Clone() : profile;
         IsEditing = true;
-        IsEditingDefault = profile.Name == "Default";
-        ActiveProfileName = profile.Name;
         App.MainVm.SelectedProfile = profile;
+
+        _syncingSelection = true;
+        SelectedProfileItem = profile.Name == "Default"
+            ? _service.Profiles.FirstOrDefault(p => p.Name == "Default")
+            : profile;
+        _syncingSelection = false;
+    }
+
+    /// <summary>
+    /// Writes the current edit as the selected controller's profile and files that controller under
+    /// it. Returns the saved profile, or null when there is no controller to receive it.
+    /// </summary>
+    private ProfileData? SaveCurrentEditToSelectedController()
+    {
+        if (ActiveEdit is null) return null;
+
+        var selected = Controllers.Selected;
+        if (selected is null)
+        {
+            StatusMessage = Strings.Current["Sélectionnez une manette pour enregistrer ce profil."];
+            return null;
+        }
+
+        // A controller renamed "Default" must not be able to overwrite the reference profile.
+        if (selected.DisplayName.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusMessage = Strings.Current["Renommez la manette : « Default » est réservé au profil de référence."];
+            return null;
+        }
+
+        var profile = ActiveEdit.Clone();
+        profile.Name = selected.DisplayName;
+        profile.Family = FamilyOf(selected.Identity.Kind);
+        _service.Save(profile);
+        Controllers.AssignToSelected(profile.Name);
+        return profile;
     }
 
     [RelayCommand]
     private void SaveProfile()
     {
-        if (ActiveEdit == null) return;
-        if (ActiveEdit.Name == "Default") return;
-        _service.Save(ActiveEdit);
-        StatusMessage = Strings.Current["Profil sauvegardé."];
+        if (SaveCurrentEditToSelectedController() is { } saved)
+        {
+            StartEditing(saved);
+            StatusMessage = Strings.Current.Format(
+                "Profil « {0} » associé à {1}.", saved.Name, Controllers.Selected?.DisplayName ?? "");
+        }
     }
 
     [RelayCommand]
     private void ApplyProfile()
     {
-        if (ActiveEdit == null) return;
-        if (ActiveEdit.Name == "Default") return;
-        _service.Save(ActiveEdit);
-        StatusMessage = Strings.Current["Paramètres appliqués."];
+        if (SaveCurrentEditToSelectedController() is { } saved)
+        {
+            StartEditing(saved);
+            StatusMessage = Strings.Current.Format(
+                "Réglages appliqués à {0}.", Controllers.Selected?.DisplayName ?? "");
+        }
     }
 
     [RelayCommand]
@@ -532,25 +674,38 @@ public partial class ProfileViewModel : ObservableObject
         StatusMessage = Strings.Current["Profil « Default » restauré aux valeurs d'usine."];
     }
 
+    /// <summary>
+    /// Deletes the selected controller's own profile. The controller falls back to the default
+    /// settings; the reference Default profile is never touched.
+    /// </summary>
     [RelayCommand]
-    private void DeleteActiveProfile(ProfileData? profile)
+    private void DeleteSelectedControllerProfile()
     {
-        if (profile == null) return;
-        if (profile.Name == "Default") return;
+        var selected = Controllers.Selected;
+        if (selected is null)
+        {
+            StatusMessage = Strings.Current["Sélectionnez une manette pour supprimer son profil."];
+            return;
+        }
+
+        var profile = _service.Profiles.FirstOrDefault(p =>
+            p.Name == selected.DisplayName && p.Name != "Default");
+        if (profile is null)
+        {
+            StatusMessage = Strings.Current.Format("La manette « {0} » n'a pas de profil.", selected.DisplayName);
+            return;
+        }
+
         _service.Delete(profile);
+        Controllers.ForgetMissingProfiles(_service.Profiles.Select(p => p.Name));
+
         if (ActiveEdit?.Name == profile.Name)
         {
-            IsEditing = false;
             ActiveEdit = null;
-            IsEditingDefault = false;
+            IsEditing = false;
         }
-    }
 
-    [RelayCommand]
-    private void CancelEdit()
-    {
-        IsEditing = false;
-        ActiveEdit = null;
-        IsEditingDefault = false;
+        StatusMessage = Strings.Current.Format(
+            "Profil de « {0} » supprimé. Elle revient aux réglages par défaut.", selected.DisplayName);
     }
 }

@@ -90,6 +90,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 // Nothing displays them any more.
                 Controllers.Refresh();
 
+                // Start on detection, when the setting asks for it. This used to be here, was
+                // removed because the configuration window and the environment both launched the
+                // bridge with --restart and killed each other in a loop, and never came back — so
+                // "démarrer automatiquement à la détection" has been a setting that did nothing ever
+                // since. The loop is no longer possible: the core holds a single-instance mutex, and
+                // starting it when it is already running is a no-op.
+                if (_settings.Settings.AutoStart && dev.IsConnected && !IsCoreRunning)
+                {
+                    StatusText = Strings.Current["Manette détectée"];
+                    StartCoreCommand.Execute(null);
+                }
+
                 // The configuration window no longer starts the bridge on its own. SteamXBox.Desktop
                 // owns that lifecycle now: it starts the core with the environment and stops it when
                 // the environment closes. Two owners meant two launches, each passing --restart and
@@ -118,6 +130,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // ProfileService.ActiveProfile kept pointing at an object that was no longer in it, so the
         // editor's list had nothing selected.
         AutoStart = _settings.Settings.AutoStart;
+
+        // The bridge is very often already running when this window opens: the environment starts it
+        // at boot, and the Controller tile only opens a view onto something that has been working
+        // for a while. Assuming it stopped meant the button read "Démarrer" over a running bridge —
+        // so there was no way to stop it at all, and pressing Start restarted what was already fine.
+        //
+        // Adopted rather than merely displayed: the service takes ownership of the process it finds,
+        // so Stop acts on it.
+        if (_core.AdoptRunningInstance())
+        {
+            IsCoreRunning = true;
+            StatusText = Strings.Current["En cours"];
+        }
 
         var lastProfile = _settings.Settings.LastActiveProfile;
         var match = _profileService.Profiles.FirstOrDefault(p => p.Name == lastProfile);
@@ -182,8 +207,41 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void StopCore()
     {
         _core.Stop();
+
+        // The overlay keyboard as well as the bridge. It is started by the core, outlives it, and
+        // owns a topmost window: left running after a stop, it stays on screen with nothing feeding
+        // it, which reads as SteamXBox having half-quit. Asked through the exit signal it already
+        // watches, so it can put down any latched modifier key before going.
+        StopOverlayKeyboard();
+
         IsCoreRunning = false;
         StatusText = Strings.Current["Arrêté"];
+    }
+
+    /// <summary>Asks the overlay keyboard to close, then kills it if it will not.</summary>
+    private static void StopOverlayKeyboard()
+    {
+        try
+        {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(AppContext.BaseDirectory, "osk-exit.signal"),
+                DateTime.UtcNow.Ticks.ToString());
+
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("Sc2Xboxed.Osk"))
+            {
+                using (process)
+                {
+                    if (!process.WaitForExit(1500))
+                    {
+                        process.Kill();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Sc2Xboxed.Core.Diagnostics.UiLog.Failure("stopping the overlay keyboard", ex);
+        }
     }
 
     [RelayCommand]
@@ -224,7 +282,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _device.StopPolling();
-        _core.Stop();
         _core.Dispose();
         _device.Dispose();
     }

@@ -22,7 +22,7 @@ public class StickPointerMapperTests
     private static StickPointerOutput Map(ControllerState state, TimeSpan? elapsed = null)
     {
         var carry = new StickPointerCarry();
-        return StickPointerMapper.Map(state, elapsed ?? Frame, Settings, ref carry);
+        return StickPointerMapper.Map(state, elapsed ?? Frame, Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class StickPointerMapperTests
 
         for (var i = 0; i < 200; i++)
         {
-            travelled += StickPointerMapper.Map(diagonal, Frame, Settings, ref carry).PixelsX;
+            travelled += StickPointerMapper.Map(diagonal, Frame, Settings, rightStickPointer: true, leftStickWheel: true, ref carry).PixelsX;
         }
 
         Assert.True(travelled > 0);
@@ -126,13 +126,13 @@ public class StickPointerMapperTests
         var barely = With(new NormalizedStick(Settings.DeadZone + 0.02, 0));
         var tick = TimeSpan.FromMilliseconds(8);
 
-        var single = StickPointerMapper.Map(barely, tick, Settings, ref carry);
+        var single = StickPointerMapper.Map(barely, tick, Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
         Assert.Equal(0, single.PixelsX);
 
         var total = 0;
         for (var i = 0; i < 400; i++)
         {
-            total += StickPointerMapper.Map(barely, tick, Settings, ref carry).PixelsX;
+            total += StickPointerMapper.Map(barely, tick, Settings, rightStickPointer: true, leftStickWheel: true, ref carry).PixelsX;
         }
 
         Assert.True(total > 0);
@@ -159,7 +159,7 @@ public class StickPointerMapperTests
         // raison : une trame d'un dixieme de seconde est deja tres lente pour une boucle a 133 Hz.
         var carry = new StickPointerCarry();
         var frame = TimeSpan.FromMilliseconds(200);
-        var output = StickPointerMapper.Map(With(new NormalizedStick(1, 0)), frame, Settings, ref carry);
+        var output = StickPointerMapper.Map(With(new NormalizedStick(1, 0)), frame, Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
 
         Assert.Equal((int)(Settings.PixelsPerSecond * frame.TotalSeconds), output.PixelsX);
     }
@@ -169,10 +169,51 @@ public class StickPointerMapperTests
     {
         var carry = new StickPointerCarry();
         var frame = TimeSpan.FromMilliseconds(200);
-        var output = StickPointerMapper.Map(With(new NormalizedStick(0.5, 0)), frame, Settings, ref carry);
+        var output = StickPointerMapper.Map(With(new NormalizedStick(0.5, 0)), frame, Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
         var linear = Settings.PixelsPerSecond * frame.TotalSeconds / 2;
 
         Assert.True(output.PixelsX < linear);
         Assert.True(output.PixelsX > 0);
+    }
+
+    // The "Stick droite" dropdown: a stick-only family (PS5/Xbox) has no pad to fall back on, so
+    // switching the right stick off must actually stop the pointer — and must not leave a carry
+    // behind that fires one last blip when it is switched back on.
+    [Fact]
+    public void ADisabledRightStickDoesNotMoveThePointer()
+    {
+        var carry = new StickPointerCarry();
+        var frame = TimeSpan.FromMilliseconds(200);
+        var output = StickPointerMapper.Map(
+            With(new NormalizedStick(1, 0)), frame, Settings, rightStickPointer: false, leftStickWheel: true, ref carry);
+
+        Assert.Equal(0, output.PixelsX);
+        Assert.Equal(0, output.PixelsY);
+    }
+
+    [Fact]
+    public void ADisabledRightStickDropsItsCarrySoNothingFiresOnReenable()
+    {
+        // Move the pointer first so a sub-pixel remainder accumulates.
+        var carry = new StickPointerCarry();
+        var frame = TimeSpan.FromMilliseconds(200);
+        StickPointerMapper.Map(With(new NormalizedStick(1, 0)), TimeSpan.FromMilliseconds(5), Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
+
+        // Switch it off: the remainder must be zeroed, or re-enabling the stick would emit a blip.
+        StickPointerMapper.Map(With(NormalizedStick.Center), frame, Settings, rightStickPointer: false, leftStickWheel: true, ref carry);
+        var output = StickPointerMapper.Map(With(new NormalizedStick(1, 0)), frame, Settings, rightStickPointer: true, leftStickWheel: true, ref carry);
+
+        Assert.Equal((int)(Settings.PixelsPerSecond * frame.TotalSeconds), output.PixelsX);
+    }
+
+    [Fact]
+    public void ADisabledLeftStickDoesNotScroll()
+    {
+        var carry = new StickPointerCarry();
+        var frame = TimeSpan.FromMilliseconds(200);
+        var output = StickPointerMapper.Map(
+            With(NormalizedStick.Center, new NormalizedStick(0, 1)), frame, Settings, rightStickPointer: true, leftStickWheel: false, ref carry);
+
+        Assert.Equal(0, output.WheelNotches);
     }
 }

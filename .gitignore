@@ -41,11 +41,13 @@ Library/Exclusif/
 /SteamXBox.Desktop.exe
 /SteamXBox.Core.exe
 /Sc2Xboxed.Osk.exe
+/Sc2XboxedPads.Osk.exe
+/Sc2XboxedSticks.Osk.exe
 /publish/
 
 # Artefacts d'execution.
 *.signal
-steamxbox-*.log
+steamxbox-*.log*
 
 # Backups locaux
 Library/archive/

@@ -120,4 +120,46 @@ public class ControllerRosterTests
         Assert.Empty(added);
         Assert.Empty(removed);
     }
+
+    // A PlayStation pad is neither a Valve device nor an XInput one. It was absent from every list
+    // the interface built — not filtered out, simply never constructed — so the user was told "no
+    // controller connected" while holding one the bridge was reading correctly.
+    private const string DualSense =
+        @"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid&0002054c_pid&0ce6#8&15f755c8&3&0000#{guid}";
+
+    private const string OtherDualSense =
+        @"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid&0002054c_pid&0ce6#8&99aabbcc&3&0000#{guid}";
+
+    [Fact]
+    public void ADualSenseAppearsInTheRoster()
+    {
+        var roster = ControllerRoster.Build([], [], [DualSense]);
+
+        Assert.Single(roster);
+        Assert.Equal(ControllerKind.DualSense, roster[0].Kind);
+    }
+
+    [Fact]
+    public void TheThreeFamiliesCoexist()
+    {
+        var roster = ControllerRoster.Build([Col03], [0], [DualSense]);
+
+        Assert.Equal(3, roster.Count);
+        Assert.Single(roster, c => c.Kind == ControllerKind.SteamController);
+        Assert.Single(roster, c => c.Kind == ControllerKind.DualSense);
+        Assert.Single(roster, c => c.Kind == ControllerKind.XInput);
+    }
+
+    [Fact]
+    public void TwoDualSensesAreTwoEntries()
+        => Assert.Equal(2, ControllerRoster.Build([], [], [DualSense, OtherDualSense]).Count);
+
+    // The same pad exposes several HID collections, exactly as a Steam Controller does.
+    [Fact]
+    public void TheCollectionsOfOneDualSenseCollapseIntoOneEntry()
+        => Assert.Single(ControllerRoster.Build([], [], [DualSense, DualSense]));
+
+    [Fact]
+    public void OmittingTheDualSenseListStillWorks()
+        => Assert.Single(ControllerRoster.Build([Col03], []));
 }

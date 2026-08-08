@@ -46,6 +46,12 @@ public sealed record Sc2XboxedProfileSettings
 
     public StickMotionMode LeftStickMode { get; init; } = StickMotionMode.ArrowKeys;
 
+    /// <summary>
+    /// Drives the mouse pointer on stick-only controllers (PS5/Xbox) while Pointer mode is active.
+    /// Never mapped onto a touchpad: those families have no pads.
+    /// </summary>
+    public StickMotionMode RightStickMode { get; init; } = StickMotionMode.Pointer;
+
     public LeftTouchpadScrollSettings LeftPadScroll { get; init; } = LeftTouchpadScrollSettings.Default;
 
     public RightTouchpadTrackballSettings RightPadTrackball { get; init; } = RightTouchpadTrackballSettings.Default;
@@ -61,4 +67,13 @@ public sealed record Sc2XboxedProfileSettings
     public PadHapticSettings RightPadHaptics { get; init; } = PadHapticSettings.Default;
 
     public TouchpadTapSettings TouchpadTap { get; init; } = TouchpadTapSettings.Default;
+
+    // ---- Xbox360 mode ----
+    // Carried inside the desktop profile since the merge: one file moves desktop mapping and the
+    // gamepad layout together, and the runtime no longer needs a separate --xbox-profile argument.
+
+    /// <summary>Physical button name to Xbox 360 button name.</summary>
+    public Dictionary<string, string> XboxButtons { get; init; } = XboxButtonMap.Default.ToDictionary();
+
+    public XboxTuning XboxTuning { get; init; } = new();
 }

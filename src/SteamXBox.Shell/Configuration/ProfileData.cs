@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Sc2Xboxed.Core.Mapping;
 
 namespace SteamXBox.Shell.Configuration;
 
@@ -12,6 +13,17 @@ public sealed class ProfileData
 
     [JsonPropertyName("mode")]
     public string Mode { get; set; } = "Profile";
+
+    /// <summary>
+    /// Which controller family the profile was written for — "Steam", "DualSense" or "XInput".
+    /// Empty for Default and for profiles an older build created without a family.
+    /// </summary>
+    /// <remarks>
+    /// Read by the GUI to file each profile under its family's tab. The runtime never reads it:
+    /// <c>ProfileMapper</c> picks its keys by name, so the extra field is inert there.
+    /// </remarks>
+    [JsonPropertyName("family")]
+    public string Family { get; set; } = "";
 
     [JsonPropertyName("switchButton")]
     public string SwitchButton { get; set; } = "quick-access";
@@ -101,12 +113,58 @@ public sealed class ProfileData
     [JsonPropertyName("xboxStickDeadZone")]
     public double XboxStickDeadZone { get; set; } = 0.018;
 
+    [JsonPropertyName("xboxStickCurve")]
+    public double XboxStickCurve { get; set; } = 1.0;
+
+    [JsonPropertyName("xboxStickSensitivity")]
+    public double XboxStickSensitivity { get; set; } = 1.0;
+
+    [JsonPropertyName("xboxTriggerThreshold")]
+    public double XboxTriggerThreshold { get; set; } = 0.0;
+
+    [JsonPropertyName("xboxTriggerFullPoint")]
+    public double XboxTriggerFullPoint { get; set; } = 1.0;
+
+    [JsonPropertyName("xboxVibrationEnabled")]
+    public bool XboxVibrationEnabled { get; set; } = true;
+
+    [JsonPropertyName("xboxVibrationIntensity")]
+    public double XboxVibrationIntensity { get; set; } = 1.0;
+
+    [JsonPropertyName("xboxHapticForwarding")]
+    public bool XboxHapticForwarding { get; set; } = false;
+
+    [JsonPropertyName("xboxTriggerHapticsEnabled")]
+    public bool XboxTriggerHapticsEnabled { get; set; } = false;
+
+    [JsonPropertyName("xboxTriggerHapticStrength")]
+    public double XboxTriggerHapticStrength { get; set; } = 0.6;
+
+    [JsonPropertyName("xboxTriggerActuatorIndex")]
+    public int XboxTriggerActuatorIndex { get; set; } = 2;
+
+    // ---- Xbox360 mode ----
+    //
+    // The gamepad layout used to live in separate files under "xbox-profiles". It now travels with
+    // the desktop profile so one save in the Profile tab moves both. The keys are the same names the
+    // old Xbox tab wrote, so profiles written before the merge read back untouched.
+
+    /// <summary>Physical button name to Xbox 360 button name.</summary>
+    [JsonPropertyName("xboxButtons")]
+    public Dictionary<string, string> XboxButtons { get; set; } = new(XboxButtonMap.Default.ToDictionary());
+
+    [JsonIgnore]
+    public XboxButtonMap XboxMap => XboxButtonMap.FromDictionary(XboxButtons);
+
+    public void ApplyXboxMap(XboxButtonMap map) => XboxButtons = map.ToDictionary();
+
     [JsonPropertyName("motions")]
     public Dictionary<string, string> Motions { get; set; } = new()
     {
         ["RightPad"] = "Trackball",
         ["LeftPad"] = "Scroll",
         ["LeftStick"] = "ArrowKeys",
+        ["RightStick"] = "Souris",
     };
 
     [JsonPropertyName("buttons")]
@@ -118,7 +176,10 @@ public sealed class ProfileData
         ["R5"] = "Alt+F4",
         ["A"] = "OSK Toggle",
         ["B"] = "OSK Toggle",
+        ["X"] = "Alt+←",
+        ["Y"] = "Alt+→",
         ["L3"] = "Enter",
+        ["R3"] = "Aucun",
         ["Menu"] = "Win",
         ["View"] = "Win+D",
         ["DPadUp"] = "VolumeUp",
@@ -137,7 +198,39 @@ public sealed class ProfileData
     public static ProfileData Load(string path)
     {
         var json = File.ReadAllText(path);
-        return System.Text.Json.JsonSerializer.Deserialize<ProfileData>(json) ?? new ProfileData();
+        var data = System.Text.Json.JsonSerializer.Deserialize<ProfileData>(json) ?? new ProfileData();
+        MigrateLegacyXboxSection(data, json);
+        return data;
+    }
+
+    /// <summary>
+    /// Profiles written before the merge kept the Xbox layout in separate files under
+    /// "xbox-profiles". Merging them into the profile means one file carries the whole pad, so a
+    /// legacy profile is migrated here, once, by copying the stored default Xbox layout into its
+    /// own section. The runtime performs the same migration when it loads a profile, so both sides
+    /// always read the same layout.
+    /// </summary>
+    private static void MigrateLegacyXboxSection(ProfileData data, string json)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("xboxButtons", out var section) && section.ValueKind == JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var legacy = XboxProfile.Load(XboxProfile.DefaultName);
+        data.XboxButtons = legacy.Buttons;
+        data.XboxStickDeadZone = legacy.Tuning.StickDeadZone;
+        data.XboxStickCurve = legacy.Tuning.StickCurve;
+        data.XboxStickSensitivity = legacy.Tuning.StickSensitivity;
+        data.XboxTriggerThreshold = legacy.Tuning.TriggerThreshold;
+        data.XboxTriggerFullPoint = legacy.Tuning.TriggerFullPoint;
+        data.XboxVibrationEnabled = legacy.Tuning.VibrationEnabled;
+        data.XboxVibrationIntensity = legacy.Tuning.VibrationIntensity;
+        data.XboxHapticForwarding = legacy.Tuning.HapticForwarding;
+        data.XboxTriggerHapticsEnabled = legacy.Tuning.TriggerHapticsEnabled;
+        data.XboxTriggerHapticStrength = legacy.Tuning.TriggerHapticStrength;
+        data.XboxTriggerActuatorIndex = legacy.Tuning.TriggerActuatorIndex;
     }
 
     public void Save()
@@ -175,6 +268,7 @@ public sealed class ProfileData
         {
             Name = Name,
             Mode = Mode,
+            Family = Family,
             SwitchButton = SwitchButton,
             RightPadSensitivity = RightPadSensitivity,
             LeftPadSensitivity = LeftPadSensitivity,
@@ -197,6 +291,17 @@ public sealed class ProfileData
             LeftPadHorizontalScroll = LeftPadHorizontalScroll,
             StickDeadZone = StickDeadZone,
             XboxStickDeadZone = XboxStickDeadZone,
+            XboxStickCurve = XboxStickCurve,
+            XboxStickSensitivity = XboxStickSensitivity,
+            XboxTriggerThreshold = XboxTriggerThreshold,
+            XboxTriggerFullPoint = XboxTriggerFullPoint,
+            XboxVibrationEnabled = XboxVibrationEnabled,
+            XboxVibrationIntensity = XboxVibrationIntensity,
+            XboxHapticForwarding = XboxHapticForwarding,
+            XboxTriggerHapticsEnabled = XboxTriggerHapticsEnabled,
+            XboxTriggerHapticStrength = XboxTriggerHapticStrength,
+            XboxTriggerActuatorIndex = XboxTriggerActuatorIndex,
+            XboxButtons = new Dictionary<string, string>(XboxButtons),
             Motions = new Dictionary<string, string>(Motions),
             Buttons = new Dictionary<string, string>(Buttons),
         };

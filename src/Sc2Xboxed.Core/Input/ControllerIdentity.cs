@@ -57,11 +57,36 @@ public static class ControllerIdentityFactory
 {
     /// <summary>Key for a HID controller, derived from its interface path.</summary>
     /// <remarks>
-    /// The path is normalised: Windows varies its case and appends a collection suffix per
-    /// interface, so the raw string differs between two enumerations of one controller. The
-    /// vendor, product and instance segment are what identify the device; the rest is noise that
-    /// would make the same controller look like a new one on every reconnection.
+    /// Built from the vendor, the product and the device instance, and from nothing else.
+    ///
+    /// <para>
+    /// A Windows interface path looks like
+    /// <c>\\?\hid#{service}_vid&amp;0002054c_pid&amp;0ce6#8&amp;15f755c8&amp;3&amp;0000#{interface-guid}</c>.
+    /// The trailing GUID is the HID <i>class</i> interface and is identical on every HID device, so
+    /// keeping it adds no identity while making the key sensitive to any variation in how the path
+    /// is spelled. The previous version cut at the <c>&amp;col</c> collection marker — which a Steam
+    /// Controller has and a DualSense does not — so on a DualSense nothing was trimmed at all.
+    /// </para>
+    ///
+    /// <para>
+    /// The consequence was measured, not theorised: the same pad acquired two different keys between
+    /// two enumerations, the hot-plug rescan saw the second as a new controller, and SteamXBox read
+    /// one physical DualSense through two readers at once. That doubles the frame rate, makes two
+    /// contenders for a pointer whose arbitration cancels contention, and files the controller's
+    /// profile under a key that will not exist tomorrow.
+    /// </para>
     /// </remarks>
+    /// <summary>
+    /// Resolves a device's durable identity from its interface path, when the platform can.
+    /// </summary>
+    /// <remarks>
+    /// Injected rather than called directly: reading the durable identity means walking the Windows
+    /// device tree, and this assembly must stay free of the platform. The composition roots plug in
+    /// <c>DeviceTree.DurableKeyFor</c>; left unset — in tests, or on a platform without it — the
+    /// path-derived key is used and is honestly reported as non-durable.
+    /// </remarks>
+    public static Func<string, string?>? DurableKeyResolver { get; set; }
+
     public static string FromHidPath(string devicePath)
     {
         if (string.IsNullOrWhiteSpace(devicePath))
@@ -69,7 +94,22 @@ public static class ControllerIdentityFactory
             return "hid:unknown";
         }
 
+        // The real identity first. What follows is derived from the interface path, whose instance
+        // segment Windows reissues on every Bluetooth reconnection — so it names a connection, not a
+        // controller, and a profile filed under it can never find its pad again.
+        if (DurableKeyResolver?.Invoke(devicePath) is { Length: > 0 } durable)
+        {
+            return durable;
+        }
+
         var lowered = devicePath.ToLowerInvariant();
+
+        // The class interface GUID, always last and always the same; dropped before anything else.
+        var lastHash = lowered.LastIndexOf('#');
+        if (lastHash > 0 && lowered.IndexOf('{', lastHash) > 0)
+        {
+            lowered = lowered[..lastHash];
+        }
 
         // Everything from the first "vid" up to the collection marker, if any.
         var start = lowered.IndexOf("vid", StringComparison.Ordinal);
@@ -97,7 +137,20 @@ public static class ControllerIdentityFactory
     /// </remarks>
     public static string FromXInputSlot(int slot) => $"xinput-slot:{slot}";
 
-    /// <summary>Whether a key identifies the same physical device across sessions.</summary>
+    /// <summary>
+    /// Whether a key identifies the same physical device across sessions.
+    /// </summary>
+    /// <remarks>
+    /// Only a key built from something burned into the device: a Bluetooth address, or a USB serial
+    /// the controller reports itself. Everything else names a connection.
+    ///
+    /// This used to answer true for any <c>hid:</c> key, on the belief that a HID interface path was
+    /// durable. It is not — Windows issues a new instance segment on every Bluetooth reconnection —
+    /// and the consequence was invisible by construction: assignments were written to disk, the pad
+    /// came back under a new key, and it simply ran on the defaults with nothing saying why. A
+    /// method that lies about durability is worse than one that admits it has none.
+    /// </remarks>
     public static bool IsStable(string id)
-        => id.StartsWith("hid:", StringComparison.Ordinal);
+        => id.StartsWith("bt:", StringComparison.Ordinal)
+           || id.StartsWith("usb:", StringComparison.Ordinal);
 }

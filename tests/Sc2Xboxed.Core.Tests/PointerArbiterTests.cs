@@ -24,7 +24,7 @@ public class PointerArbiterTests
         var arbiter = new PointerArbiter();
         arbiter.Offer(PadA, 12, -7, 0);
 
-        Assert.Equal((12, -7, 0), arbiter.Resolve());
+        Assert.Equal((12, -7, 0, 0), arbiter.Resolve());
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class PointerArbiterTests
         var arbiter = new PointerArbiter();
         arbiter.Offer(PadC, 3, 4, 0);
 
-        Assert.Equal((3, 4, 0), arbiter.Resolve());
+        Assert.Equal((3, 4, 0, 0), arbiter.Resolve());
     }
 
     // The decision this class exists for.
@@ -44,7 +44,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 10, 0, 0);
         arbiter.Offer(PadB, 10, 0, 0);
 
-        Assert.Equal((0, 0, 0), arbiter.Resolve());
+        Assert.Equal((0, 0, 0, 0), arbiter.Resolve());
     }
 
     // Specifically not summing: same direction is still contention, not agreement.
@@ -55,7 +55,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 5, 5, 0);
         arbiter.Offer(PadB, 5, 5, 0);
 
-        Assert.Equal((0, 0, 0), arbiter.Resolve());
+        Assert.Equal((0, 0, 0, 0), arbiter.Resolve());
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class PointerArbiterTests
 
         arbiter.Offer(PadA, 8, 0, 0);
 
-        Assert.Equal((8, 0, 0), arbiter.Resolve());
+        Assert.Equal((8, 0, 0, 0), arbiter.Resolve());
     }
 
     // Several frames arrive from one pad between two resolutions; they are one intent, not several.
@@ -79,7 +79,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 3, 1, 0);
         arbiter.Offer(PadA, 4, 1, 0);
 
-        Assert.Equal((7, 2, 0), arbiter.Resolve());
+        Assert.Equal((7, 2, 0, 0), arbiter.Resolve());
     }
 
     // A thumb resting on a stick produces scroll long before it produces travel, so a stray notch
@@ -91,7 +91,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 0, 0, 2);
         arbiter.Offer(PadB, 9, 0, 0);
 
-        Assert.Equal((9, 0, 2), arbiter.Resolve());
+        Assert.Equal((9, 0, 2, 0), arbiter.Resolve());
     }
 
     [Fact]
@@ -101,7 +101,26 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 0, 0, 2);
         arbiter.Offer(PadB, 0, 0, -2);
 
-        Assert.Equal((0, 0, 0), arbiter.Resolve());
+        Assert.Equal((0, 0, 0, 0), arbiter.Resolve());
+    }
+
+    [Fact]
+    public void HorizontalScrollPassesThroughBesideMotion()
+    {
+        var arbiter = new PointerArbiter();
+        arbiter.Offer(PadA, 5, 0, 0, 3);
+
+        Assert.Equal((5, 0, 0, 3), arbiter.Resolve());
+    }
+
+    [Fact]
+    public void TwoControllersHorizontalScrollingAtOnceStallIt()
+    {
+        var arbiter = new PointerArbiter();
+        arbiter.Offer(PadA, 0, 0, 0, 2);
+        arbiter.Offer(PadB, 0, 0, 0, -2);
+
+        Assert.Equal((0, 0, 0, 0), arbiter.Resolve());
     }
 
     [Fact]
@@ -111,13 +130,13 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 0, 0, 0);
         arbiter.Offer(PadB, 6, 0, 0);
 
-        Assert.Equal((6, 0, 0), arbiter.Resolve());
+        Assert.Equal((6, 0, 0, 0), arbiter.Resolve());
         Assert.Equal(0, arbiter.Contenders);
     }
 
     [Fact]
     public void NothingOfferedMovesNothing()
-        => Assert.Equal((0, 0, 0), new PointerArbiter().Resolve());
+        => Assert.Equal((0, 0, 0, 0), new PointerArbiter().Resolve());
 
     [Fact]
     public void ResolvingClearsTheSlate()
@@ -126,7 +145,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadA, 5, 5, 1);
         arbiter.Resolve();
 
-        Assert.Equal((0, 0, 0), arbiter.Resolve());
+        Assert.Equal((0, 0, 0, 0), arbiter.Resolve());
     }
 
     // A pad that disconnects mid-push would otherwise contend forever: a pointer frozen by a
@@ -139,7 +158,7 @@ public class PointerArbiterTests
         arbiter.Offer(PadB, 10, 0, 0);
         arbiter.Forget(PadB);
 
-        Assert.Equal((10, 0, 0), arbiter.Resolve());
+        Assert.Equal((10, 0, 0, 0), arbiter.Resolve());
     }
 
     [Fact]

@@ -32,6 +32,10 @@ Console.WriteLine($"{devices.Count} interface(s) :");
 foreach (var d in devices)
 {
     Console.WriteLine($"  in={d.GetMaxInputReportLength(),3}  out={d.GetMaxOutputReportLength(),3}  {d.DevicePath}");
+    // La cle durable : ce sous quoi le profil de cette manette doit etre range.
+    Console.WriteLine($"      instance = {Sc2Xboxed.Windows.DeviceTree.ToInstanceId(d.DevicePath)}");
+    foreach (var a in Sc2Xboxed.Windows.DeviceTree.AncestorInstanceIds(d.DevicePath)) Console.WriteLine($"      parent   = {a}");
+    Console.WriteLine($"      CLE      = {Sc2Xboxed.Windows.DeviceTree.DurableKeyFor(d.DevicePath) ?? "(aucune)"}");
 }
 
 // The interface carrying the longest input report is the gamepad one; the others are control

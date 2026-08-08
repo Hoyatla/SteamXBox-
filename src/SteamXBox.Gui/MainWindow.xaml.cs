@@ -30,8 +30,9 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        ProfileView.DataContext = new ProfileViewModel();
-        XboxView.DataContext = new XboxViewModel();
+        var profileVm = new ProfileViewModel();
+        ProfileView.DataContext = profileVm;
+        XboxView.DataContext = new XboxViewModel(profileVm);
 
         _views = [HomeView, ProfileView, XboxView];
 
