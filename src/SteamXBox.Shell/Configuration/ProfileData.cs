@@ -110,6 +110,13 @@ public sealed class ProfileData
     [JsonPropertyName("stickDeadZone")]
     public double StickDeadZone { get; set; } = 0.06;
 
+    /// <summary>
+    /// Whether this controller's on-screen keyboard follows the text, or stays pinned at the bottom
+    /// centre of the screen holding the caret.
+    /// </summary>
+    [JsonPropertyName("oskFloating")]
+    public bool OskFloating { get; set; } = true;
+
     /// <summary>Pointer speed at full stick deflection, in pixels per second.</summary>
     [JsonPropertyName("stickPointerSpeed")]
     public double StickPointerSpeed { get; set; } = 1400.0;

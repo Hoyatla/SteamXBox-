@@ -42,6 +42,27 @@ public static class CaretLocator
     /// screen: with no caret to locate, the keyboard went home to monitor one while the user was
     /// typing on monitor two.
     /// </remarks>
+    /// <summary>Work area of the monitor the mouse pointer is on.</summary>
+    /// <remarks>
+    /// The fallback when no caret can be found. The pointer is the one thing that always says which
+    /// screen the user is actually working on: the foreground window can be a dialog on one monitor
+    /// while the typing happens on another, and the primary monitor is simply a guess.
+    /// </remarks>
+    public static ScreenRect PointerWorkArea()
+    {
+        try
+        {
+            var area = System.Windows.Forms.Screen
+                .FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+
+            return new ScreenRect(area.X, area.Y, area.Width, area.Height);
+        }
+        catch
+        {
+            return WorkAreaFor(default);
+        }
+    }
+
     public static ScreenRect ForegroundWorkArea()
     {
         try

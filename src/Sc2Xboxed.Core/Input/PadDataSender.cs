@@ -134,14 +134,6 @@ public sealed class PadDataSender : IAsyncDisposable
 
         span[offset++] = (byte)kind;
 
-        // The stick bytes as they leave, before anything can reinterpret them. Every measurement so
-        // far has been of doubles already decoded at one end or the other, which cannot show where
-        // they empty. Offsets 45..76 hold the four stick values and nothing else.
-        if (WireLog is { } wireLog)
-        {
-            wireLog($"write [45..76] {Convert.ToHexString(buffer, 45, 32)}");
-        }
-
         lock (_lock)
         {
             for (int i = _clients.Count - 1; i >= 0; i--)
@@ -159,13 +151,6 @@ public sealed class PadDataSender : IAsyncDisposable
             }
         }
     }
-
-    /// <summary>Optional sink for the raw wire bytes, set only while diagnosing.</summary>
-    /// <remarks>
-    /// Left null in normal use: dumping thirty-two bytes per frame at two hundred frames a second
-    /// would bury the log it is written into.
-    /// </remarks>
-    public static Action<string>? WireLog { get; set; }
 
     private static void WriteDouble(Span<byte> span, ref int offset, double value)
     {

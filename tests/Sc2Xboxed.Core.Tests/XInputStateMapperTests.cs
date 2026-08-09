@@ -45,8 +45,10 @@ public class XInputStateMapperTests
         Assert.Equal(SteamControllerButtons.View, XInputStateMapper.MapButtons(0x0020));
     }
 
-    // The grip paddles and the Steam buttons have no counterpart on an Xbox pad. Approximating them
-    // onto something else would make that something fire unexpectedly.
+    // The grip paddles and the Quick Access button have no counterpart on an Xbox pad. Approximating
+    // them onto something else would make that something fire unexpectedly.
+    //
+    // Steam is no longer on that list: the Xbox button is a real button and it now produces it.
     [Fact]
     public void NothingIsMappedOntoTheSteamControllerOnlyButtons()
     {
@@ -56,11 +58,27 @@ public class XInputStateMapperTests
         {
             SteamControllerButtons.L4, SteamControllerButtons.R4,
             SteamControllerButtons.L5, SteamControllerButtons.R5,
-            SteamControllerButtons.Steam, SteamControllerButtons.QuickAccess,
+            SteamControllerButtons.QuickAccess,
         })
         {
             Assert.False(everything.HasFlag(absent), $"{absent} should not be produced");
         }
+    }
+
+    // The Xbox button opens Steam, the same as a Steam Controller's Steam button, so it produces the
+    // same flag rather than travelling by a second path.
+    [Fact]
+    public void TheXboxButtonProducesSteam()
+        => Assert.Equal(SteamControllerButtons.Steam, XInputStateMapper.MapButtons(0x0400));
+
+    // It only ever arrives from XInputGetStateEx. The documented XInputGetState masks the bit out,
+    // so on a machine where the undocumented export cannot be resolved this simply never fires —
+    // every other button keeps working.
+    [Fact]
+    public void SteamComesFromTheGuideBitAlone()
+    {
+        Assert.False(XInputStateMapper.MapButtons(0xFFFF & ~0x0400)
+            .HasFlag(SteamControllerButtons.Steam));
     }
 
     [Fact]

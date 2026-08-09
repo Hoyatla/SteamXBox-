@@ -138,6 +138,18 @@ public static class DualSenseReportParser
         if ((shoulders & 0x40) != 0) buttons |= SteamControllerButtons.LeftStick;
         if ((shoulders & 0x80) != 0) buttons |= SteamControllerButtons.RightStick;
 
+        // Third button byte: PS, touchpad click, mute. The three button bytes are consecutive in
+        // both layouts, so it is always one past the shoulders wherever those are.
+        //
+        // The PS button becomes Steam, the same flag a Steam Controller's Steam button produces, so
+        // it reaches the launcher already wired to it rather than through a second path. Guarded on
+        // length: a truncated report must lose the button, not throw.
+        if (report.Length > layout.Buttons + 2)
+        {
+            var system = report[layout.Buttons + 2];
+            if ((system & 0x01) != 0) buttons |= SteamControllerButtons.Steam;   // PS
+        }
+
         return new ControllerState(
             timestamp,
             buttons,

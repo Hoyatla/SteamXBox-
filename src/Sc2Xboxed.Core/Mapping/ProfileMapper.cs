@@ -129,6 +129,8 @@ public sealed class ProfileMapper
 			bool invertX = ReadBool(root, "rightPadInvertX", false, origins);
 			double deadzone = ReadDouble(root, "stickDeadZone", 0.5, origins);
 			double gamepadDeadzone = ReadDouble(root, "xboxStickDeadZone", 0.08, origins);
+			bool hasTrackpads = ReadHasTrackpads(root, origins);
+			bool oskFloating = ReadBool(root, "oskFloating", defaults.OskFloating, origins);
 			double stickPointerSpeed = ReadDouble(root, "stickPointerSpeed", defaults.StickPointerSpeed, origins);
 			double stickPointerCurve = ReadDouble(root, "stickPointerCurve", defaults.StickPointerCurve, origins);
 			bool leftInvert = ReadBool(root, "leftPadInvertVertical", true, origins);
@@ -182,6 +184,8 @@ public sealed class ProfileMapper
 			{
 				StickDeadZone = deadzone,
 				GamepadStickDeadZone = gamepadDeadzone,
+				HasTrackpads = hasTrackpads,
+				OskFloating = oskFloating,
 				StickPointerSpeed = stickPointerSpeed,
 				StickPointerCurve = stickPointerCurve,
 				XboxButtons = xboxButtons,
@@ -383,6 +387,30 @@ public sealed class ProfileMapper
 		return fallback;
 	}
 
+	/// <summary>
+	/// Whether the profile's family has trackpads at all.
+	/// </summary>
+	/// <remarks>
+	/// True when the family is unknown, so a profile written before this key existed keeps behaving
+	/// as it did. A DualSense's touchpad is not read by this project and both stick families report
+	/// their pads permanently released, so for them the whole pad path is work that can never
+	/// produce anything.
+	/// </remarks>
+	private static bool ReadHasTrackpads(JsonElement root, List<ProfileValueOrigin> origins)
+	{
+		var family = root.TryGetProperty("family", out var element) && element.ValueKind == JsonValueKind.String
+			? element.GetString() ?? ""
+			: "";
+
+		var has = !family.Equals("DualSense", StringComparison.OrdinalIgnoreCase)
+			&& !family.Equals("XInput", StringComparison.OrdinalIgnoreCase);
+
+		origins.Add(new ProfileValueOrigin("family", family.Length == 0 ? "(absent)" : family, family.Length > 0));
+		origins.Add(new ProfileValueOrigin("hasTrackpads", has.ToString(), FromFile: false));
+
+		return has;
+	}
+
 	public void Reset()
 	{
 		_prevRightTriggerDown = false;
@@ -475,7 +503,12 @@ public sealed class ProfileMapper
 		HandleEdge(ref _prevRightTriggerDown, rightTriggerDown, live, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
 		HandleEdge(ref _prevLeftTriggerDown, leftTriggerDown, live, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
 
-		if (!OskActive)
+		// A controller with no trackpads never enters the pad path at all. A DualSense and an Xbox
+		// pad report both pads permanently released, so the smoothing, the trackball, its inertia
+		// and the click edges all ran every frame on input that can never change — and the profile
+		// carried sensitivity, dead zone and inertia settings describing a surface that is not
+		// there. Two families were being tuned as though they were a third.
+		if (!OskActive && _settings.HasTrackpads)
 		{
 			var rightSmooth = _rightPadSmooth.Update(state.RightPad);
 			var rightFrame = MapPad(_settings.RightPadMode, state.Timestamp, rightSmooth, _rightTrackball, _rightScroll);

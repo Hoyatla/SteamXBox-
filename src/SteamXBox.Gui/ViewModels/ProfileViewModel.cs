@@ -489,21 +489,11 @@ public partial class ProfileViewModel : ObservableObject
 
     public string OskKeyboardScaleDisplay => $"{OskKeyboardScale} %";
 
-    /// <summary>
-    /// Checked: the keyboard floats, following the text field and dodging the pointer.
-    /// Unchecked: it is pinned to the bottom of the screen.
-    /// </summary>
-    public bool OskFloatingKeyboard
-    {
-        get => _osk.FloatingKeyboard;
-        set
-        {
-            if (_osk.FloatingKeyboard == value) return;
-            _osk.FloatingKeyboard = value;
-            OnPropertyChanged();
-            _osk.Save();
-        }
-    }
+    // Floating or pinned now lives on the controller's profile, as ActiveEdit.OskFloating, and the
+    // checkbox binds straight to it. The property that used to sit here wrote the shared setting,
+    // which the runtime keeps only as a fallback for an overlay launched without being told — so
+    // once the profile started deciding, this control silently stopped doing anything. Removed
+    // rather than left in place: a switch that saves a value nobody reads is worse than no switch.
 
     public bool OskHoverHaptics
     {

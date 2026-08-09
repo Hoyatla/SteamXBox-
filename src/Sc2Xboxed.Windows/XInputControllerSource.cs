@@ -88,7 +88,7 @@ public sealed class XInputControllerSource : IPhysicalControllerSource
                 }
             }
 
-            if (XInputGetState((uint)Slot, out var state) != ErrorSuccess)
+            if (ReadState((uint)Slot, out var state) != ErrorSuccess)
             {
                 // Gone. Forgetting the slot rather than ending the stream: the controller may come
                 // back on a different slot after sleeping, and the caller should not have to
@@ -149,6 +149,43 @@ public sealed class XInputControllerSource : IPhysicalControllerSource
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    /// <summary>
+    /// Reads a pad's state, including the Guide button.
+    /// </summary>
+    /// <remarks>
+    /// <c>XInputGetState</c> masks the Guide button out on purpose: Microsoft reserved it for the
+    /// Game Bar, so a pad's Xbox button is invisible to ordinary XInput callers no matter how it is
+    /// polled. Reading it needs <c>XInputGetStateEx</c>, which the DLL exports by ordinal 100 with no
+    /// name and no documentation, and which every controller tool that shows a Guide press uses.
+    ///
+    /// <para>
+    /// Resolved once, and it falls back on its own: if the ordinal is missing the pad keeps working
+    /// with everything except its Xbox button, rather than the source failing to open at all.
+    /// </para>
+    /// </remarks>
+    private static uint ReadState(uint index, out XInputState state)
+    {
+        if (_getStateEx is not null)
+        {
+            return _getStateEx(index, out state);
+        }
+
+        return XInputGetState(index, out state);
+    }
+
+    private delegate uint XInputGetStateExDelegate(uint index, out XInputState state);
+
+    private static readonly XInputGetStateExDelegate? _getStateEx = ResolveGetStateEx();
+
+    /// <remarks>
+    /// Through <see cref="NativeOrdinal"/>, because the export has no name at all. Asking
+    /// <c>NativeLibrary.TryGetExport</c> for "#100" was my mistake: that string is the linker's way
+    /// of writing an ordinal, not a name any export answers to, so it failed everywhere and the
+    /// Guide button silently never arrived.
+    /// </remarks>
+    private static XInputGetStateExDelegate? ResolveGetStateEx()
+        => NativeOrdinal.Resolve<XInputGetStateExDelegate>("xinput1_4.dll", 100);
 
     [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
     private static extern uint XInputGetState(uint index, out XInputState state);

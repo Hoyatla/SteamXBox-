@@ -171,13 +171,15 @@ public sealed class OverlayForm : Form
     /// </summary>
     private OverlayPlacementResult FixedPlacement()
     {
-        // The screen is chosen by the caret rather than by the foreground window. They are usually
-        // the same, but not always — a dialog can own the foreground while the field being typed
-        // into sits on the other monitor — and a keyboard pinned to the wrong screen is useless to
-        // the hand that asked for it.
+        // The screen holding the text field, and failing that the screen holding the mouse pointer.
+        //
+        // Not the foreground window, which was the previous fallback and is the wrong question: a
+        // dialog can own the foreground while the field being typed into sits on the other monitor,
+        // and a full-screen application can own it while the user is working elsewhere. The pointer
+        // is where the user is, which is the next best thing to knowing where the caret is.
         var caret = CaretLocator.FindActiveFieldDetailed();
         var area = caret.Rect.IsEmpty
-            ? CaretLocator.ForegroundWorkArea()
+            ? CaretLocator.PointerWorkArea()
             : CaretLocator.WorkAreaFor(caret.Rect);
 
         _lastWorkArea = area;
@@ -267,8 +269,10 @@ public sealed class OverlayForm : Form
         // whole screen. That is what makes it float rather than sit as a full-width band.
         _keyW = StandardKeyWidth;
         _keyH = StandardKeyHeight;
-        _boardX = (_screenW - BoardWidth) / 2.0;
-        _boardY = _screenH - BoardHeight - 40;
+        // Screen coordinates, like everywhere else the board origin is read. Written as client
+        // coordinates here it disagreed with the rest by the virtual desktop's origin.
+        _boardX = _originX + ((_screenW - BoardWidth) / 2.0);
+        _boardY = _originY + _screenH - BoardHeight - 40;
 
         Text = "SteamXBox Keyboard";
         FormBorderStyle = FormBorderStyle.None;
@@ -371,8 +375,15 @@ public sealed class OverlayForm : Form
 
             foreach (var key in KeyboardLayout.Keys)
             {
-                double x = _boardX + key.Col * _keyW;
-                double y = _boardY + key.Row * _keyH;
+                // Converted to client coordinates, like every other thing drawn here. The board
+                // origin is a screen position — DodgePointer compares it with Cursor.Position, and
+                // Program builds the stick cursors from it — but the form covers the whole virtual
+                // desktop, whose top-left is not the screen origin. Drawing the keys at the raw
+                // screen value was invisible on a single monitor at (0,0) and slid the keyboard by
+                // the virtual desktop's origin as soon as a second screen sat left of the first,
+                // which put it across the join between the two.
+                double x = ToClientX(_boardX) + key.Col * _keyW;
+                double y = ToClientY(_boardY) + key.Row * _keyH;
                 float w = (float)(key.Width * _keyW - 2);
                 float h = (float)(_keyH - 2);
                 var rect = new RectangleF((float)(x + 1), (float)(y + 1), w, h);

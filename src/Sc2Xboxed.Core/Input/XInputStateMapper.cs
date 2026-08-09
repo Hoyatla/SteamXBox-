@@ -49,6 +49,14 @@ public static class XInputStateMapper
     private const ushort RightThumb = 0x0080;
     private const ushort LeftShoulder = 0x0100;
     private const ushort RightShoulder = 0x0200;
+
+    /// <summary>The Xbox button. Only ever set when the state came from XInputGetStateEx.</summary>
+    /// <remarks>
+    /// The documented XInputGetState masks this bit out, so it reads as zero there and the mapping
+    /// below simply never fires — no special case needed for a machine where the undocumented export
+    /// could not be resolved.
+    /// </remarks>
+    private const ushort Guide = 0x0400;
     private const ushort A = 0x1000;
     private const ushort B = 0x2000;
     private const ushort X = 0x4000;
@@ -95,6 +103,10 @@ public static class XInputStateMapper
 
         if ((buttons & Start) != 0) result |= SteamControllerButtons.Menu;
         if ((buttons & Back) != 0) result |= SteamControllerButtons.View;
+
+        // The Xbox button becomes Steam, the flag a Steam Controller's Steam button produces, so it
+        // reaches the launcher already wired to it instead of through a second path.
+        if ((buttons & Guide) != 0) result |= SteamControllerButtons.Steam;
 
         if ((buttons & DPadUp) != 0) result |= SteamControllerButtons.DPadUp;
         if ((buttons & DPadDown) != 0) result |= SteamControllerButtons.DPadDown;

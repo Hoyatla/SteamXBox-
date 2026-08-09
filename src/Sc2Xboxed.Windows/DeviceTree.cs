@@ -45,11 +45,38 @@ public static class DeviceTree
 
             var key = DurableControllerKey.From(chain);
 
-            log?.Invoke(key is null
-                ? $"no durable identity in [{string.Join(" <- ", chain)}]"
-                : $"durable key {key} from {chain[0]}");
+            if (key is not null)
+            {
+                log?.Invoke($"durable key {key} from {chain[0]}");
+                return key;
+            }
 
-            return key;
+            // Nothing in the instance ids identifies the device: a pad that enumerates by port and
+            // reports no serial, which is common on third-party controllers. Windows keeps its own
+            // answer to "which physical device is this" — the container id — and that is better than
+            // the alternative here, which is a slot number that moves between controllers.
+            //
+            // Its limit is worth stating rather than hiding: for a device with no serial Windows
+            // derives the container id from where it is plugged in, so it survives reboots and
+            // reconnections to the same port, and changes if the pad is moved to another one. The
+            // prefix says so, and the log line names it, so a profile that stops matching after a
+            // pad is moved is explainable instead of mysterious.
+            if (ContainerIdOf(chain[0]) is { } container)
+            {
+                // The model is part of the key, not decoration. A container id derived from a port
+                // is reused by whatever is plugged into that port next, so a different pad in the
+                // same socket would inherit this one's profile — the silent swap the durable-key
+                // rules exist to prevent. With the vendor and product in the key, only the same
+                // model in the same port can inherit, and inheriting from an identical model is a
+                // defensible outcome rather than a wrong one.
+                var containerKey = $"dev:{ModelOf(chain)}{container}";
+
+                log?.Invoke($"durable key {containerKey} (container id) from {chain[0]}");
+                return containerKey;
+            }
+
+            log?.Invoke($"no durable identity in [{string.Join(" <- ", chain)}]");
+            return null;
         }
         catch (Exception ex)
         {
@@ -132,6 +159,86 @@ public static class DeviceTree
             ? buffer.ToString()
             : "";
     }
+
+    /// <summary>The vendor and product of the first node that names them, as a key fragment.</summary>
+    /// <remarks>
+    /// Empty when nothing in the chain says: the container id alone is still better than a slot, and
+    /// refusing a key here would leave the pad with no durable identity at all.
+    /// </remarks>
+    private static string ModelOf(IEnumerable<string> chain)
+    {
+        foreach (var id in chain)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                id, @"VID[_&]([0-9A-Fa-f]{4}).*?PID[_&]([0-9A-Fa-f]{4})");
+
+            if (match.Success)
+            {
+                return $"vid_{match.Groups[1].Value.ToLowerInvariant()}&pid_{match.Groups[2].Value.ToLowerInvariant()}:";
+            }
+        }
+
+        return "";
+    }
+
+    /// <summary>
+    /// Windows' own identifier for the physical device an instance belongs to, or null.
+    /// </summary>
+    /// <remarks>
+    /// All the interfaces a composite device exposes — a pad's gamepad, audio and vendor collections
+    /// — share one container id, which is exactly the grouping wanted here: one key per controller,
+    /// not one per collection.
+    /// </remarks>
+    private static string? ContainerIdOf(string instanceId)
+    {
+        try
+        {
+            if (CM_Locate_DevNodeW(out var node, instanceId, 0) != CrSuccess)
+            {
+                return null;
+            }
+
+            var key = DevpkeyDeviceContainerId;
+            var buffer = new byte[16];
+            var size = (uint)buffer.Length;
+
+            if (CM_Get_DevNode_PropertyW(node, ref key, out var type, buffer, ref size, 0) != CrSuccess
+                || type != DevpropTypeGuid
+                || size != 16)
+            {
+                return null;
+            }
+
+            var container = new Guid(buffer);
+
+            return container == Guid.Empty ? null : container.ToString("N");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>DEVPKEY_Device_ContainerId.</summary>
+    private static DevpropKey DevpkeyDeviceContainerId => new()
+    {
+        Fmtid = new Guid("8c7ed206-3f8a-4827-b3ab-ae9e1faefc6c"),
+        Pid = 2,
+    };
+
+    private const uint DevpropTypeGuid = 0x0000000D;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DevpropKey
+    {
+        public Guid Fmtid;
+        public uint Pid;
+    }
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern int CM_Get_DevNode_PropertyW(
+        uint devInst, ref DevpropKey propertyKey, out uint propertyType,
+        byte[] buffer, ref uint bufferSize, uint flags);
 
     [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
     private static extern int CM_Locate_DevNodeW(out uint devInst, string deviceId, uint flags);

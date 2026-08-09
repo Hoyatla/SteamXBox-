@@ -49,11 +49,6 @@ public sealed class PadInputReader : IAsyncDisposable
             catch (EndOfStreamException) { yield break; }
             catch (IOException) { yield break; }
 
-            // The same bytes the sender dumped, before a single one is decoded here. Compared side
-            // by side, these two lines say whether the values survive the wire — which no amount of
-            // reading decoded doubles at either end could establish.
-            Program.Log($"read  [45..76] {Convert.ToHexString(buffer, 45, 32)}");
-
             int offset = 0;
 
             // A sender and a reader that disagree on the frame size do not fail, they slide out of

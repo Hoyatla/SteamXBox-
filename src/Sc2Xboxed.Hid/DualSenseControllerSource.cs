@@ -121,11 +121,15 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
         var start = DateTimeOffset.UtcNow;
         var lastButtons = SteamControllerButtons.None;
         var lastLength = -1;
-        var lastStick = (0, 0, 0, 0);
 
         // The last state handed out, timestamp stripped, so a repeat can be recognised.
         ControllerState previous = default;
-        var lastYielded = TimeSpan.MinValue;
+
+        // Null until the first frame, never a sentinel. TimeSpan.MinValue stood here and the very
+        // first comparison — state.Timestamp minus it — overflowed TimeSpan.MaxValue and threw,
+        // killing the reader on its first report. The pad then looked slow and unreliable when in
+        // fact its source was dying and restarting.
+        TimeSpan? lastYielded = null;
 
         using (stream)
         {
@@ -191,19 +195,19 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                         // whether the byte was misread or mapped to the wrong Xbox equivalent. One press
                         // logged like this says both, and ends the guessing this project has already
                         // paid for several times over.
-                        // Sticks as well as buttons. Logging only on button change never captured a
-                        // stick push at all, so "the stick does nothing" and "the stick moves and the
-                        // mapper ignores it" stayed indistinguishable. Quantised to a sixteenth so a
-                        // resting thumb does not produce a line per frame.
-                        var stickStep = (
-                            (int)(state.LeftStick.X * 16), (int)(state.LeftStick.Y * 16),
-                            (int)(state.RightStick.X * 16), (int)(state.RightStick.Y * 16));
-
-                        if (state.Buttons != lastButtons || read != lastLength || stickStep != lastStick)
+                        // Buttons and report shape only. The sticks were in this condition too, at a
+                        // sixteenth of travel, which sounded coarse enough — a moving thumb crosses
+                        // a sixteenth constantly, so it produced a thirty-two byte dump per frame at
+                        // two hundred frames a second, three thousand lines a minute, each one
+                        // flushed to disk. It was the single largest thing in the log and a real
+                        // load on the machine.
+                        //
+                        // Nothing is lost: the per-second counter line already reports each
+                        // controller's stick peak, which is what "did the stick move" needs.
+                        if (state.Buttons != lastButtons || read != lastLength)
                         {
                             lastButtons = state.Buttons;
                             lastLength = read;
-                            lastStick = stickStep;
 
                             _log?.Invoke(
                                 $"DualSense report id=0x{buffer[0]:X2} len={read} "
@@ -224,7 +228,9 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                         // significant bit and are correctly let through. The guard is here for when
                         // the pad is truly still.
                         var current = state with { Timestamp = default };
-                        if (previous == current && state.Timestamp - lastYielded < IdleHeartbeat)
+                        if (previous == current
+                            && lastYielded is { } last
+                            && state.Timestamp - last < IdleHeartbeat)
                         {
                             continue;
                         }

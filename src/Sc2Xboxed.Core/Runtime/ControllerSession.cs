@@ -167,11 +167,33 @@ public sealed class ControllerSessionSet
     public void Forget(string controllerId) => _sessions.Remove(controllerId);
 
     /// <summary>Rebuilds every session, for when the profiles on disk have changed.</summary>
-    public void Reload()
+    public void Reload() => Reload(_ => true);
+
+    /// <summary>
+    /// Rebuilds only the sessions the caller names, and returns how many were touched.
+    /// </summary>
+    /// <remarks>
+    /// Rebuilding a session is not free and not invisible: it throws away the chord timers, the
+    /// trackball's inertia, the sub-pixel carry and the first-frame flag. Doing it to every
+    /// controller because one profile was edited means a hand holding a two-second chord on one pad
+    /// loses it whenever someone touches a slider for another — and a chord that never completes is
+    /// indistinguishable from a button that does not work.
+    /// </remarks>
+    public int Reload(Func<string, bool> shouldReload)
     {
+        var reloaded = 0;
+
         foreach (var id in _sessions.Keys.ToList())
         {
+            if (!shouldReload(id))
+            {
+                continue;
+            }
+
             _sessions[id] = _factory(id);
+            reloaded++;
         }
+
+        return reloaded;
     }
 }

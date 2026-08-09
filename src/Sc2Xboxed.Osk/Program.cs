@@ -180,6 +180,40 @@ public static class Program
         return "";
     }
 
+    /// <summary>
+    /// Whether this keyboard was asked to float, from the controller that opened it.
+    /// </summary>
+    /// <remarks>
+    /// Null when the argument is absent, and then the shared setting decides as before.
+    ///
+    /// <para>
+    /// Passed on the command line rather than read from the settings file, because it is not a
+    /// property of the machine. Pinned or floating belongs to the controller: one user types on a
+    /// pad in the corner of a big screen and wants the board next to the text, another holds a
+    /// DualSense on the sofa and wants it in the same place every time. A single shared flag made
+    /// the second controller obey the first one's preference.
+    /// </para>
+    /// </remarks>
+    private static bool? ReadFloatingOverride()
+    {
+        var argv = Environment.GetCommandLineArgs();
+
+        for (var i = 0; i < argv.Length - 1; i++)
+        {
+            if (argv[i].Equals("--floating", StringComparison.OrdinalIgnoreCase))
+            {
+                var value = argv[i + 1];
+
+                if (value is "1" or "true" or "True") return true;
+                if (value is "0" or "false" or "False") return false;
+
+                return null;
+            }
+        }
+
+        return null;
+    }
+
     public static void Main(string[] args)
     {
         // One log per executable: two specialised keyboards writing to one file would truncate
@@ -270,8 +304,11 @@ public static class Program
     /// <summary>Scale read from the settings, applied to the form the next time it is shown.</summary>
     private static int _pendingScale = 100;
 
-    /// <summary>Floating or pinned, read from the settings on every show.</summary>
+    /// <summary>Floating or pinned, resolved on every show.</summary>
     private static bool _pendingFloating = true;
+
+    /// <summary>What the controller asked for, or null when it said nothing.</summary>
+    private static readonly bool? _floatingOverride = ReadFloatingOverride();
 
     /// <summary>
     /// Applies the stored layout name and size. An unrecognised layout falls back to detection
@@ -280,7 +317,10 @@ public static class Program
     private static void ApplyKeyboardLayout(OskSettings settings)
     {
         _pendingScale = settings.ClampedKeyboardScale;
-        _pendingFloating = settings.FloatingKeyboard;
+
+        // The controller that opened this keyboard has the last word. The shared setting is only
+        // the fallback, for a keyboard launched without being told.
+        _pendingFloating = _floatingOverride ?? settings.FloatingKeyboard;
 
         // La palette suit le theme choisi dans le GUI, relue a chaque affichage.
         OverlayPalette.Load(AppContext.BaseDirectory, settings.Theme);
@@ -455,6 +495,11 @@ public static class Program
         }
         else
         {
+            // Placed before it appears, exactly like the resident path does on a show signal. This
+            // branch went straight to Show(), so the board kept the value the constructor gives it —
+            // the centre of the whole virtual desktop, which on two monitors is the join between
+            // them. Neither the pinned rule nor the floating one had ever run.
+            form.UpdatePlacement();
             form.Show();
             Log("Overlay form shown.");
             Application.Run(form);
@@ -628,6 +673,11 @@ public static class Program
                 bool rightActive = padDriven && PadActive(frame.RightPad, ref s.RightTouchHold);
                 bool leftActive = padDriven && PadActive(frame.LeftPad, ref s.LeftTouchHold);
 
+                if (padDriven)
+                {
+                    PadExtremes.Observe(frame.LeftPad, frame.RightPad);
+                }
+
                 KeyDef? rightKey = null;
                 KeyDef? leftKey = null;
 
@@ -635,9 +685,10 @@ public static class Program
                 {
                     if (rightTouched)
                     {
-                        double py = (frame.RightPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
-                        int row = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
-                        rightKey = KeyboardLayout.FindKeyAt(row, KeyboardLayout.ColumnFor(frame.RightPad.X, isLeftPad: false, row));
+                        // Both axes together: the disc-to-square stretch needs the whole point, not
+                        // one coordinate at a time.
+                        int row = KeyboardLayout.RowFor(frame.RightPad.X, frame.RightPad.Y);
+                        rightKey = KeyboardLayout.FindKeyAt(row, KeyboardLayout.ColumnFor(frame.RightPad.X, frame.RightPad.Y, isLeftPad: false));
                         s.RightHoldKey = rightKey;
                     }
                     else if (s.RightTouchHold > 0)
@@ -647,9 +698,8 @@ public static class Program
 
                     if (leftTouched)
                     {
-                        double py = (frame.LeftPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
-                        int row = Math.Clamp((int)(py / kh), 0, KeyboardLayout.Rows - 1);
-                        leftKey = KeyboardLayout.FindKeyAt(row, KeyboardLayout.ColumnFor(frame.LeftPad.X, isLeftPad: true, row));
+                        int row = KeyboardLayout.RowFor(frame.LeftPad.X, frame.LeftPad.Y);
+                        leftKey = KeyboardLayout.FindKeyAt(row, KeyboardLayout.ColumnFor(frame.LeftPad.X, frame.LeftPad.Y, isLeftPad: true));
                         s.LeftHoldKey = leftKey;
                     }
                     else if (s.LeftTouchHold > 0)
@@ -710,9 +760,10 @@ public static class Program
 
                     if (rightTouched)
                     {
-                        double rawRy = (frame.RightPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
-                        int rightRow = Math.Clamp((int)(rawRy / kh), 0, KeyboardLayout.Rows - 1);
-                        double rawRx = KeyboardLayout.CursorXFor(frame.RightPad.X, isLeftPad: false, rightRow, kw);
+                        // The drawn cursor follows the same normalisation as the key it selects, or
+                        // the dot and the highlight drift apart near the edges.
+                        double rawRy = KeyboardLayout.CursorYFor(frame.RightPad.X, frame.RightPad.Y, kh);
+                        double rawRx = KeyboardLayout.CursorXFor(frame.RightPad.X, frame.RightPad.Y, isLeftPad: false, kw);
                         s.EaseRight(rawRx, rawRy);
                         s.Form.SetRightCursor(s.Form.BoardX + s.SmoothRightX, boardY + s.SmoothRightY);
                         s.Form.HighlightKey(rightKey);
@@ -741,9 +792,8 @@ public static class Program
 
                     if (leftTouched)
                     {
-                        double rawLy = (frame.LeftPad.Y + 1.0) / 2.0 * (kh * KeyboardLayout.Rows);
-                        int leftRow = Math.Clamp((int)(rawLy / kh), 0, KeyboardLayout.Rows - 1);
-                        double rawLx = KeyboardLayout.CursorXFor(frame.LeftPad.X, isLeftPad: true, leftRow, kw);
+                        double rawLy = KeyboardLayout.CursorYFor(frame.LeftPad.X, frame.LeftPad.Y, kh);
+                        double rawLx = KeyboardLayout.CursorXFor(frame.LeftPad.X, frame.LeftPad.Y, isLeftPad: true, kw);
                         s.EaseLeft(rawLx, rawLy);
                         s.Form.SetLeftCursor(s.Form.BoardX + s.SmoothLeftX, boardY + s.SmoothLeftY);
                         s.Form.HighlightLeftKey(leftKey);

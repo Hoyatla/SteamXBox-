@@ -2,6 +2,50 @@ SteamXBox - Change log
 ======================
 
 
+4.4
+---
+  Inputs
+
+  * Every physical device is an independent input. Controllers no longer cancel each
+    other: whichever one moves the pointer, moves it. The arbitration that froze the
+    pointer whenever two controllers contributed in the same 8 ms window is gone, and
+    with it the case where a trackpad still gliding on its inertia blocked another
+    controller's stick for seconds at a time.
+
+  * A controller that repeats an unchanged state no longer runs the whole mapping for
+    it. A still controller still reports at 20 Hz, so held chords and inertia keep
+    being told that time is passing.
+
+  Sticks
+
+  * The two sticks are tuned separately. Pointing and scrolling had shared one dead
+    zone and one curve, so tuning either one spoiled the other.
+
+  * Pointer speed, curve and dead zone are read from each controller's own profile
+    instead of constants shared by every controller, and are editable in the Profils
+    tab under "Stick droit : pointeur du bureau".
+
+  * Fixed: saving a profile discarded any setting the clone in between did not know
+    about. New settings silently reverted to their defaults on every save.
+
+  On-screen keyboard
+
+  * Pinned mode places the keyboard at the bottom centre of the screen holding the
+    caret, rather than of the foreground window.
+
+  * The floating keyboard keeps a gap from the text on both sides, and goes below the
+    caret when there is no room to its left or above — the right is where the text is
+    about to be written.
+
+  Desktop
+
+  * The environment no longer swallows clicks over its empty area, so other windows
+    can be brought forward and it can go behind them.
+
+  * It occupies the work area rather than the whole monitor, leaving the taskbar
+    visible and usable.
+
+
 4.0
 ---
   Interface

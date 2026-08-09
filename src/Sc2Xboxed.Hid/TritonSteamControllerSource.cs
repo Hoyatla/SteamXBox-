@@ -75,7 +75,11 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource, INa
 
             // The last state handed out, timestamp stripped, so a repeat can be recognised.
             ControllerState previous = default;
-            var lastYielded = TimeSpan.MinValue;
+
+            // Null until the first frame, never a sentinel: TimeSpan.MinValue here made the very
+            // first subtraction overflow TimeSpan.MaxValue and throw, killing the reader on its
+            // first report.
+            TimeSpan? lastYielded = null;
 
             // How long an unchanging controller may stay silent before a frame is sent anyway.
             var IdleHeartbeat = TimeSpan.FromMilliseconds(50);
@@ -136,7 +140,9 @@ public sealed class TritonSteamControllerSource : IPhysicalControllerSource, INa
                         // buttons held perfectly still produce identical states, and the two second
                         // hold never accumulated. 20 Hz instead of 800 keeps them all fed.
                         var current = state with { Timestamp = default };
-                        if (previous == current && state.Timestamp - lastYielded < IdleHeartbeat)
+                        if (previous == current
+                            && lastYielded is { } last
+                            && state.Timestamp - last < IdleHeartbeat)
                         {
                             continue;
                         }

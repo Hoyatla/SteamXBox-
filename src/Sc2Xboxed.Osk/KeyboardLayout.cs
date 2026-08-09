@@ -1,3 +1,5 @@
+using Sc2Xboxed.Core.Osk;
+
 namespace Sc2Xboxed.Osk;
 
 public enum SpecialAction { None, Shift, Backspace, Enter, Space, Tab, Sym }
@@ -54,52 +56,136 @@ public static class KeyboardLayout
     public const int MaxCols = 11;
 
     /// <summary>
-    /// Column shared by both pads: 6 / Z / H / N on the detected layouts. The left pad owns columns
-    /// 0 to this one, the right pad this one to the last, so each thumb covers its own half of the
-    /// board and neither has to cross the whole width.
+    /// The columns one pad owns: the same halves the sticks aim from.
     /// </summary>
-    public const int SharedColumn = 5;
-
-    /// <summary>The last row holds the editing keys and stays reachable from both pads.</summary>
-    public static bool IsSpecialRow(int row) => row == Rows - 1;
-
-    /// <summary>
-    /// Maps a pad's horizontal position to a column within that pad's zone.
-    /// </summary>
-    public static int ColumnFor(double padX, bool isLeftPad, int row)
+    /// <remarks>
+    /// Taken from <see cref="StickAnchorLayout"/> rather than from a constant of its own, because
+    /// "the same split as the sticks" has to be true by construction. Two independent definitions
+    /// agreed on paper and disagreed in fact: the pads split at a <i>shared</i> column 5 — owned by
+    /// both — while the sticks split 0-5 and 6-10 with no overlap, and the pads left the last row
+    /// undivided so either thumb could reach Enter. Three differences between two keyboards that are
+    /// supposed to feel like one.
+    /// </remarks>
+    public static (int First, int Last) ZoneFor(bool isLeftPad)
     {
-        var normalized = Math.Clamp((padX + 1.0) / 2.0, 0.0, 1.0);
+        var anchors = StickAnchorLayout.Build(MaxCols, Rows);
+        var anchor = anchors[Math.Min(StickAnchorLayout.AnchorFor(isLeftPad), anchors.Count - 1)];
 
-        // Space, Enter, Backspace, Shift and Sym must stay under either thumb, so the special row is
-        // not split: both pads span its full width.
-        if (IsSpecialRow(row))
-        {
-            return Math.Clamp((int)(normalized * MaxCols), 0, MaxCols - 1);
-        }
-
-        if (isLeftPad)
-        {
-            var span = SharedColumn + 1;
-            return Math.Clamp((int)(normalized * span), 0, SharedColumn);
-        }
-
-        var rightSpan = MaxCols - SharedColumn;
-        return Math.Clamp(SharedColumn + (int)(normalized * rightSpan), SharedColumn, MaxCols - 1);
+        return (anchor.FirstColumn, anchor.LastColumn);
     }
 
-    /// <summary>Horizontal centre of a pad's zone, in pixels, for drawing its cursor.</summary>
-    public static double CursorXFor(double padX, bool isLeftPad, int row, double keyWidth)
-    {
-        var normalized = Math.Clamp((padX + 1.0) / 2.0, 0.0, 1.0);
+    /// <summary>
+    /// How far from the centre a thumb comfortably reaches, as a fraction of the reported range.
+    /// </summary>
+    /// <remarks>
+    /// Not 1.0, and the difference is the whole point. Measured on the hardware by sweeping each pad
+    /// edge to edge, the extremes reported were left X -0.88 to +0.81, Y -0.79 to +0.92; right X
+    /// -0.87 to +0.98, Y -0.91 to +0.96. A mapping built on ±1.00 therefore places the outer columns
+    /// past anything the thumb actually produces: the last key of each row can only be reached by
+    /// pushing onto the very rim, if at all.
+    ///
+    /// <para>
+    /// The four bounds also disagree with each other, so no single measured value would be right for
+    /// all of them. This is deliberately a little inside the smallest of them: everything beyond
+    /// clamps to the outer column, which costs a sliver of unused rim and buys an outer column that
+    /// is comfortably reachable on every edge of both pads.
+    /// </para>
+    /// </remarks>
+    public const double UsableReach = 0.80;
 
-        if (IsSpecialRow(row))
+    /// <summary>
+    /// Maps a point on the round pad to a point on the square zone, each axis 0 to 1.
+    /// </summary>
+    /// <remarks>
+    /// The pads are discs and the zones are rectangles, so a direct mapping leaves the four corner
+    /// keys of every zone outside anything a finger can produce: on a circle <c>|X|</c> and
+    /// <c>|Y|</c> cannot both be large, which the measured extremes show plainly — Y stopped at 0.92
+    /// while X was already at -0.88.
+    ///
+    /// <para>
+    /// So the disc is stretched onto the square along each direction. The direction the thumb points
+    /// is kept exactly; only how far out the rim lies is rescaled, from the circle's radius of 1 to
+    /// the square's edge in that same direction, which is <c>1 / max(|x|,|y|)</c> of it. On the axes
+    /// nothing changes at all; on the diagonals the rim now reaches the corner.
+    /// </para>
+    ///
+    /// <para>
+    /// The cost, worth naming: a given distance travelled by the thumb covers more keys diagonally
+    /// than straight, because the diagonal was stretched the most. That is inherent to putting a
+    /// square inside a circle, and the alternative is corner keys nobody can reach.
+    /// </para>
+    /// </remarks>
+    public static (double X, double Y) NormalizePoint(double padX, double padY)
+    {
+        var x = padX / UsableReach;
+        var y = padY / UsableReach;
+
+        // Past the usable rim: pulled back onto it, keeping the direction. Clamping each axis on its
+        // own would bend a diagonal push towards the nearest edge.
+        var radius = Math.Sqrt((x * x) + (y * y));
+        if (radius > 1.0)
         {
-            return normalized * keyWidth * MaxCols;
+            x /= radius;
+            y /= radius;
+            radius = 1.0;
         }
 
-        return isLeftPad
-            ? normalized * keyWidth * (SharedColumn + 1)
-            : keyWidth * SharedColumn + normalized * keyWidth * (MaxCols - SharedColumn);
+        var longest = Math.Max(Math.Abs(x), Math.Abs(y));
+        if (longest > 1e-9)
+        {
+            var stretch = radius / longest;
+            x *= stretch;
+            y *= stretch;
+        }
+
+        return (Math.Clamp((x + 1.0) / 2.0, 0.0, 1.0), Math.Clamp((y + 1.0) / 2.0, 0.0, 1.0));
+    }
+
+    /// <summary>The row a pad point selects.</summary>
+    public static int RowFor(double padX, double padY)
+    {
+        var (_, y) = NormalizePoint(padX, padY);
+
+        return Math.Clamp((int)(y * Rows), 0, Rows - 1);
+    }
+
+    /// <summary>
+    /// Maps a pad point to a column within that pad's zone.
+    /// </summary>
+    /// <remarks>
+    /// Edge to edge over the usable travel: the leftmost the thumb comfortably reaches is the zone's
+    /// first column, the rightmost is its last, and past that it clamps. The thumb never has to
+    /// leave the surface to reach a key.
+    /// </remarks>
+    public static int ColumnFor(double padX, double padY, bool isLeftPad)
+    {
+        var (x, _) = NormalizePoint(padX, padY);
+        var (first, last) = ZoneFor(isLeftPad);
+        var span = last - first + 1;
+
+        return Math.Clamp(first + (int)(x * span), first, last);
+    }
+
+    /// <summary>Horizontal position of a pad's cursor, in pixels, for drawing it.</summary>
+    /// <remarks>
+    /// The same mapping as <see cref="ColumnFor"/>, in pixels rather than columns. Anything else and
+    /// the dot the user is steering would sit somewhere other than the key it selects.
+    /// </remarks>
+    public static double CursorXFor(double padX, double padY, bool isLeftPad, double keyWidth)
+    {
+        var (x, _) = NormalizePoint(padX, padY);
+        var (first, last) = ZoneFor(isLeftPad);
+        var span = last - first + 1;
+
+        return (first + (x * span)) * keyWidth;
+    }
+
+    /// <summary>Vertical position of a pad's cursor, in pixels, matching <see cref="RowFor"/>.</summary>
+    public static double CursorYFor(double padX, double padY, double keyHeight)
+    {
+        var (_, y) = NormalizePoint(padX, padY);
+
+        return y * keyHeight * Rows;
     }
 
     private static IReadOnlyList<KeyDef>? _detected;

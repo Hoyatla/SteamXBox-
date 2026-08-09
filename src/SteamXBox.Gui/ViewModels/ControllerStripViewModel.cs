@@ -128,10 +128,13 @@ public partial class ControllerStripViewModel : ObservableObject
 
         var previous = Selected?.Identity.Id;
 
+        // The same resolver the runtime uses, or the two would file the same pad under two different
+        // identities — the GUI saving a profile the Core never looks up.
         var roster = ControllerRoster.Build(
             SafeHidPaths(),
             Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots(),
-            SafeDualSensePaths());
+            SafeDualSensePaths(),
+            slot => Sc2Xboxed.Windows.XInputDurableIdentity.For(slot));
 
         Controllers.Clear();
 

@@ -19,6 +19,25 @@ public enum PluginCategory
 
     /// <summary>A periodic display in the environment.</summary>
     Widget,
+
+    /// <summary>
+    /// A tool of the control centre: calculator, clipboard, timer, converter.
+    /// </summary>
+    /// <remarks>
+    /// A tool is a plugin rather than a parallel mechanism of its own. Two systems that do the same
+    /// thing drift, and it is always the second one that falls behind — this project has spent
+    /// enough on that lesson elsewhere.
+    ///
+    /// <para>
+    /// The host draws; the tool describes. A tool declares what it contains and
+    /// <c>SteamXBox.Desktop</c> supplies the window, the theme, the controller navigation and the
+    /// on-screen keyboard. Ten tools each drawing their own window would be ten foreign windows, none
+    /// of them navigable with a controller — and a controller is the one device this project
+    /// guarantees. The cost is that a tool cannot have an interface the host has no words for, and
+    /// the vocabulary grows when a real tool asks for it, never in anticipation.
+    /// </para>
+    /// </remarks>
+    Tool,
 }
 
 /// <summary>A plugin's <c>plugin.json</c>, as written on disk.</summary>
@@ -54,6 +73,7 @@ public sealed class PluginManifest
         "theme.surface" => PluginCategory.ThemeSurface,
         "tile" => PluginCategory.Tile,
         "widget" => PluginCategory.Widget,
+        "tool" => PluginCategory.Tool,
         _ => PluginCategory.Unknown,
     };
 

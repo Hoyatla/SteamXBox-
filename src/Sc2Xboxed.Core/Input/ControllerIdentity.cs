@@ -150,7 +150,16 @@ public static class ControllerIdentityFactory
     /// came back under a new key, and it simply ran on the defaults with nothing saying why. A
     /// method that lies about durability is worse than one that admits it has none.
     /// </remarks>
+    /// <remarks>
+    /// <c>dev:</c> is Windows' own container id for a physical device, used for pads that report no
+    /// serial. It belongs here for the reason the other two do: it is not reassigned to a different
+    /// controller by the order things were switched on, which is the failure an XInput slot has and
+    /// the whole point of this test. Its own limit — a serial-less device takes its container id
+    /// from the port, so the same model in the same socket inherits — is closed where the key is
+    /// built, by naming the model in it.
+    /// </remarks>
     public static bool IsStable(string id)
         => id.StartsWith("bt:", StringComparison.Ordinal)
-           || id.StartsWith("usb:", StringComparison.Ordinal);
+           || id.StartsWith("usb:", StringComparison.Ordinal)
+           || id.StartsWith("dev:", StringComparison.Ordinal);
 }

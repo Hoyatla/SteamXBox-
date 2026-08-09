@@ -543,17 +543,35 @@ static ProfileMapper BuildMapperFor(
         }
     }
 
+    // Said out loud. A controller with no profile of its own runs on the settings of whichever
+    // profile the bridge was launched with — which is another controller's, of another family: an
+    // Xbox pad silently inheriting a Steam Controller's trackpad tuning. It happened without a
+    // single line in the log, so from the outside it looked like the pad had its own settings and
+    // they were wrong.
+    log.Info(LogCategory.Session, fallback is not null
+        ? $"Controller {controllerId} has no profile of its own; using the launch profile's settings."
+        : $"Controller {controllerId} has no profile of its own; using the built-in defaults.");
+
     return fallback is not null ? new ProfileMapper(fallback) : new ProfileMapper();
 }
 
 
 /// <summary>Short readable form of a controller id, for the one-line counters.</summary>
 /// <remarks>
-/// A HID key runs to sixty characters and would push everything else off the line. The tail is what
-/// distinguishes two pads of the same model, so that is what is kept.
+/// Both ends, because either one alone collapses different controllers into the same text — and a
+/// counter line that shows one pad three times is worse than no counter line at all.
+///
+/// <para>
+/// The tail alone was kept, on the reasoning that it holds the serial that separates two pads of the
+/// same model. True for <c>usb:</c> keys. False for the container ids added since: Windows derives
+/// them partly from the machine, so every one of them here ended in <c>d4e98a60d0e6</c> and three
+/// distinct Xbox pads printed as the same controller. The head alone fails the opposite way, two
+/// same-model pads sharing <c>usb:vid_…&amp;pid_…</c>. Keeping both is the only form that separates
+/// every case this project actually produces.
+/// </para>
 /// </remarks>
 static string Shorten(string id)
-    => id.Length <= 14 ? id : id[..4] + "..." + id[^9..];
+    => id.Length <= 20 ? id : id[..8] + "…" + id[^8..];
 /// <summary>Reads --source steam|xinput, or an empty string when the choice is automatic.</summary>
 static string ReadForcedSource(string[] args)
 {
@@ -780,10 +798,10 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     var session = sessions.For("bootstrap");
     var profileMapper = session.ProfileMapper;
 
-    // Applying settings must not require a restart, so the profile file is watched and reloaded live.
-    using var profileWatcher = string.IsNullOrEmpty(profileName)
-        ? null
-        : new ProfileFileWatcher(profileName, message => log.Warn(LogCategory.Session, message));
+    // Applying settings must not require a restart, so the profiles are watched and reloaded live.
+    // Every profile, not only the launch one: each controller has its own file and each must be
+    // noticed when it is saved.
+    using var profileWatcher = new ProfileFileWatcher(message => log.Warn(LogCategory.Session, message));
     var padSender = new PadDataSender();
 
     // The single HID writer for haptics, declared before the keyboard instances because every
@@ -823,8 +841,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             }
         });
 
-    // Diagnostic only: the raw stick bytes as they leave the bridge.
-    PadDataSender.WireLog = m => log.Info(LogCategory.Osk, m);
     padSender.Start();
     log.Info(LogCategory.Pipe, "PadData pipe server started (SteamXBox_OskPad).");
     var seconds = ReadSecondsOption(args);
@@ -852,24 +868,41 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
     // Rebuilds both mappers from disk, carrying over the overlay state so a reload cannot strand the
     // keyboard open with nothing driving it.
-    void ReloadProfile()
+    /// <summary>
+    /// Rebuilds the controllers whose own profile was just saved, and nobody else's.
+    /// </summary>
+    /// <remarks>
+    /// It used to rebuild every session on any change, which was wrong in both directions: saving
+    /// the Steam Controller's profile threw away the DualSense's chord timers, trackball inertia and
+    /// sub-pixel carry, while saving the DualSense's own profile did nothing at all — the watcher
+    /// only looked at the file the bridge was launched with.
+    /// </remarks>
+    void ReloadProfile(IReadOnlyCollection<string> changedProfiles)
     {
-        if (string.IsNullOrEmpty(profileName)) return;
-
-        var reloaded = ProfileMapper.LoadDetailed(profileName);
         var wasOskActive = profileMapper.OskActive;
         var wasDaisywheel = profileMapper.DaisywheelActive;
 
-        // Every controller's mapper, not just the last one to send a frame. Reloading one would
-        // leave the other players on the previous profile with nothing saying so.
-        sessions.Reload();
+        var touched = sessions.Reload(
+            id => changedProfiles.Contains(profileBook.ProfileFor(id), StringComparer.OrdinalIgnoreCase));
+
         profileMapper = sessions.For("bootstrap").ProfileMapper;
         profileMapper.OskActive = wasOskActive;
         profileMapper.DaisywheelActive = wasDaisywheel;
+
+        log.Info(LogCategory.Session,
+            $"Profiles changed [{string.Join(", ", changedProfiles)}]: {touched} controller(s) rebuilt.");
+
+        // The launch profile also feeds process-wide state: the Xbox layout served to controllers
+        // with no profile of their own, and the rumble translation. Only when that one changed.
+        if (string.IsNullOrEmpty(profileName)
+            || !changedProfiles.Contains(profileName, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var reloaded = ProfileMapper.LoadDetailed(profileName);
         mapper = new DefaultSteamControllerMapper(reloaded.Settings);
 
-        // The Xbox layout travels with the profile, so the statics that answer for controllers
-        // without a profile of their own (and the rumble translation) follow the reload too.
         DefaultSteamControllerMapper.DefaultButtonMap = XboxButtonMap.FromDictionary(reloaded.Settings.XboxButtons);
         DefaultSteamControllerMapper.DefaultTuning = reloaded.Settings.XboxTuning;
         TritonHapticReportBuilder.TriggerActuatorIndex = reloaded.Settings.XboxTuning.TriggerActuatorIndex;
@@ -1242,9 +1275,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     break;
                 }
 
-                if (profileWatcher?.TryConsumeChange() == true)
+                if (profileWatcher.TryConsumeChange(out var changedProfiles))
                 {
-                    ReloadProfile();
+                    ReloadProfile(changedProfiles);
                 }
 
                 // Steam may also have been started from outside SteamXBox entirely.
@@ -1324,6 +1357,21 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                         // overlay and lunge the cursor.
                         var elapsed = state.Timestamp - session.LastFrame;
                         session.LastFrame = state.Timestamp;
+
+                        // A source that restarts counts from zero again, so the next frame lands
+                        // before the one this session last saw and the gap comes out negative — the
+                        // log showed -67 seconds. Every rule downstream treats a non-positive gap as
+                        // a stall and produces nothing, so the pointer freezes until the clock has
+                        // climbed back past where it was. One frame is the honest reading here: the
+                        // stream is new, not late.
+                        if (elapsed < TimeSpan.Zero)
+                        {
+                            log.Info(LogCategory.Mapping,
+                                $"{frameSource}: frame clock went backwards by {-elapsed.TotalMilliseconds:F0} ms "
+                                + "(source restarted); counting this frame as one interval.");
+
+                            elapsed = TimeSpan.Zero;
+                        }
 
                         if (!oskActive)
                         {
@@ -1503,6 +1551,14 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                                             psi.ArgumentList.Add("--instance");
                                             psi.ArgumentList.Add(instance.Naming.Suffix);
+
+                                            // Pinned or floating, from this controller's own
+                                            // profile. The overlay used to read one shared setting
+                                            // file, so whichever preference was saved last applied
+                                            // to every controller on the machine.
+                                            psi.ArgumentList.Add("--floating");
+                                            psi.ArgumentList.Add(
+                                                profileMapper.Settings.OskFloating ? "1" : "0");
 
                                             var proc = Process.Start(psi);
                                             DLog($"OSK overlay launched for {frameSource}: PID={proc?.Id}");

@@ -47,10 +47,19 @@ public static class ControllerRoster
     /// itself between two refreshes is one nobody can point at.
     /// </remarks>
     /// <param name="dualSensePaths">Interface paths of every DualSense found.</param>
+    /// <param name="xinputDurableKey">
+    /// Resolves an XInput slot to a key that survives a reconnection, or returns null when it cannot.
+    /// </param>
+    /// <remarks>
+    /// Injected because the answer lives in the Windows device tree, which this assembly does not
+    /// reference. Absent, an Xbox pad is identified by its slot — the position Windows gave it this
+    /// session, which moves to another controller as soon as the order changes.
+    /// </remarks>
     public static IReadOnlyList<ControllerIdentity> Build(
         IEnumerable<string> hidPaths,
         IEnumerable<int> occupiedXInputSlots,
-        IEnumerable<string>? dualSensePaths = null)
+        IEnumerable<string>? dualSensePaths = null,
+        Func<int, string?>? xinputDurableKey = null)
     {
         var roster = new List<ControllerIdentity>();
 
@@ -92,9 +101,12 @@ public static class ControllerRoster
 
         foreach (var slot in occupiedXInputSlots.Distinct().OrderBy(s => s))
         {
+            // The durable key when the device tree can give one, the slot only as a last resort.
+            // The slot is a position, not an identity: settings filed under it follow whichever pad
+            // happens to occupy it next.
             roster.Add(new ControllerIdentity(
                 ControllerKind.XInput,
-                ControllerIdentityFactory.FromXInputSlot(slot),
+                xinputDurableKey?.Invoke(slot) ?? ControllerIdentityFactory.FromXInputSlot(slot),
                 $"Manette Xbox {slot + 1}",
                 slot));
         }

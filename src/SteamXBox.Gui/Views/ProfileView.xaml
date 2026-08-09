@@ -196,7 +196,7 @@
                                  clavier qui suit le champ. -->
                             <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4" Margin="0,8,0,0"
                                       Content="{loc:T Text='Clavier flottant (sinon fixe en bas de l\'écran)'}"
-                                      IsChecked="{Binding OskFloatingKeyboard}"
+                                      IsChecked="{Binding ActiveEdit.OskFloating}"
                                       Style="{StaticResource ToggleSwitch}"/>
 
                             <!-- Taille du clavier flottant. La portée du bras et la taille d'écran
@@ -255,7 +255,8 @@
                                   IsChecked="{Binding OskValidateOnRelease}"
                                   Style="{StaticResource ToggleSwitch}"/>
                         <TextBlock Text="{loc:T Text='Permet de repositionner le doigt en maintenant le clic avant de valider.'}"
-                                   FontSize="11" Foreground="{StaticResource TextDimBrush}"/>
+                                   FontSize="11" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+
                     </StackPanel>
                 </Border>
 

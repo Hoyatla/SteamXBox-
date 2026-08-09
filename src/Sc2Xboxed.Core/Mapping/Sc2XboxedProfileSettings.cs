@@ -36,6 +36,28 @@ public sealed record Sc2XboxedProfileSettings
 
     public double GamepadStickDeadZone { get; init; } = 0.018;
 
+    /// <summary>
+    /// Whether this controller has trackpads at all.
+    /// </summary>
+    /// <remarks>
+    /// A DualSense and an Xbox pad have none that this project reads — both report their pads
+    /// permanently released — so every pad rule below is inert for them and every pad setting in
+    /// their profile describes something that cannot happen. Kept as a flag rather than inferred per
+    /// frame: the mapper holds state across frames, and "no touch yet" is not "no pad".
+    /// </remarks>
+    public bool HasTrackpads { get; init; } = true;
+
+    /// <summary>
+    /// Whether this controller's on-screen keyboard follows the text, or stays pinned.
+    /// </summary>
+    /// <remarks>
+    /// Per controller, because it is a preference of the person holding it and not of the machine.
+    /// One user types on a pad in the corner of a large screen and wants the board beside the text;
+    /// another holds a DualSense on a sofa and wants it in the same place every time. A single
+    /// shared flag made the second controller obey the first one's choice.
+    /// </remarks>
+    public bool OskFloating { get; init; } = true;
+
     /// <summary>Pointer speed at full stick deflection, in pixels per second.</summary>
     /// <remarks>
     /// For a controller driving the desktop pointer from a stick rather than a trackpad. It was a

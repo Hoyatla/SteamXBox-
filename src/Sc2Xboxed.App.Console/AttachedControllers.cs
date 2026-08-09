@@ -125,14 +125,20 @@ public static class AttachedControllers
             // Every answering slot, each pinned to its own reader. Pinning matters: a source left to
             // "find the first slot that answers" would have several readers racing onto the same
             // controller while the others went unread.
-            // Intersected with the snapshot, never re-enumerated. A slot answering now that was not
-            // occupied at startup is one of our own virtual pads.
-            foreach (var slot in XInputControllerSource.ConnectedSlots().Where(physicalSlots.Contains))
+            // Asked of the device tree, and only fall back to the startup snapshot when it cannot
+            // answer. The snapshot alone said "a slot that fills after we started is ours", which
+            // kept our own ViGEm pads out and also made every controller plugged in later invisible
+            // for the rest of the session — users swap pads, so that is most of them.
+            foreach (var slot in XInputControllerSource.ConnectedSlots()
+                         .Where(slot => XInputDurableIdentity.LooksPhysical(slot, log) ?? physicalSlots.Contains(slot)))
             {
+                // The durable key when the device tree can give one. Filed under the slot, this
+                // pad's settings would follow the position rather than the pad.
                 opened.Add((
                     new ControllerIdentity(
                         ControllerKind.XInput,
-                        ControllerIdentityFactory.FromXInputSlot(slot),
+                        XInputDurableIdentity.For(slot, log)
+                            ?? ControllerIdentityFactory.FromXInputSlot(slot),
                         $"Manette Xbox {slot + 1}",
                         slot),
                     new XInputControllerSource(slot)));
