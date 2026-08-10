@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L'indexeur du corpus documentaire.
+
+    Un executable a part, et non un morceau du Desktop : il tourne une fois, sur le serveur qui voit
+    le partage, planifie par la DSI. Trente postes indexant le meme partage chacun de leur cote
+    serait absurde, et la politique des outils interdit de toute facon a un outil de laisser tourner
+    quelque chose d'invisible.
+
+    Cible net10.0 et non net10.0-windows : rien ici ne touche a l'interface, et l'institution peut
+    vouloir l'executer ailleurs que sur un poste.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SteamXBox.Indexer</RootNamespace>
+    <AssemblyName>SteamXBox.Indexer</AssemblyName>
+    <Product>SteamXBox</Product>
+    <AssemblyTitle>SteamXBox Indexer</AssemblyTitle>
+    <Description>SteamXBox - alimente l'index documentaire.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SteamXBox.Tools\SteamXBox.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+  </ItemGroup>
+
+</Project>

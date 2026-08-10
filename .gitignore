@@ -40,6 +40,7 @@ Library/Exclusif/
 /SteamXBox.exe
 /SteamXBox.Desktop.exe
 /SteamXBox.Core.exe
+/SteamXBox.Indexer.exe
 /Sc2Xboxed.Osk.exe
 /Sc2XboxedPads.Osk.exe
 /Sc2XboxedSticks.Osk.exe

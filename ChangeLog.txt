@@ -2,6 +2,48 @@ SteamXBox - Change log
 ======================
 
 
+4.5
+---
+  Desktop
+
+  * The environment stays below every other window, whatever raises it. It covers the
+    Windows desktop and nothing else, so a tool launched from it is never buried by it.
+    Clicking a tile no longer brings the environment forward over your work.
+
+  * The environment refuses to minimise, by any route. It is the backdrop, not a window
+    to manage.
+
+  * Tapping § twice clears the screen; tapping it twice again puts the windows back.
+    Which way it goes is decided by looking at the screen, so restoring a window by hand
+    does not send the shortcut the wrong way. As with Win+M, a few windows never
+    minimise — an always-on-top overlay, a desktop widget, the Windows input panel.
+
+  Search
+
+  * Fixed: opening a folder from the launcher did nothing on some machines. Folders had
+    been handed to explorer.exe by name, which on those machines starts and exits
+    without opening anything, reporting success. They go to the shell again, and only
+    fall back to the explorer if the shell refuses — which is what a cloud placeholder
+    folder does.
+
+  * Fixed: Ctrl+Enter, which shows an entry inside its folder, did nothing on those same
+    machines. It now asks the shell directly rather than through the explorer's command
+    line.
+
+  * The launcher accepts typing on the very first summon. The caret used to arrive only
+    from the second one, so the first use of the shortcut cost a click.
+
+  Indexing
+
+  * Office and OpenDocument templates are indexed — .dot, .xlt, .pot, .ott, .ots, .otp.
+    A shared drive is full of them: invoices, payment schedules, forms, all holding the
+    text somebody would search for.
+
+  Identity
+
+  * New application icon.
+
+
 4.4
 ---
   Inputs

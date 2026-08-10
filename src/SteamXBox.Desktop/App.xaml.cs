@@ -101,6 +101,8 @@ public partial class App : Application
         {
             Tools.ToolRegistry.StartServices();
             UiLog.Info("tool services started");
+
+            StartGlobalHotkeys();
         }
         catch (Exception ex)
         {
@@ -188,6 +190,62 @@ public partial class App : Application
     /// keyboard with it, that turned "close a feature" into "close all of SteamXBox". Nothing may
     /// end this process except the user asking for it, which is <see cref="Quit"/>.
     /// </remarks>
+    private Search.SearchLauncherWindow? _searchLauncher;
+    private Input.DoubleTapHotkey? _hotkeys;
+
+    /// <summary>
+    /// Puts the session's double-tap shortcuts in place: Shift for the launcher, the section key to
+    /// clear the screen.
+    /// </summary>
+    /// <remarks>
+    /// The launcher window is built now and hidden, not built on each summon: it is the index that is
+    /// expensive, and a launcher that takes a second to appear is one nobody uses. The index itself
+    /// is not built here — it waits for the first summon, so starting the environment does not walk
+    /// every drive while the user is trying to launch something.
+    ///
+    /// <para>
+    /// Both gestures share one keyboard hook, which is why they are registered together. A low-level
+    /// hook is in the path of every keystroke on the machine, so the cost is per hook and not per
+    /// shortcut.
+    /// </para>
+    ///
+    /// <para>
+    /// A failure here costs the shortcuts and nothing else. The environment starts either way, and
+    /// the log says which it was.
+    /// </para>
+    /// </remarks>
+    private void StartGlobalHotkeys()
+    {
+        try
+        {
+            _searchLauncher = new Search.SearchLauncherWindow(message => UiLog.Info(message));
+
+            // Looked up on this machine's layout rather than written down: the section key has a
+            // different code on every keyboard, and none at all on some.
+            var section = Input.KeyboardLayout.VirtualKeyFor('§', message => UiLog.Info(message));
+
+            _hotkeys = new Input.DoubleTapHotkey(
+                [
+                    new Input.DoubleTapGesture(
+                        "double-Shift → launcher",
+                        Input.DoubleTapHotkey.ShiftKeys,
+                        () => _searchLauncher?.Toggle()),
+
+                    new Input.DoubleTapGesture(
+                        "double-§ → clear the screen, and put it back",
+                        Input.DoubleTapHotkey.Key(section),
+                        () => Input.DesktopWindows.Toggle(message => UiLog.Info(message))),
+                ],
+                message => UiLog.Info(message));
+
+            _hotkeys.Start();
+        }
+        catch (Exception exception)
+        {
+            UiLog.Info($"global hotkeys unavailable: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
     private void ShowShell()
     {
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -224,6 +282,13 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Before anything else, and on every path out including a theme restart. A keyboard hook
+        // left installed by a process that is ending is a cost the whole machine keeps paying for
+        // nothing — every keystroke of every application still goes through a callback that is no
+        // longer there to answer.
+        _hotkeys?.Dispose();
+        _hotkeys = null;
+
         // A safety net for the paths that bypass Quit — a session logoff, or Windows shutting down.
         // Skipped while restarting for a theme, where the bridge must survive.
         if (!_restarting)

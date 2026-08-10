@@ -37,4 +37,15 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
   </ItemGroup>
 
+  <!--
+    Les icones de l'interface, prises dans Library/Icons/fluent (MIT, usage commercial autorise).
+    Embarquees et non copiees a cote : la publication est mono-fichier, et un fichier voisin peut
+    manquer ou etre supprime alors qu'une ressource embarquee voyage avec l'executable.
+    LICENSE.txt suit les icones dans l'assemblage, pour que la provenance ne se perde jamais.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Icons\*.svg" />
+    <EmbeddedResource Include="Assets\Icons\LICENSE.txt" />
+  </ItemGroup>
+
 </Project>

@@ -2,7 +2,7 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.4"
+#define MyAppVersion "4.5"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -42,6 +42,8 @@ Source: "SteamXBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Sc2XboxedPads.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Sc2XboxedSticks.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "SteamXBox.Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "SteamXBox.Indexer.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion

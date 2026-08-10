@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -76,6 +77,136 @@ public partial class MainWindow : Window
         Height = work.Height;
     }
 
+    // ---- Staying underneath ----
+
+    private const int WM_WINDOWPOSCHANGING = 0x0046;
+
+    /// <summary>The bottom of the Z order, as <c>SetWindowPos</c> spells it.</summary>
+    private static readonly IntPtr HwndBottom = new(1);
+
+    /// <summary>"Leave the Z order alone" — cleared, since changing it is the entire point.</summary>
+    private const uint SwpNoZOrder = 0x0004;
+
+    /// <summary>
+    /// Keeps the environment below every other window, whatever tries to raise it.
+    /// </summary>
+    /// <remarks>
+    /// The window is the backdrop: it covers the Windows desktop and nothing else. Letting the
+    /// clicks through was only half of it — that lets the window <i>go</i> behind, but nothing keeps
+    /// it there. Clicking a tile activates it, activation raises it, and it lands on top of whatever
+    /// the user had open. For a tool, being covered by the environment that launched it is the same
+    /// as not working.
+    ///
+    /// <para>
+    /// Forced here rather than by a call to <c>SetWindowPos</c>, because a call fixes the order at
+    /// one instant and anything may change it the next. Every single Z-order change — ours, the
+    /// user's, another application's, the shell's — is announced by this message first, and rewriting
+    /// its request is what makes the rule hold instead of being re-applied forever.
+    /// </para>
+    ///
+    /// <para>
+    /// Focus is untouched, and that is the point of doing it this way. Under Windows the Z order and
+    /// the active window are two separate things: the environment can hold the keyboard while sitting
+    /// at the bottom, so the tiles stay reachable with the arrow keys and the gamepad. The Windows
+    /// desktop stays below regardless — the shell pins it there itself, so the bottom of the ordinary
+    /// Z order is still above the wallpaper and the icons.
+    /// </para>
+    ///
+    /// <para>
+    /// Which is also why tools need no pinning of their own. An ordinary window is above the backdrop
+    /// by construction. Making tools <c>Topmost</c> instead would have put them above everything —
+    /// Steam, a fullscreen game, a video call — and a tool developer would have had to write Z-order
+    /// code to be a well-behaved window.
+    /// </para>
+    /// </remarks>
+    private IntPtr KeepBehindEveryOtherWindow(
+        IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != WM_WINDOWPOSCHANGING)
+        {
+            return IntPtr.Zero;
+        }
+
+        var position = Marshal.PtrToStructure<WindowPos>(lParam);
+
+        position.InsertAfter = HwndBottom;
+        position.Flags &= ~SwpNoZOrder;
+
+        Marshal.StructureToPtr(position, lParam, fDeleteOld: false);
+
+        // Left unhandled on purpose: WPF reads this same message to follow its own move and resize,
+        // and swallowing it would break the layout. The request has been rewritten; it still has to
+        // reach everyone else.
+        return IntPtr.Zero;
+    }
+
+    /// <summary>The move and resize request Windows is about to carry out.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowPos
+    {
+        public IntPtr Hwnd;
+        public IntPtr InsertAfter;
+        public int X;
+        public int Y;
+        public int Width;
+        public int Height;
+        public uint Flags;
+    }
+
+    // ---- Never minimising ----
+
+    private const int WM_SYSCOMMAND = 0x0112;
+    private const int SC_MINIMIZE = 0xF020;
+
+    /// <summary>The command bits of a system command; the low four are Windows' own.</summary>
+    private const int SysCommandMask = 0xFFF0;
+
+    /// <summary>
+    /// Refuses the request to minimise, wherever it comes from.
+    /// </summary>
+    /// <remarks>
+    /// The environment is the backdrop, and a backdrop that can be minimised leaves a hole: the
+    /// screen falls back to the Windows desktop and the environment has to be found in the taskbar
+    /// to come back. Nothing about it is a window the user should have to manage.
+    ///
+    /// <para>
+    /// It matters most for the shortcut that clears the screen. Asking the shell to minimise
+    /// everything asks this window too, and without this rule the one window meant to stay would go
+    /// with the rest.
+    /// </para>
+    /// </remarks>
+    private IntPtr RefuseToMinimise(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // The low four bits carry internal state — which is why the value must be masked before it is
+        // compared, and why comparing it raw silently stops matching.
+        if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & SysCommandMask) == SC_MINIMIZE)
+        {
+            handled = true;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Puts the window back, for the requests that never asked.
+    /// </summary>
+    /// <remarks>
+    /// A backstop, because <c>WM_SYSCOMMAND</c> is only the polite route. <c>ShowWindow</c> minimises
+    /// a window without sending it, and that is the route the shell takes for some of its own
+    /// operations — so refusing the message alone would hold most of the time, which for a rule like
+    /// this is the same as not holding.
+    /// </remarks>
+    protected override void OnStateChanged(EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+            return;
+        }
+
+        base.OnStateChanged(e);
+    }
+
     // ---- Letting the clicks through ----
 
     private const int WM_NCHITTEST = 0x0084;
@@ -120,6 +251,8 @@ public partial class MainWindow : Window
         if (PresentationSource.FromVisual(this) is HwndSource source)
         {
             source.AddHook(PassClicksThroughTheEmptyArea);
+            source.AddHook(KeepBehindEveryOtherWindow);
+            source.AddHook(RefuseToMinimise);
         }
 
         // Setting a flag is free; recomputing happens at most once per hit test that follows a

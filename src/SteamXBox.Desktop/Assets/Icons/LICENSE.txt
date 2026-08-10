@@ -1,0 +1,10 @@
+Fluent UI System Icons - Iconify icon set
+
+Prefix   : fluent
+Icons    : 20088
+Author   : Microsoft Corporation
+Source   : https://github.com/microsoft/fluentui-system-icons
+License  : MIT (MIT)
+Text     : https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE
+
+Retrieved from https://github.com/iconify/icon-sets
