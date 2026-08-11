@@ -145,11 +145,30 @@ public static class ClipboardService
         return true;
     }
 
+    /// <summary>
+    /// Notes that the clipboard changed, and gets out of the way.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nothing is read here.</b> This runs inside the interface thread's message pump, and
+    /// reading the clipboard means opening it — which waits when whoever just wrote to it still
+    /// holds it, and waits on the source process itself for the formats that are only rendered when
+    /// asked for. A file copied in the file manager is exactly that case.
+    ///
+    /// <para>
+    /// Measured, and it was not a slow interface: the keyboard hook is delivered on the thread that
+    /// installed it, that thread was this one, and every keystroke on the machine waits for the hook
+    /// to answer. Copying a folder therefore killed the keyboard in every application for
+    /// thirty-three seconds, until SteamXBox was closed. The hook has its own thread now; this one
+    /// stops blocking as well, because one guard against a system-wide freeze is not enough.
+    /// </para>
+    /// </remarks>
     private static IntPtr OnMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (message == WmClipboardUpdate && !_writing)
         {
-            Record();
+            Application.Current?.Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
+                new Action(Record));
         }
 
         return IntPtr.Zero;
@@ -159,6 +178,14 @@ public static class ClipboardService
     {
         try
         {
+            // A copied file or folder is not history this tool keeps, and asking for it is the
+            // expensive question: the shell renders that format on demand, so reading it waits on
+            // the file manager. Left alone entirely.
+            if (System.Windows.Clipboard.ContainsFileDropList())
+            {
+                return;
+            }
+
             if (System.Windows.Clipboard.ContainsText())
             {
                 var text = System.Windows.Clipboard.GetText();

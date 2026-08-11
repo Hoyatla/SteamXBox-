@@ -102,6 +102,24 @@ public static class XInputDurableIdentity
     public static string? For(int slot, Action<string>? log = null)
         => DeviceForSlot(slot, log) is { } device ? DeviceTree.DurableKeyFor(device, log) : null;
 
+    /// <summary>
+    /// The interface path of the real pad on a slot, for hiding it from everything else.
+    /// </summary>
+    /// <remarks>
+    /// Physical pads only, and that guard is the whole reason this is not just
+    /// <see cref="DeviceForSlot"/> made public. The pads SteamXBox creates for games are XInput
+    /// devices too; hiding one would take away the very thing the game is supposed to see, and the
+    /// symptom — "Xbox mode stopped working" — would point nowhere near this line.
+    ///
+    /// <para>
+    /// Null when the slot cannot be resolved, or when it resolves to something that is not certainly
+    /// physical. Uncertain means not hidden: failing to hide a pad costs a duplicated button press,
+    /// while hiding the wrong device costs the user a controller that works nowhere.
+    /// </para>
+    /// </remarks>
+    public static string? PhysicalInterfacePathFor(int slot, Action<string>? log = null)
+        => LooksPhysical(slot, log) == true ? DeviceForSlot(slot, log) : null;
+
     /// <summary>The XUSB device behind a slot, or null when it cannot be told which.</summary>
     private static string? DeviceForSlot(int slot, Action<string>? log)
     {

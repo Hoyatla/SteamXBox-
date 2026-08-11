@@ -34,17 +34,15 @@ public sealed class SteamControllerLizardModeHeartbeat : IAsyncDisposable
 
     private async Task RunAsync()
     {
-        var heartbeat = SteamControllerLizardMode.BuildHeartbeatCommand();
-
         while (!_cancellation.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(800), _cancellation.Token)
                 .ConfigureAwait(false);
 
-            lock (_streamGate)
-            {
-                _stream.SetFeature(heartbeat);
-            }
+            // Everything the disable changed, said again — see SteamControllerLizardMode.Beat. The
+            // beat used to repeat one of the two commands, so a session that died left the
+            // controller half restored: buttons back, trackpads still dead.
+            SteamControllerLizardMode.Beat(_stream, _streamGate);
         }
     }
 }

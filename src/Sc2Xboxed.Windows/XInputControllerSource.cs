@@ -18,7 +18,7 @@ namespace Sc2Xboxed.Windows;
 /// state and nothing else. The interval is the frame budget for the whole pipeline, so it is set
 /// once here rather than left to the caller to guess.
 /// </remarks>
-public sealed class XInputControllerSource : IPhysicalControllerSource
+public sealed class XInputControllerSource : IPhysicalControllerSource, IReportsDeparture
 {
     /// <summary>XInput exposes four slots, assigned by Windows in connection order.</summary>
     public const int SlotCount = 4;
@@ -30,6 +30,17 @@ public sealed class XInputControllerSource : IPhysicalControllerSource
 
     /// <summary>Slot currently being read, or -1 when no controller has been found yet.</summary>
     public int Slot { get; private set; } = -1;
+
+    /// <inheritdoc />
+    public event Action? Departed;
+
+    /// <summary>Whether a controller has been read since the last time one was reported gone.</summary>
+    /// <remarks>
+    /// Guards the announcement, not the polling. An empty slot is tried again every second, and
+    /// without this the departure would be announced once a second for as long as the controller
+    /// stayed off — asking whoever listens to give the same device back, over and over.
+    /// </remarks>
+    private bool _hadController;
 
     /// <param name="slot">Slot to read, or -1 to take the first one that answers.</param>
     /// <param name="pollIntervalMs">
@@ -94,8 +105,20 @@ public sealed class XInputControllerSource : IPhysicalControllerSource
                 // back on a different slot after sleeping, and the caller should not have to
                 // rebuild the source for that.
                 Slot = -1;
+
+                // Said out loud, once, because ending the stream is how every other source says it
+                // and this one never will. Until this existed, an Xbox pad switched off was the one
+                // controller whose leaving nobody was told about.
+                if (_hadController)
+                {
+                    _hadController = false;
+                    Departed?.Invoke();
+                }
+
                 continue;
             }
+
+            _hadController = true;
 
             yield return XInputStateMapper.Map(
                 new XInputFrame(

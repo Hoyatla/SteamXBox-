@@ -62,6 +62,47 @@ public sealed class PluginManifest
     public bool Revertible { get; set; }
     public string Entry { get; set; } = "";
 
+    // ---- Tools ----
+
+    /// <summary>Segoe Fluent Icons code point, as the compiled tools already use.</summary>
+    public string Glyph { get; set; } = "";
+
+    /// <summary>One line under the title when the tile has the focus.</summary>
+    public string Hint { get; set; } = "";
+
+    /// <summary>
+    /// <c>tile</c> — the tool acts without showing anything — or <c>panel</c>, where the host opens
+    /// a window and draws <see cref="Content"/> in it.
+    /// </summary>
+    public string Surface { get; set; } = "tile";
+
+    /// <summary>The action the host performs, named from the vocabulary it publishes.</summary>
+    public string Does { get; set; } = "";
+
+    /// <summary>What the action applies to: a settings page, an application, a path.</summary>
+    public string Target { get; set; } = "";
+
+    /// <summary>What the host draws when the surface is a panel.</summary>
+    public List<PluginContentItem> Content { get; set; } = [];
+
+    /// <summary>Values the host keeps for the tool between sessions, named one by one.</summary>
+    public List<string> Remembers { get; set; } = [];
+
+    /// <summary>
+    /// Whether the tool is on when nobody has said otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Three states, not two, and the distinction earns its keep: a tool the user switched off, a
+    /// tool the user switched on, and a tool nobody has touched. Only the third consults this.
+    ///
+    /// <para>
+    /// It exists for tools that should ship present but idle — a diagnostic monitor is the first.
+    /// Shipping it enabled would put a watcher on every customer's machine by default; shipping it
+    /// absent would mean it is not there on the day it is needed.
+    /// </para>
+    /// </remarks>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Folder the manifest was read from. Not serialised.</summary>
     [JsonIgnore]
     public string Directory { get; set; } = "";
@@ -191,6 +232,95 @@ public static class PluginCatalog
             return $"point d'entrée introuvable : {manifest.Entry}";
         }
 
+        return manifest.Kind == PluginCategory.Tool ? ValidateTool(manifest) : null;
+    }
+
+    /// <summary>
+    /// The rules a declarative tool has to meet on top of the common ones.
+    /// </summary>
+    /// <remarks>
+    /// Refused rather than repaired, for the same reason as the rest: a tool whose action the host
+    /// does not know would appear as a tile that does nothing when pressed, and the user would have
+    /// no way to tell that from a bug in SteamXBox.
+    /// </remarks>
+    private static string? ValidateTool(PluginManifest manifest)
+    {
+        if (manifest.Name.Length == 0)
+        {
+            return "champ 'name' manquant";
+        }
+
+        if (manifest.Glyph.Length == 0)
+        {
+            return "champ 'glyph' manquant : une tuile sans icône n'est pas atteignable du regard";
+        }
+
+        var surface = manifest.Surface.ToLowerInvariant();
+
+        if (surface is not ("tile" or "panel"))
+        {
+            return $"surface inconnue : '{manifest.Surface}' (attendu 'tile' ou 'panel')";
+        }
+
+        // A tile is only its action, so it must have one. A panel gets its actions from its content.
+        if (surface == "tile")
+        {
+            return PluginActions.NeedsPanel(manifest.Does)
+                ? $"l'action '{manifest.Does}' a besoin d'un panneau : elle agit sur ce que l'utilisateur désigne"
+                : Action(manifest.Does, manifest.Target, "l'outil");
+        }
+
+        if (manifest.Content.Count == 0)
+        {
+            return "une surface 'panel' sans 'content' n'aurait rien à montrer";
+        }
+
+        foreach (var item in manifest.Content)
+        {
+            var kind = item.Kind.ToLowerInvariant();
+
+            if (kind is not ("text" or "number" or "choice" or "action" or "file"))
+            {
+                return $"élément inconnu dans 'content' : '{item.Kind}'";
+            }
+
+            // A file is designated by the user in the host's own panel — the tool never sees the
+            // filesystem, only what was pointed at. Without an id there is nothing for an action to
+            // refer to afterwards.
+            if (kind == "file" && item.Id.Length == 0)
+            {
+                return "un élément 'file' doit avoir un 'id' pour que l'action puisse le nommer";
+            }
+
+            if (kind == "choice" && item.Options.Count == 0)
+            {
+                return $"l'élément '{item.Id}' est un choix sans options";
+            }
+
+            if (kind == "action" && Action(item.Does, item.Target, $"l'élément '{item.Id}'") is { } problem)
+            {
+                return problem;
+            }
+        }
+
         return null;
+    }
+
+    /// <summary>Checks one named action against the vocabulary the host publishes.</summary>
+    private static string? Action(string does, string target, string who)
+    {
+        if (does.Length == 0)
+        {
+            return $"{who} ne déclare aucune action 'does'";
+        }
+
+        if (!PluginActions.Known.Contains(does))
+        {
+            return $"action inconnue : '{does}' (connues : {string.Join(", ", PluginActions.Known)})";
+        }
+
+        return PluginActions.NeedsTarget(does) && target.Length == 0
+            ? $"l'action '{does}' de {who} demande un 'target'"
+            : null;
     }
 }

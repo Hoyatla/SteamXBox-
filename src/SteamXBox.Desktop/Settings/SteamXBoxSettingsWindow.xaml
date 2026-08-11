@@ -60,6 +60,13 @@
                 <StackPanel Margin="16,16" x:Name="NavPanel">
                     <RadioButton Content="{loc:T Text='⚙  Paramètres'}" Tag="0" Click="Nav_Click"
                                  GroupName="Nav" IsChecked="True" Style="{StaticResource NavButton}"/>
+                    <RadioButton Content="{loc:T Text='🧩  Outils'}" Tag="3" Click="Nav_Click"
+                                 GroupName="Nav" Style="{StaticResource NavButton}"/>
+
+                    <!-- Les journaux et le diagnostic restent en bas : ils ne parlent qu'au
+                         developpement, et ce qui sert tous les jours ne doit pas etre derriere eux. -->
+                    <Separator Margin="0,12" Background="{StaticResource BorderBrush}"/>
+
                     <RadioButton Content="{loc:T Text='📄  Logs'}" Tag="1" Click="Nav_Click"
                                  GroupName="Nav" Style="{StaticResource NavButton}"/>
                     <RadioButton Content="{loc:T Text='🔧  Debug'}" Tag="2" Click="Nav_Click"
@@ -71,6 +78,7 @@
                 <settings:SettingsView x:Name="SettingsView" Margin="24"/>
                 <settings:LogView x:Name="LogView" Margin="24" Visibility="Collapsed"/>
                 <settings:DebugView x:Name="DebugView" Margin="24" Visibility="Collapsed"/>
+                <settings:ToolsView x:Name="ToolsView" Margin="24" Visibility="Collapsed"/>
             </Grid>
         </Grid>
     </Grid>

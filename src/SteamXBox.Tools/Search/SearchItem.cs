@@ -16,6 +16,9 @@ public enum SearchItemKind
 
     /// <summary>A document from the institution's corpus, found by its content.</summary>
     Document,
+
+    /// <summary>A message from this person's own mail, indexed on this machine only.</summary>
+    Mail,
 }
 
 /// <summary>

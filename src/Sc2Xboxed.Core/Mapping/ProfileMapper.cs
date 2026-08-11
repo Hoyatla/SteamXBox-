@@ -591,12 +591,19 @@ public sealed class ProfileMapper
 					InputHelper.KeyCombination(new ushort[] { InputHelper.VK_MENU, InputHelper.VK_RIGHT });
 			}, () => { });
 
-		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A), true,
+		// A opens the search launcher, and does nothing else. It used to also close the overlay,
+		// which made it two buttons in one: the same press meant "find something" or "put the
+		// keyboard away" depending on a state the user cannot see. B closes the overlay, and that is
+		// enough — one button, one job.
+		//
+		// Suspended while the overlay is up, like every other desktop binding: a launcher opening
+		// under the keyboard would take the keystrokes meant for whatever is being typed.
+		HandleEdge(ref _prevA, state.Buttons.HasFlag(SteamControllerButtons.A), live,
 			() =>
 			{
-				if (OskActive && !daisywheelTyping)
+				if (!daisywheelTyping)
 				{
-					OskToggleRequested = true;
+					Runtime.DesktopSignal.Raise(Runtime.DesktopSignal.Search);
 				}
 			}, () => { });
 		HandleEdge(ref _prevB, state.Buttons.HasFlag(SteamControllerButtons.B), true,
@@ -618,7 +625,10 @@ public sealed class ProfileMapper
 				if (daisywheelTyping)
 					OskToggleRequested = true;
 				else
-					InputHelper.KeyTap(0x5B);
+					// Clears the screen, and puts the windows back on the next press. This used to
+					// tap the Windows key; the environment's own launcher is on A now, which is the
+					// same job done by something built for a controller.
+					Runtime.DesktopSignal.Raise(Runtime.DesktopSignal.ClearScreen);
 			}, () => { });
 		HandleEdge(ref _prevView, state.Buttons.HasFlag(SteamControllerButtons.View), live,
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, 0x44 }),

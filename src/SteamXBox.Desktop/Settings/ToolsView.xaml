@@ -1,0 +1,67 @@
+<UserControl x:Class="SteamXBox.Desktop.Settings.ToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:SteamXBox.Shell.Localization;assembly=SteamXBox.Shell">
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+            <TextBlock Text="{loc:T Text='Outils'}" FontSize="20"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{StaticResource TextDimBrush}"
+                       Text="{loc:T Text='Un outil est un dossier. Le désactiver le garde en place. Archiver le compresse et libère la place. Éjecter supprime le dossier sans toucher à son archive.'}"/>
+        </StackPanel>
+
+        <TextBlock x:Name="Status" DockPanel.Dock="Bottom" Margin="0,12,0,0" FontSize="11"
+                   TextWrapping="Wrap" Foreground="{StaticResource TextDimBrush}"/>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="Tools">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12,10"
+                                Background="{StaticResource BgMediumBrush}" CornerRadius="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- A gauche du nom, comme demande : ranger, puis jeter. -->
+                                <Button Grid.Column="0" Width="30" Height="30" Margin="0,0,4,0"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                        Click="Archive_Click" Tag="{Binding Id}" Visibility="{Binding ArchiveVisibility}"
+                                        ToolTip="{Binding ArchiveHint}"
+                                        Content="{Binding ArchiveGlyph}" FontFamily="Segoe Fluent Icons"
+                                        FontSize="15" Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                                <Button Grid.Column="1" Width="30" Height="30" Margin="0,0,10,0"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                        Click="Eject_Click" Tag="{Binding Id}" Visibility="{Binding EjectVisibility}"
+                                        ToolTip="{loc:T Text='Supprimer le dossier de cet outil'}"
+                                        Content="&#xE8F8;" FontFamily="Segoe Fluent Icons"
+                                        FontSize="15" Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding Detail}" FontSize="11"
+                                               Foreground="{StaticResource TextDimBrush}"/>
+                                </StackPanel>
+
+                                <CheckBox Grid.Column="3" VerticalAlignment="Center"
+                                          Content="{Binding SwitchLabel}"
+                                          IsChecked="{Binding IsEnabled, Mode=OneTime}"
+                                          IsEnabled="{Binding CanSwitch}"
+                                          Tag="{Binding Id}" Click="Switch_Click"
+                                          Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

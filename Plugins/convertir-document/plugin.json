@@ -1,0 +1,33 @@
+{
+  "id": "convertir-document",
+  "name": "Convertir un document",
+  "category": "tool",
+  "version": "1.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E8B5",
+  "hint": "PDF, Word, Excel, PowerPoint, OpenDocument, e-mail",
+  "surface": "panel",
+  "remembers": ["format"],
+  "content": [
+    {
+      "kind": "file",
+      "id": "document",
+      "label": "Document",
+      "options": ["pdf", "doc", "docx", "odt", "xls", "xlsx", "ods", "ppt", "pptx", "odp", "rtf", "txt", "csv", "eml", "wdseml"]
+    },
+    {
+      "kind": "choice",
+      "id": "format",
+      "label": "Convertir en",
+      "value": "docx",
+      "options": ["docx", "odt", "rtf", "html", "txt", "pptx", "odp", "xlsx", "ods", "csv", "pdf"]
+    },
+    {
+      "kind": "action",
+      "label": "Convertir",
+      "does": "convert",
+      "target": "{document}|{format}"
+    }
+  ]
+}

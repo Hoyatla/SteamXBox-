@@ -1,0 +1,14 @@
+{
+  "id": "moniteur",
+  "name": "Moniteur de diagnostic",
+  "category": "tool",
+  "version": "1.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E9D9",
+  "hint": "Enregistre ce qui arrive aux fenêtres et aux touches",
+  "surface": "tile",
+  "does": "application",
+  "target": "SteamXBox-Moniteur.exe",
+  "enabled": false
+}

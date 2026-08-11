@@ -84,7 +84,7 @@ public partial class MainWindow : Window
     /// <summary>The bottom of the Z order, as <c>SetWindowPos</c> spells it.</summary>
     private static readonly IntPtr HwndBottom = new(1);
 
-    /// <summary>"Leave the Z order alone" — cleared, since changing it is the entire point.</summary>
+    /// <summary>"Leave the Z order alone" — the flag that says this request is none of our business.</summary>
     private const uint SwpNoZOrder = 0x0004;
 
     /// <summary>
@@ -129,8 +129,22 @@ public partial class MainWindow : Window
 
         var position = Marshal.PtrToStructure<WindowPos>(lParam);
 
+        // Only the requests that were already going to touch the Z order. Anything carrying
+        // SWP_NOZORDER is a move, a resize or a frame change and is left exactly as it came.
+        //
+        // The first version rewrote every request and cleared the flag, which turned each of those
+        // into a real restack of the whole desktop. Measured on this machine that was five needless
+        // restacks per session rather than the storm it was suspected of being — but a window that
+        // reorders the desktop when it was only told to resize is wrong whatever the count.
+        //
+        // Nothing is lost by narrowing it. A window can only be raised by a request that changes the
+        // Z order, and every one of those still arrives here and is still sent to the bottom.
+        if ((position.Flags & SwpNoZOrder) != 0)
+        {
+            return IntPtr.Zero;
+        }
+
         position.InsertAfter = HwndBottom;
-        position.Flags &= ~SwpNoZOrder;
 
         Marshal.StructureToPtr(position, lParam, fDeleteOld: false);
 

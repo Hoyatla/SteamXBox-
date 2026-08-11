@@ -44,6 +44,9 @@ public static class IconLibrary
     /// <summary>A result from the web.</summary>
     public const string Web = "globe-24-regular";
 
+    /// <summary>A message from this person's own mail.</summary>
+    public const string Mail = "mail-24-regular";
+
     private static readonly Dictionary<string, Geometry?> Cache = new(StringComparer.Ordinal);
     private static readonly Lock Gate = new();
 

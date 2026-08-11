@@ -11,6 +11,18 @@ public enum QueryRoute
 
     /// <summary>The institution's own corpus, through its Meilisearch index.</summary>
     Docs,
+
+    /// <summary>
+    /// This person's own mail, from an index held on this machine.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not part of <see cref="Docs"/>, and the separation is a privacy decision rather
+    /// than a tidiness one. The institution's corpus lives in a Meilisearch index, which has no
+    /// per-document permissions: a mailbox put in there is readable by everyone who can query it.
+    /// Mail therefore never leaves the machine it belongs to, and has its own route so that it
+    /// cannot be pointed at a shared instance by a change of setting.
+    /// </remarks>
+    Mail,
 }
 
 /// <summary>A query, once its prefix has been read.</summary>
@@ -41,6 +53,7 @@ public static class QueryPrefix
         {
             ["web"] = QueryRoute.Web,
             ["docs"] = QueryRoute.Docs,
+            ["mail"] = QueryRoute.Mail,
         };
 
     /// <summary>Reads a raw query and says where it goes.</summary>

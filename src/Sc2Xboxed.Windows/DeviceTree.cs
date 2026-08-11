@@ -182,6 +182,116 @@ public static class DeviceTree
     }
 
     /// <summary>
+    /// Whether this device is a keyboard or a mouse, or carries one underneath it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The question to ask before hiding anything from the rest of Windows.</b> A pad-and-keyboard
+    /// combination arrives as one composite device whose children are a gamepad on one interface and
+    /// a keyboard and a mouse on another. Hiding the gamepad interface is right and is what happens
+    /// today; hiding the parent would take the keyboard and the mouse with it, and leave the machine
+    /// with no way to type — including no way to reach the setting that would undo it.
+    ///
+    /// <para>
+    /// Measured on the development machine, which has two such devices: <c>VID_37D7&amp;PID_2501</c>
+    /// exposes <c>MI_00</c> as an Xbox pad and <c>MI_01</c> as both a keyboard and a mouse, on one
+    /// plug. Nothing in the code prevented the parent from being chosen — it simply never was.
+    /// </para>
+    ///
+    /// <para>
+    /// The subtree is walked rather than the name inspected. A rule based on the shape of an
+    /// identifier — "refuse anything without an interface number" — would also refuse every
+    /// single-interface gamepad, and would still be guessing.
+    /// </para>
+    /// </remarks>
+    public static bool IsOrCarriesKeyboardOrMouse(string instanceId)
+    {
+        try
+        {
+            if (instanceId.Length == 0 || CM_Locate_DevNodeW(out var node, instanceId, 0) != CrSuccess)
+            {
+                // Unknown is treated as dangerous. A device Windows will not describe is not one to
+                // hide on the assumption that it is only a gamepad.
+                return true;
+            }
+
+            return SubtreeHasInputDevice(node, depth: 0);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Walks a device and everything below it, looking for a keyboard or a mouse.</summary>
+    private static bool SubtreeHasInputDevice(uint node, int depth)
+    {
+        // Deep enough for any real device tree, and a bound rather than a promise: a malformed tree
+        // must not become an endless walk inside the code that decides what to hide.
+        if (depth > 8)
+        {
+            return false;
+        }
+
+        if (ClassOf(node) is { } name
+            && (name.Equals("Keyboard", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Mouse", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (CM_Get_Child(out var child, node, 0) != CrSuccess)
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            if (SubtreeHasInputDevice(child, depth + 1))
+            {
+                return true;
+            }
+
+            if (CM_Get_Sibling(out var sibling, child, 0) != CrSuccess)
+            {
+                return false;
+            }
+
+            child = sibling;
+        }
+    }
+
+    /// <summary>The device class of a node — "Keyboard", "Mouse", "XnaComposite" — or null.</summary>
+    private static string? ClassOf(uint node)
+    {
+        var key = DevpkeyDeviceClass;
+        var buffer = new byte[256];
+        var size = (uint)buffer.Length;
+
+        if (CM_Get_DevNode_PropertyW(node, ref key, out var type, buffer, ref size, 0) != CrSuccess
+            || type != DevpropTypeString)
+        {
+            return null;
+        }
+
+        return Encoding.Unicode.GetString(buffer, 0, (int)size).TrimEnd('\0');
+    }
+
+    /// <summary>DEVPKEY_Device_Class.</summary>
+    private static DevpropKey DevpkeyDeviceClass => new()
+    {
+        Fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"),
+        Pid = 9,
+    };
+
+    private const uint DevpropTypeString = 0x00000012;
+
+    [DllImport("cfgmgr32.dll")]
+    private static extern int CM_Get_Child(out uint child, uint devInst, uint flags);
+
+    [DllImport("cfgmgr32.dll")]
+    private static extern int CM_Get_Sibling(out uint sibling, uint devInst, uint flags);
+
+    /// <summary>
     /// Windows' own identifier for the physical device an instance belongs to, or null.
     /// </summary>
     /// <remarks>

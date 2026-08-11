@@ -38,6 +38,17 @@ public partial class SearchLauncherWindow : Window
 
     private bool _indexing;
 
+    /// <summary>This person's own mail, built on demand and held on this machine.</summary>
+    /// <remarks>
+    /// Built the first time <c>mail:</c> is typed, not with the file index. Reading a mailbox is not
+    /// something to do because a launcher happened to open: somebody who never types the prefix
+    /// should find that SteamXBox never went near their correspondence.
+    /// </remarks>
+    private MailIndex _mail = MailIndex.Empty;
+
+    private bool _mailIndexing;
+    private bool _mailAsked;
+
     /// <summary>What the user opens, which nudges the ranking towards it next time.</summary>
     private readonly LaunchHistory _history;
 
@@ -165,7 +176,80 @@ public partial class SearchLauncherWindow : Window
 
             Status.Text = "";
             Refresh();
+
+            // The window was summoned to be typed into, and building the index took seconds during
+            // which anything could have taken the foreground. Asking again costs nothing and is the
+            // difference between a launcher that is ready when the wait ends and one that quietly
+            // is not.
+            TakeForeground();
         }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>
+    /// Builds the mail index once, off the interface thread.
+    /// </summary>
+    /// <remarks>
+    /// Started by the prefix, and only by the prefix. A saved index is loaded first so the wait
+    /// happens once ever rather than once per session.
+    /// </remarks>
+    private void EnsureMailIndex()
+    {
+        if (_mailIndexing || _mailAsked)
+        {
+            return;
+        }
+
+        _mailAsked = true;
+        _mail = MailIndex.Load(_log);
+
+        if (_mail.Count > 0)
+        {
+            return;
+        }
+
+        if (!MailIndexBuilder.AnythingToIndex())
+        {
+            return;
+        }
+
+        _mailIndexing = true;
+        Status.Text = "Indexation du courrier…";
+
+        Task.Run(() => MailIndexBuilder.Build(_log)).ContinueWith(built =>
+        {
+            _mail = built.IsCompletedSuccessfully ? built.Result : MailIndex.Empty;
+            _mailIndexing = false;
+
+            if (built.IsCompletedSuccessfully)
+            {
+                _mail.Save(_log);
+            }
+            else
+            {
+                _log?.Invoke($"mail index failed: {built.Exception?.GetBaseException().Message}");
+            }
+
+            Status.Text = "";
+            Refresh();
+            TakeForeground();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>Puts the window back in front and the caret back in the field.</summary>
+    /// <remarks>
+    /// Only while it is still up. A window the user has already dismissed must not claw its way back
+    /// because a background task finished.
+    /// </remarks>
+    private void TakeForeground()
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        Activate();
+        WindowForeground.Take(this);
+        FocusQuery();
     }
 
     /// <summary>Shows the launcher, or hides it if it is already up.</summary>
@@ -331,6 +415,21 @@ public partial class SearchLauncherWindow : Window
 
         Results.Items.Clear();
 
+        // Emptied with the rows it belongs to. Left behind, a message from the previous query would
+        // be read for a row that no longer means it.
+        _mailResults = [];
+        HidePreview();
+
+        // Mail is local, so it behaves like local: results appear as the words are typed, rather
+        // than waiting for Enter the way the web and the corpus do. Nothing leaves the machine, so
+        // there is nothing to hold back for.
+        if (routed.Route == QueryRoute.Mail)
+        {
+            EnsureMailIndex();
+            ShowMailResults(routed.Rest);
+            return;
+        }
+
         // A routed query is not searched at all: there is nothing on this machine to rank against
         // "web: manettes ps5", and showing local guesses underneath would suggest the prefix had not
         // been understood.
@@ -409,6 +508,62 @@ public partial class SearchLauncherWindow : Window
 
         StartLiveFolderSearch(terms, now);
     }
+
+    /// <summary>Lists the messages matching what has been typed after <c>mail:</c>.</summary>
+    /// <remarks>
+    /// A message is shown by its subject with the sender underneath, because a mailbox is full of
+    /// subjects that repeat — five messages called "Re: candidature" are told apart by who sent
+    /// them, never by their file name, which is a hash.
+    /// </remarks>
+    private void ShowMailResults(string query)
+    {
+        if (query.Length == 0)
+        {
+            Show(results: false);
+
+            Status.Text = _mailIndexing
+                ? "Indexation du courrier…"
+                : _mail.Count > 0
+                    ? $"Tapez les mots à chercher dans {_mail.Count} message(s)."
+                    : "Aucun courrier indexé sur cette machine.";
+
+            return;
+        }
+
+        _mailResults = [.. _mail.Search(query)];
+
+        foreach (var message in _mailResults)
+        {
+            Results.Items.Add(new Row(new SearchItem(
+                message.Subject,
+                message.Path,
+                SearchItemKind.Mail,
+                Priority: 0,
+                LastWrite: DateTime.MinValue),
+                Describe(message)));
+        }
+
+        if (Results.Items.Count > 0)
+        {
+            Results.SelectedIndex = 0;
+        }
+
+        Show(results: Results.Items.Count > 0);
+
+        Status.Text = Results.Items.Count > 0
+            ? "Flèches : lire  ·  Ctrl+Entrée : ouvrir le dossier"
+            : _mailIndexing ? "Indexation du courrier…" : "Aucun message.";
+
+        // The first result is read straight away. A preview that waits for an arrow key is one the
+        // user has to discover, and the top result is the one they were looking for most of the time.
+        ShowPreview();
+
+        _log?.Invoke($"mail search '{query}': {Results.Items.Count} result(s) of {_mail.Count} indexed.");
+    }
+
+    /// <summary>The line under a message's subject.</summary>
+    private static string Describe(MailEntry message)
+        => string.Join("  ·  ", new[] { message.From, message.Date }.Where(part => part.Length > 0));
 
     private CancellationTokenSource? _liveSearch;
 
@@ -504,7 +659,79 @@ public partial class SearchLauncherWindow : Window
 
         Results.Visibility = visibility;
         Separator.Visibility = visibility;
+
+        if (!results)
+        {
+            HidePreview();
+        }
     }
+
+    private void HidePreview()
+    {
+        PreviewPanel.Visibility = Visibility.Collapsed;
+        PreviewText.Text = "";
+        _previewed = null;
+    }
+
+    /// <summary>What the panel is currently showing, so moving within a list does not re-read.</summary>
+    private string? _previewed;
+
+    /// <summary>
+    /// Shows the selected message, read from where it actually lives.
+    /// </summary>
+    /// <remarks>
+    /// Read on selection rather than kept in the index. A message in <c>Sent Items</c> is a slice of
+    /// a three-hundred-megabyte file, and the index deliberately holds only the stripped, shortened
+    /// form used for matching — which is the searchable text, not the readable one.
+    ///
+    /// <para>
+    /// Read on the interface thread, which was measured before being decided. An ordinary message is
+    /// a seek and two kilobytes; the worst case found on a real machine was twenty-one milliseconds,
+    /// in a Sent Items whose eighty-eight messages average nearly four megabytes each because they
+    /// carry attachments. That is under a frame at sixty hertz, and a task would trade it for a
+    /// preview arriving after the user has already pressed the arrow key again.
+    /// </para>
+    /// </remarks>
+    private void ShowPreview()
+    {
+        var selected = Results.SelectedIndex;
+
+        if (selected < 0 || selected >= _mailResults.Count)
+        {
+            HidePreview();
+            return;
+        }
+
+        var entry = _mailResults[selected];
+
+        if (_previewed == entry.Key)
+        {
+            return;
+        }
+
+        var message = MailReader.Read(entry, _log);
+
+        if (message is null)
+        {
+            HidePreview();
+            return;
+        }
+
+        _previewed = entry.Key;
+        PreviewText.Text = MailReader.ToPreview(message.Value);
+        PreviewScroll.ScrollToTop();
+        PreviewPanel.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// The messages currently listed, in the order the rows were added.
+    /// </summary>
+    /// <remarks>
+    /// Parallel to the list rather than looked up by path, because a mailbox holds thousands of
+    /// messages at one path and the path alone identifies none of them. Cleared whenever the results
+    /// are rebuilt, so a stale entry can never be read for a row that has been replaced.
+    /// </remarks>
+    private List<MailEntry> _mailResults = [];
 
     private void Query_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -553,6 +780,10 @@ public partial class SearchLauncherWindow : Window
 
         Results.SelectedIndex = Math.Clamp(Results.SelectedIndex + delta, 0, Results.Items.Count - 1);
         Results.ScrollIntoView(Results.SelectedItem);
+
+        // The arrow keys are how a message is read: the preview follows the selection rather than
+        // waiting for a key of its own.
+        ShowPreview();
     }
 
     private void Results_Activate(object sender, MouseButtonEventArgs e) => OpenSelected();
@@ -830,11 +1061,20 @@ public partial class SearchLauncherWindow : Window
     /// launcher is usually asked for and the difference is worth seeing at a glance.
     /// </para>
     /// </remarks>
-    private sealed record Row(SearchItem Item)
+    private sealed record Row(SearchItem Item, string? Subtitle = null)
     {
         public string Name => Item.Name;
 
         public string Path => Item.Path;
+
+        /// <summary>
+        /// The second line: the path, unless the caller had something better to say.
+        /// </summary>
+        /// <remarks>
+        /// A message is the case that needed it. Its file name is a hash, so the path says nothing;
+        /// who sent it and when is what tells two messages with the same subject apart.
+        /// </remarks>
+        public string Detail => string.IsNullOrWhiteSpace(Subtitle) ? Path : Subtitle;
 
         public System.Windows.Media.Geometry? Icon => IconLibrary.Get(IconName);
 
@@ -845,6 +1085,7 @@ public partial class SearchLauncherWindow : Window
             SearchItemKind.Drive => IconLibrary.Drive,
             SearchItemKind.Web => IconLibrary.Web,
             SearchItemKind.Document => IconLibrary.Document,
+            SearchItemKind.Mail => IconLibrary.Mail,
             _ when IsCode(Item.Path) => IconLibrary.Code,
             _ => IconLibrary.Document,
         };

@@ -17,10 +17,59 @@ namespace SteamXBox.Desktop.Tools;
 /// </remarks>
 public static class ToolRegistry
 {
-    public static IReadOnlyList<ToolDescriptor> All { get; } =
+    /// <summary>
+    /// The compiled tools and the ones found on disk, in one list.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately one list. The contract's own measure of the loader is that a tool from a
+    /// <c>plugin.json</c> produces the same tile as the compiled ones — so they arrive as the same
+    /// record, and everything downstream is unable to tell them apart.
+    ///
+    /// <para>
+    /// Loaded once, at first use. Re-reading the folder on every access would walk the disk each
+    /// time the grid is drawn; a tool dropped in while SteamXBox runs appears on the next start,
+    /// which is what "dropped in, it is installed" has always meant for the rest of the product.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<ToolDescriptor> All => _all ??=
+    [
+        // The compiled tools obey the same switch as the loaded ones. A user who turns the
+        // calculator off in the uninstall screen means the tile to go, and it would be a strange
+        // product where that worked for the tools written last week and not for the ones that
+        // shipped first.
+        //
+        // The system entries ignore it entirely — even a stale line in the state file cannot hide
+        // them. Without that, one bad entry would remove the settings tile and with it the only way
+        // back to the screen that would restore it.
+        .. Compiled.Where(tool => tool.IsSystem
+                                  || SteamXBox.Plugins.PluginLifecycle.IsEnabled(tool.Id, byDefault: true)),
+        .. PluginTools.Load(_log),
+    ];
+
+    /// <summary>
+    /// The compiled tools that are tools, for the screen that lists them.
+    /// </summary>
+    /// <remarks>
+    /// Without the system entries. The controller configuration and the settings window are what
+    /// SteamXBox is, not accessories it can do without, and offering to switch them off is offering
+    /// the user a way to lock themselves out.
+    /// </remarks>
+    public static IReadOnlyList<ToolDescriptor> Builtin => [.. Compiled.Where(tool => !tool.IsSystem)];
+
+    /// <summary>Whether an identifier names part of SteamXBox rather than a tool.</summary>
+    public static bool IsSystem(string id)
+        => Compiled.Any(tool => tool.IsSystem && tool.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    private static IReadOnlyList<ToolDescriptor>? _all;
+    private static Action<string>? _log;
+
+    /// <summary>Gives the loader somewhere to report, before anything reads <see cref="All"/>.</summary>
+    public static void LogTo(Action<string> log) => _log = log;
+
+    private static IReadOnlyList<ToolDescriptor> Compiled { get; } =
     [
         new("controller", "Controller", "Manette : reglages et profils", Glyphs.Controller,
-            Executable: "SteamXBox.exe", Arguments: "--config"),
+            Executable: "SteamXBox.exe", Arguments: "--config", IsSystem: true),
 
         new("calculator", "Calculatrice", "Calculatrice scientifique de SteamXBox", Glyphs.Calculator,
             Run: _ => OpenOnce<CalculatorWindow>(() => new CalculatorWindow())),
@@ -33,7 +82,8 @@ public static class ToolRegistry
             Start: Clipboard.ClipboardService.Start),
 
         new("settings", "Parametres SteamXBox", "Preferences, journaux et diagnostic", Glyphs.Settings,
-            Run: _ => OpenOnce<Settings.SteamXBoxSettingsWindow>(() => new Settings.SteamXBoxSettingsWindow())),
+            Run: _ => OpenOnce<Settings.SteamXBoxSettingsWindow>(() => new Settings.SteamXBoxSettingsWindow()),
+            IsSystem: true),
     ];
 
     /// <summary>Starts every tool that needs to be running before it is opened.</summary>

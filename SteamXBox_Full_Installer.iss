@@ -3,7 +3,7 @@
 ; Compile: iscc SteamXBox_Full_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.5"
+#define MyAppVersion "4.6"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -56,6 +56,7 @@ Source: "Sc2XboxedPads.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Sc2XboxedSticks.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Indexer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "SteamXBox-Moniteur.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion
@@ -74,6 +75,17 @@ Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Tasks: vigembus
 Source: "HidHide_1.5.230_x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Tasks: hidhide
 
+[Registry]
+; Cette entree n'est PAS creee par l'installeur : c'est l'application qui l'ecrit quand l'utilisateur
+; coche "lancer au demarrage" dans les parametres. Elle est declaree ici uniquement pour que la
+; desinstallation l'emporte.
+;
+; Sans cela, elle survit au produit. Constate le 11 aout 2026 : le desinstalleur de la 3.2 a laisse
+; derriere lui une entree pointant vers un executable qui n'existait plus, et il a fallu la retirer
+; a la main. "dontcreatekey" est ce qui distingue "je nettoie ceci" de "je cree ceci".
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
+    ValueName: "SteamXBox"; Flags: dontcreatekey uninsdeletevalue
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\SteamXBox.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
@@ -87,8 +99,38 @@ Filename: "{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe"; Parameters: "/quiet /norest
 Filename: "{tmp}\HidHide_1.5.230_x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installation HidHide (masquage manettes)..."; Tasks: hidhide; Flags: waituntilterminated shellexec
 
 [UninstallRun]
+; Rendre les manettes avant de partir. Desinstaller pendant que le masquage HidHide est actif laisse
+; une manette invisible pour tous les jeux, et le fichier qui dit comment la rendre se trouve dans
+; les donnees d'application de l'utilisateur.
+Filename: "{app}\SteamXBox.Core.exe"; Parameters: "stop"; Flags: runhidden; RunOnceId: "StopCore"
+Filename: "{app}\SteamXBox.Core.exe"; Parameters: "hidhide-off"; Flags: runhidden; RunOnceId: "ReleasePads"
 
 [Code]
+// Prevenir avant de partir : les curseurs de Windows survivent a la desinstallation, et
+// l'enregistrement des curseurs d'origine se trouve dans le dossier d'etat de l'utilisateur, que la
+// desinstallation ne touche pas. Constate le 11 aout 2026 : 16 des 19 valeurs de
+// HKCU\Control Panel\Cursors differaient de la sauvegarde.
+//
+// L'ecran de desinstallation du produit le dit deja, mais desinstaller depuis le panneau de
+// configuration ne passe pas par cet ecran.
+function InitializeUninstall(): Boolean;
+var
+  Backup: String;
+begin
+  Result := True;
+  Backup := ExpandConstant('{localappdata}\SteamXBox\windows-state-backup.json');
+
+  if FileExists(Backup) then
+  begin
+    if MsgBox('SteamXBox a remplace les curseurs de Windows.' + #13#10#13#10 +
+              'Ils resteront en place apres la desinstallation, et l''enregistrement de vos ' +
+              'curseurs d''origine se trouve dans vos donnees d''application.' + #13#10#13#10 +
+              'Voulez-vous continuer la desinstallation ?',
+              mbConfirmation, MB_YESNO) = IDNO then
+      Result := False;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Msg: String;

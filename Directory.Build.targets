@@ -1,0 +1,93 @@
+<Project>
+
+  <!--
+    Signature des executables publies.
+
+    Pourquoi ce fichier existe : Windows n'accorde uiAccess="true" — l'acces aux fenetres elevees
+    sans elever le processus — qu'a un binaire signe par un certificat de confiance ET installe dans
+    un emplacement sur. Mesure le 11 aout 2026 : sans signature, Windows REFUSE de demarrer le
+    processus. Ce n'est donc pas un embellissement, c'est la condition d'une fonctionnalite.
+
+    La signature vaut aussi pour elle-meme sur un produit vendu : un executable non signe declenche
+    l'avertissement SmartScreen chez chaque client au premier lancement.
+
+    RIEN NE SE PASSE tant qu'aucun certificat n'est designe. La construction et la publication
+    fonctionnent exactement comme avant ; ce fichier ne fait quelque chose que le jour ou l'une des
+    deux proprietes ci-dessous est renseignee.
+
+    Deux facons de designer le certificat, au choix :
+
+      1. Par empreinte, le certificat etant dans le magasin Windows — a preferer, aucun mot de passe
+         ne traverse la ligne de commande ni les journaux de construction :
+
+           dotnet publish ... -p:SteamXBoxSignThumbprint=A1B2C3...
+
+      2. Par fichier .pfx :
+
+           dotnet publish ... -p:SteamXBoxSignCertificate=C:\chemin\cert.pfx ^
+                              -p:SteamXBoxSignPassword=...
+
+    L'horodatage est indispensable et non optionnel : sans lui, les binaires deviennent invalides le
+    jour ou le certificat expire, y compris ceux deja installes chez les clients. Avec lui, ils
+    restent valides pour toujours.
+  -->
+
+  <PropertyGroup>
+    <SteamXBoxTimestampUrl Condition="'$(SteamXBoxTimestampUrl)' == ''">http://timestamp.digicert.com</SteamXBoxTimestampUrl>
+
+    <_SteamXBoxWantsSigning Condition="'$(SteamXBoxSignThumbprint)' != '' or '$(SteamXBoxSignCertificate)' != ''">true</_SteamXBoxWantsSigning>
+  </PropertyGroup>
+
+  <!--
+    « Exe » ET « WinExe ». Une application a fenetre — le clavier a l'ecran, l'interface — est
+    WinExe, et la premiere version de cette condition ne retenait que Exe : la signature ne s'est
+    pas produite, la publication a reussi, et rien ne l'a dit. Le binaire est ressorti NotSigned.
+    C'est exactement le defaut que ce projet passe son temps a chasser, commis ici meme.
+  -->
+  <Target Name="SteamXBoxSignPublishedExecutable"
+          AfterTargets="Publish"
+          Condition="'$(_SteamXBoxWantsSigning)' == 'true' and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe')">
+
+    <!--
+      signtool n'est pas sur le chemin et le SDK .NET ne renseigne pas WindowsSdkVerBinPath, qui
+      n'existe que pour les projets C++. Cherche dans le kit Windows, version la plus recente.
+    -->
+    <ItemGroup Condition="'$(SteamXBoxSignToolPath)' == ''">
+      <_SteamXBoxSignTool Include="$(ProgramFiles)\Windows Kits\10\bin\*\x64\signtool.exe" />
+      <_SteamXBoxSignTool Include="C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" />
+    </ItemGroup>
+
+    <PropertyGroup Condition="'$(SteamXBoxSignToolPath)' == ''">
+      <SteamXBoxSignToolPath>%(_SteamXBoxSignTool.FullPath)</SteamXBoxSignToolPath>
+    </PropertyGroup>
+
+    <!--
+      Une signature demandee et impossible arrete la construction. Continuer produirait un binaire
+      non signe qui a l'air d'avoir ete signe — et avec uiAccess, Windows le refusera au demarrage
+      chez le client, sans que rien ici ne l'ait annonce.
+    -->
+    <Error Condition="!Exists('$(SteamXBoxSignToolPath)')"
+           Text="Signature demandee mais signtool.exe est introuvable. Installez le SDK Windows, ou indiquez -p:SteamXBoxSignToolPath=..." />
+
+    <PropertyGroup>
+      <_SteamXBoxPublishedExe>$(PublishDir)$(AssemblyName).exe</_SteamXBoxPublishedExe>
+
+      <_SteamXBoxSignArguments Condition="'$(SteamXBoxSignThumbprint)' != ''">sign /sha1 $(SteamXBoxSignThumbprint) /fd SHA256 /tr $(SteamXBoxTimestampUrl) /td SHA256</_SteamXBoxSignArguments>
+      <_SteamXBoxSignArguments Condition="'$(SteamXBoxSignThumbprint)' == ''">sign /f "$(SteamXBoxSignCertificate)" /p "$(SteamXBoxSignPassword)" /fd SHA256 /tr $(SteamXBoxTimestampUrl) /td SHA256</_SteamXBoxSignArguments>
+    </PropertyGroup>
+
+    <Exec Command="&quot;$(SteamXBoxSignToolPath)&quot; $(_SteamXBoxSignArguments) &quot;$(_SteamXBoxPublishedExe)&quot;"
+          ContinueOnError="false" />
+
+    <!--
+      Verifie apres avoir signe, et non pas seulement suppose. La verification est ce qui distingue
+      « signtool est sorti sans erreur » de « le fichier porte une signature valide » — deux choses
+      que ce projet a appris a ne pas confondre.
+    -->
+    <Exec Command="&quot;$(SteamXBoxSignToolPath)&quot; verify /pa &quot;$(_SteamXBoxPublishedExe)&quot;"
+          ContinueOnError="false" />
+
+    <Message Importance="high" Text="SteamXBox : $(AssemblyName).exe signe et verifie." />
+  </Target>
+
+</Project>

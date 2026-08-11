@@ -49,8 +49,44 @@ public sealed class XboxButtonMap
 
     private readonly Dictionary<SteamControllerButtons, Xbox360Buttons> _map = [];
 
-    /// <summary>The mapping SteamXBox used before any of this was configurable.</summary>
-    public static XboxButtonMap Default
+    /// <summary>The mapping for a Steam Controller, which is what this product started as.</summary>
+    public static XboxButtonMap Default => DefaultFor(ControllerKind.SteamController);
+
+    /// <summary>
+    /// The mapping a controller of this kind should start with.
+    /// </summary>
+    /// <remarks>
+    /// Only Menu and View differ, and the reason is worth stating because it looked like a bug for a
+    /// long time. On a Steam Controller the two buttons produce Back and Start the other way round
+    /// from what their labels suggest — measured on the hardware, reverted once, and put back. That
+    /// finding was then applied to every controller, and on a DualSense or an Xbox pad, whose labels
+    /// already follow the Xbox convention, it crosses them: Options and Start come out as Back.
+    ///
+    /// <para>
+    /// So the quirk stays where it was measured and nowhere else. A controller is not a Steam
+    /// Controller unless it is one.
+    /// </para>
+    /// </remarks>
+    public static XboxButtonMap DefaultFor(ControllerKind kind)
+    {
+        var map = Common;
+
+        if (kind == ControllerKind.SteamController)
+        {
+            map[SteamControllerButtons.Menu] = Xbox360Buttons.Back;
+            map[SteamControllerButtons.View] = Xbox360Buttons.Start;
+        }
+        else
+        {
+            map[SteamControllerButtons.Menu] = Xbox360Buttons.Start;
+            map[SteamControllerButtons.View] = Xbox360Buttons.Back;
+        }
+
+        return map;
+    }
+
+    /// <summary>Everything that is the same whatever the controller is.</summary>
+    private static XboxButtonMap Common
     {
         get
         {
@@ -65,13 +101,6 @@ public sealed class XboxButtonMap
             map[SteamControllerButtons.RightBumper] = Xbox360Buttons.RightShoulder;
             map[SteamControllerButtons.LeftStick] = Xbox360Buttons.LeftThumb;
             map[SteamControllerButtons.RightStick] = Xbox360Buttons.RightThumb;
-
-            // Menu produces Back and View produces Start. This is what the controller actually does
-            // in practice, confirmed on the hardware; the apparent inversion against the Xbox naming
-            // is in how the two buttons are labelled, not in this mapping. Briefly swapped in 3.2 and
-            // put back — a saved profile keeps whatever it stored, only this default moved.
-            map[SteamControllerButtons.Menu] = Xbox360Buttons.Back;
-            map[SteamControllerButtons.View] = Xbox360Buttons.Start;
 
             map[SteamControllerButtons.DPadUp] = Xbox360Buttons.DPadUp;
             map[SteamControllerButtons.DPadDown] = Xbox360Buttons.DPadDown;
@@ -125,8 +154,13 @@ public sealed class XboxButtonMap
     /// controller with dead buttons.
     /// </summary>
     public static XboxButtonMap FromDictionary(IReadOnlyDictionary<string, string>? stored)
+        => FromDictionary(stored, ControllerKind.SteamController);
+
+    /// <inheritdoc cref="FromDictionary(IReadOnlyDictionary{string, string})"/>
+    public static XboxButtonMap FromDictionary(
+        IReadOnlyDictionary<string, string>? stored, ControllerKind kind)
     {
-        var map = Default;
+        var map = DefaultFor(kind);
         if (stored is null)
         {
             return map;

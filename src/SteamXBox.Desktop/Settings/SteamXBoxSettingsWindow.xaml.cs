@@ -23,7 +23,7 @@ public partial class SteamXBoxSettingsWindow : Window
 
         SettingsView.DataContext = new SettingsViewModel();
         DebugView.DataContext = _debug;
-        _screens = [SettingsView, LogView, DebugView];
+        _screens = [SettingsView, LogView, DebugView, ToolsView];
 
         // The diagnostics screen used to be fed by the configuration window's device polling. In
         // this process it has to watch for itself, and it should stop when the window closes rather

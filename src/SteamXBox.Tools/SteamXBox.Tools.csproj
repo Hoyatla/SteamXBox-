@@ -17,5 +17,16 @@
     <AssemblyTitle>SteamXBox Tools</AssemblyTitle>
     <Description>SteamXBox - logique des outils, sans interface.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+
+    <!--
+      Le chiffrement au repos de l'index du courrier, par la protection de donnees de Windows.
+      Voir Search/PersonalFile.cs : la cle vient du compte Windows, il n'y a donc rien a retenir
+      pour l'utilisateur ni rien a stocker pour ce produit.
+    -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+  </ItemGroup>
 
 </Project>

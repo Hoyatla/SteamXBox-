@@ -19,6 +19,21 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!--
+      Un seul fichier, autonome, comme les autres executables du produit.
+
+      Ces trois lignes manquaient et rien ne le signalait : « dotnet publish » produisait un apphost
+      accompagne de ses assemblages, et copier le seul .exe a la racine donnait un binaire qui
+      demarre puis annonce qu'il ne trouve pas son propre .dll. Le 11 aout 2026 un Core casse a ete
+      deploye ainsi, et decouvert seulement en essayant de le lancer.
+
+      Ecrit ici plutot que passe en options a la main : une option qu'il faut se rappeler est une
+      option qu'on oublie, et l'oubli produit un binaire qui a l'air correct.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
 </Project>

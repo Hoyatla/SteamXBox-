@@ -41,6 +41,7 @@ Library/Exclusif/
 /SteamXBox.Desktop.exe
 /SteamXBox.Core.exe
 /SteamXBox.Indexer.exe
+/SteamXBox-Moniteur.exe
 /Sc2Xboxed.Osk.exe
 /Sc2XboxedPads.Osk.exe
 /Sc2XboxedSticks.Osk.exe
@@ -49,6 +50,7 @@ Library/Exclusif/
 # Artefacts d'execution.
 *.signal
 steamxbox-*.log*
+steamxbox-diag.txt
 
 # Backups locaux
 Library/archive/

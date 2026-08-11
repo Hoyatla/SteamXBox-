@@ -1,0 +1,32 @@
+<Window x:Class="SteamXBox.Desktop.Tools.PluginPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Outil" Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgDarkBrush}">
+
+    <StackPanel Margin="20">
+        <TextBlock x:Name="PanelTitle" FontSize="18" Margin="0,0,0,2"
+                   Foreground="{StaticResource TextPrimaryBrush}"/>
+        <TextBlock x:Name="PanelHint" FontSize="11" Margin="0,0,0,14"
+                   Foreground="{StaticResource TextDimBrush}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Dessine par l'hote a partir de content. L'outil decrit, il ne dessine pas : c'est ce qui
+             rend un outil ecrit par un utilisateur navigable a la manette sans qu'il y ait pense. -->
+        <StackPanel x:Name="Body"/>
+
+        <!-- Indeterminee : LibreOffice ne dit pas ou il en est, et une barre qui avancerait
+             a une vitesse inventee mentirait sur le temps restant. Celle-ci ne promet qu'une
+             chose, la seule qui soit vraie : ca travaille encore. -->
+        <ProgressBar x:Name="PanelProgress" Height="3" Margin="0,14,0,0"
+                     IsIndeterminate="True" Visibility="Collapsed"
+                     Background="Transparent" BorderThickness="0"
+                     Foreground="{StaticResource AccentBrush}"/>
+
+        <TextBlock x:Name="PanelStatus" FontSize="11" Margin="0,8,0,0"
+                   Foreground="{StaticResource TextDimBrush}"
+                   TextWrapping="Wrap"/>
+    </StackPanel>
+</Window>

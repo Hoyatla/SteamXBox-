@@ -28,16 +28,30 @@ public static class LaunchHistoryStore
     {
         try
         {
-            if (!File.Exists(Path))
+            // Protected like the mail index, and for a smaller version of the same reason: a list of
+            // what somebody searched for names the people, the documents and the subjects they were
+            // looking for. It is short, so it looks harmless — the mail index is the one that looks
+            // dangerous, and both say the same things about the same person.
+            var json = SteamXBox.Tools.Search.PersonalFile.Read(Path, out var wasPlain, log);
+
+            if (json is null)
             {
                 return new LaunchHistory();
             }
 
-            var saved = JsonSerializer.Deserialize<Dictionary<string, LaunchRecord>>(File.ReadAllText(Path));
+            var saved = JsonSerializer.Deserialize<Dictionary<string, LaunchRecord>>(json);
 
             log?.Invoke($"search history: {saved?.Count ?? 0} entries.");
 
-            return new LaunchHistory(saved);
+            var history = new LaunchHistory(saved);
+
+            if (wasPlain)
+            {
+                log?.Invoke("search history: found in plain text; writing it back protected.");
+                Save(history, log);
+            }
+
+            return history;
         }
         catch (Exception exception)
         {
@@ -51,11 +65,10 @@ public static class LaunchHistoryStore
     {
         try
         {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-
-            File.WriteAllText(
+            SteamXBox.Tools.Search.PersonalFile.Write(
                 Path,
-                JsonSerializer.Serialize(history.All, new JsonSerializerOptions { WriteIndented = true }));
+                JsonSerializer.Serialize(history.All, new JsonSerializerOptions { WriteIndented = true }),
+                log);
         }
         catch (Exception exception)
         {

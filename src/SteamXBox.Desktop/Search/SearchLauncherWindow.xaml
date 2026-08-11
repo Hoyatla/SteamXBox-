@@ -86,7 +86,7 @@
                                 <TextBlock Text="{Binding Name}" FontSize="14"
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Path}" FontSize="11"
+                                <TextBlock Text="{Binding Detail}" FontSize="11"
                                            Foreground="{StaticResource TextDimBrush}"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
@@ -94,6 +94,19 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+
+            <!-- L'apercu d'un message. Lecture seule : ouvrir et modifier appartiennent aux outils,
+                 pas au lanceur, qui sait trouver et montrer. -->
+            <Border x:Name="PreviewPanel" Visibility="Collapsed"
+                    BorderThickness="0,1,0,0" BorderBrush="{StaticResource BorderBrush}"
+                    Padding="16,10">
+                <ScrollViewer x:Name="PreviewScroll" MaxHeight="260"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock x:Name="PreviewText" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </ScrollViewer>
+            </Border>
 
             <TextBlock x:Name="Status" Margin="16,0,16,10" FontSize="11"
                        Foreground="{StaticResource TextDimBrush}"/>

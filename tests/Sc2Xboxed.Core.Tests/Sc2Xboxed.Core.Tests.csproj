@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
     <ProjectReference Include="..\..\src\Sc2Xboxed.Hid\Sc2Xboxed.Hid.csproj" />
+    <ProjectReference Include="..\..\src\Sc2Xboxed.Windows\Sc2Xboxed.Windows.csproj" />
     <ProjectReference Include="..\..\src\SteamXBox.Plugins\SteamXBox.Plugins.csproj" />
     <ProjectReference Include="..\..\src\SteamXBox.Tools\SteamXBox.Tools.csproj" />
   </ItemGroup>

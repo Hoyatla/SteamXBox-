@@ -42,6 +42,27 @@ public sealed class ParallelControllerSource : IMultiControllerSource
     private int _enumerations;
 
     /// <summary>
+    /// This source's own life, so that letting go of it actually stops it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Everything here used to run on the caller's token, which is the session's.</b> So a source
+    /// the caller had finished with kept its arrivals watcher running until the whole session ended:
+    /// rescanning every three seconds, opening devices, and announcing controllers alongside its
+    /// replacement.
+    ///
+    /// <para>
+    /// That is what "the same controller arrives twice" was. The loop that waits for a pad to come
+    /// back builds a new source each time round and never released the old one, so a session with
+    /// two power-off cycles ran three watchers at once — each on its own three-second beat, hence
+    /// arrivals eight tenths of a second apart from a loop that waits three seconds.
+    /// </para>
+    /// </remarks>
+    private readonly CancellationTokenSource _own = new();
+
+    /// <summary>The links between this source's life and each caller's, kept until disposal.</summary>
+    private readonly List<CancellationTokenSource> _lifetimes = [];
+
+    /// <summary>
     /// Reader tasks still running, and how many times the stream has been enumerated.
     /// </summary>
     /// <remarks>
@@ -131,8 +152,19 @@ public sealed class ParallelControllerSource : IMultiControllerSource
                 continue;
             }
 
-            foreach (var child in found.Where(c => !known.Contains(c.Identity.Id)))
+            foreach (var child in found)
             {
+                if (known.Contains(child.Identity.Id))
+                {
+                    // Already being read, so this second source for the same controller is surplus —
+                    // and it was simply dropped on the floor before. A rescan builds one source per
+                    // attached controller every three seconds, whether or not it is new, so on a
+                    // machine with a controller connected this discarded an undisposed
+                    // IAsyncDisposable twenty times a minute for the length of the session.
+                    await SafelyDispose(child.Source).ConfigureAwait(false);
+                    continue;
+                }
+
                 known.Add(child.Identity.Id);
                 _children.Add(child);
                 var pump = PumpAsync(child.Identity, child.Source, writer, cancellationToken);
@@ -140,6 +172,24 @@ public sealed class ParallelControllerSource : IMultiControllerSource
                 _allReaders.Add(pump);
                 _log?.Invoke($"controller arrived: {child.Identity.DisplayName} [{child.Identity.Id}]");
             }
+        }
+    }
+
+    /// <summary>Lets go of a source we are not going to read, whatever it thinks of that.</summary>
+    /// <remarks>
+    /// A source that throws while being disposed must not end the rescan: the next controller to be
+    /// plugged in would then never be noticed, which is a far worse outcome than one handle staying
+    /// open.
+    /// </remarks>
+    private async Task SafelyDispose(IPhysicalControllerSource source)
+    {
+        try
+        {
+            await source.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"discarding a surplus source: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -188,6 +238,29 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         });
 
         _enumerations++;
+
+        // The caller's life and this source's own, whichever ends first. Without the second half,
+        // disposing this object stopped nothing at all.
+        //
+        // NOT a "using". It was, and that was a bug with a long reach: breaking out of the
+        // enumeration ends the iterator, which disposed the linked source — and a disposed linked
+        // source no longer forwards anything, so cancelling _own afterwards reached nobody. The
+        // watcher went on rescanning every three seconds for the rest of the session.
+        //
+        // The consequence in the product was not obvious from here: when Steam started, SteamXBox
+        // handed the controller over and released it from HidHide, and six tenths of a second later
+        // the orphaned watcher's rescan hid it again. Steam therefore never saw the controller, and
+        // the hand-over that had just been logged as done had been undone.
+        //
+        // Kept and disposed with this object instead, so the order can no longer matter.
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _own.Token);
+
+        lock (_lifetimes)
+        {
+            _lifetimes.Add(lifetime);
+        }
+
+        cancellationToken = lifetime.Token;
 
         var readers = _children
             .Select(child => PumpAsync(child.Identity, child.Source, channel.Writer, cancellationToken))
@@ -258,6 +331,32 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         ChannelWriter<ControllerFrame> writer,
         CancellationToken cancellationToken)
     {
+        // A source that outlives its controller has to say so itself. The XInput one keeps polling
+        // an empty slot rather than ending its stream — a pad that sleeps often returns on another
+        // slot — so without this, switching an Xbox pad off was the one departure nobody heard.
+        Action? departed = null;
+
+        if (source is IReportsDeparture reporter)
+        {
+            departed = () =>
+            {
+                _log?.Invoke($"controller left: {identity.DisplayName} [{identity.Id}] (still watching for it)");
+
+                try
+                {
+                    _onLeft?.Invoke(identity);
+                }
+                catch (Exception ex)
+                {
+                    // One listener's failure is not this controller's problem, and certainly not
+                    // the other players'.
+                    _log?.Invoke($"onLeft for {identity.DisplayName} failed: {ex.GetType().Name}: {ex.Message}");
+                }
+            };
+
+            reporter.Departed += departed;
+        }
+
         try
         {
             await foreach (var state in source.ReadFramesAsync(cancellationToken)
@@ -280,6 +379,13 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         }
         finally
         {
+            if (departed is not null && source is IReportsDeparture stillReporting)
+            {
+                // Unsubscribed before anything else: this closure holds the identity and the log,
+                // and a source kept alive for reconnection would otherwise hold them for ever.
+                stillReporting.Departed -= departed;
+            }
+
             // Removed once its stream ends. The set only ever grew before: a controller that went
             // away stayed listed for the rest of the session, and — worse — the arrivals watcher
             // still considered it known, so switching it back on never brought it back.
@@ -306,6 +412,29 @@ public sealed class ParallelControllerSource : IMultiControllerSource
 
     public async ValueTask DisposeAsync()
     {
+        // First, so that the arrivals watcher stops rescanning before the devices under it are
+        // closed. The other order leaves a watcher enumerating hardware that is being taken away.
+        try
+        {
+            await _own.CancelAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Disposed twice; the first call already stopped everything.
+        }
+
+        // After the cancellation, never before: disposing a linked source stops it forwarding, so
+        // releasing these first would leave the watchers running on tokens nothing can cancel.
+        lock (_lifetimes)
+        {
+            foreach (var lifetime in _lifetimes)
+            {
+                try { lifetime.Dispose(); } catch (ObjectDisposedException) { }
+            }
+
+            _lifetimes.Clear();
+        }
+
         foreach (var child in _children)
         {
             try

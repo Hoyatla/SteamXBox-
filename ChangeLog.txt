@@ -2,6 +2,22 @@ SteamXBox - Change log
 ======================
 
 
+4.6
+---
+  Identity
+
+  * The application icon carries the wordmark under the emblem, on a rounded tile.
+
+  Documentation
+
+  * README rewritten. It described the Steam Controller bridge and the on-screen
+    keyboard only, and had said nothing about the desktop environment, the search
+    launcher, the tools, the document indexer or the support for controllers other
+    than the Steam Controller.
+
+  * PRESENTATION.md added: what the project is, who it is for, and how it is built.
+
+
 4.5
 ---
   Desktop

@@ -99,6 +99,12 @@ public partial class App : Application
 
         try
         {
+            // Before the tools, because a screen left cleared by a session that died is the first
+            // thing the user is looking at — and the only thing that knows about it is a marker on
+            // disk that nothing else reads.
+            Input.DesktopWindows.RepairOnStart(message => UiLog.Info(message));
+
+            Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
             Tools.ToolRegistry.StartServices();
             UiLog.Info("tool services started");
 
@@ -192,6 +198,27 @@ public partial class App : Application
     /// </remarks>
     private Search.SearchLauncherWindow? _searchLauncher;
     private Input.DoubleTapHotkey? _hotkeys;
+    private Input.DesktopSignalWatcher? _signals;
+
+    /// <summary>Runs what a controller asked for, whichever button it came from.</summary>
+    /// <remarks>
+    /// Deliberately the same calls the keyboard gestures make, not a parallel implementation. A
+    /// controller path that drifted from the keyboard path is how one of them ends up fixed and the
+    /// other forgotten.
+    /// </remarks>
+    private void RunControllerRequest(string signal)
+    {
+        if (signal == Sc2Xboxed.Core.Runtime.DesktopSignal.Search)
+        {
+            _searchLauncher?.Toggle();
+            return;
+        }
+
+        if (signal == Sc2Xboxed.Core.Runtime.DesktopSignal.ClearScreen)
+        {
+            Input.DesktopWindows.Toggle(message => UiLog.Info(message));
+        }
+    }
 
     /// <summary>
     /// Puts the session's double-tap shortcuts in place: Shift for the launcher, the section key to
@@ -239,6 +266,11 @@ public partial class App : Application
                 message => UiLog.Info(message));
 
             _hotkeys.Start();
+
+            // The same two actions, reached from a controller. Profile mode binds A and Menu to
+            // them, and the runtime asks for them from its own process.
+            _signals = new Input.DesktopSignalWatcher(RunControllerRequest, message => UiLog.Info(message));
+            _signals.Start();
         }
         catch (Exception exception)
         {
@@ -288,6 +320,18 @@ public partial class App : Application
         // longer there to answer.
         _hotkeys?.Dispose();
         _hotkeys = null;
+
+        _signals?.Dispose();
+        _signals = null;
+
+        // Before the process goes: an environment that cleared the screen and then left would hand
+        // the user an empty desktop with nothing left to undo it.
+        Input.DesktopWindows.RestoreOnExit(message => UiLog.Info(message));
+
+        // And let go of the shell object. Every activation of it makes objects inside explorer.exe
+        // that outlive this process, which is measurable: explorer grew by eighty-nine handles per
+        // session and never gave them back.
+        Input.DesktopWindows.Release();
 
         // A safety net for the paths that bypass Quit — a session logoff, or Windows shutting down.
         // Skipped while restarting for a theme, where the bridge must survive.

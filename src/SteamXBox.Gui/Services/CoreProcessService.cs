@@ -146,6 +146,13 @@ public sealed class CoreProcessService : IDisposable
                 process.Start();
                 pid = process.Id;
                 _runningPid = pid;
+
+                // Bound to this window's life by the kernel. A core left running holds the
+                // controllers, keeps them hidden from every game, and answers to nothing on screen —
+                // the state this whole inventory exists to stop happening.
+                Sc2Xboxed.Windows.ChildProcesses.Adopt(
+                    process, message => OutputReceived?.Invoke($"[INFO] {message}"));
+
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 OutputReceived?.Invoke($"[INFO] Core démarré (PID {pid})");

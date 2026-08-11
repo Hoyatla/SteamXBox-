@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -34,6 +35,94 @@ public static class DesktopWindows
     private static int _countBeforeClear = -1;
 
     /// <summary>
+    /// Where the fact that the screen is cleared is written down, for a session that does not
+    /// survive to put it back.
+    /// </summary>
+    /// <remarks>
+    /// The count above lives in memory and dies with the process. Everything else SteamXBox leaves
+    /// on the machine has a way back; a desktop full of minimised windows had none — the user was
+    /// left to restore them one by one without knowing what had done it.
+    ///
+    /// <para>
+    /// In the shared state, beside the note that records hidden controllers, and for the reason that
+    /// note had to move there: a marker next to the executable belongs to one copy of SteamXBox, and
+    /// the copy that made the mess is not always the one that comes back.
+    /// </para>
+    /// </remarks>
+    private static string MarkerPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SteamXBox",
+        "windows-minimised.state");
+
+    /// <summary>
+    /// Puts back a screen that an earlier session cleared and never restored.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only if those windows can still exist.</b> Restoring blindly would be worse than doing
+    /// nothing: <c>UndoMinimizeALL</c> raises everything currently minimised, so a marker left by a
+    /// crash three days ago would, at the next launch, throw open every window the user had put away
+    /// on purpose that morning.
+    ///
+    /// <para>
+    /// A minimised window does not survive a restart, so the marker is only acted on when it was
+    /// written since the machine last booted. Older than that and there is nothing left to give
+    /// back — the marker is simply cleared.
+    /// </para>
+    /// </remarks>
+    public static void RepairOnStart(Action<string>? log = null)
+    {
+        try
+        {
+            if (!File.Exists(MarkerPath))
+            {
+                return;
+            }
+
+            var written = File.GetLastWriteTimeUtc(MarkerPath);
+            var booted = DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+
+            if (written < booted)
+            {
+                File.Delete(MarkerPath);
+                log?.Invoke(
+                    "clear-the-screen: an earlier session left the screen cleared, but the machine has "
+                    + "restarted since, so those windows are long gone. Marker cleared.");
+                return;
+            }
+
+            log?.Invoke("clear-the-screen: an earlier session cleared the screen and did not put it back.");
+            UndoMinimizeAll(log);
+            File.Delete(MarkerPath);
+        }
+        catch (Exception exception)
+        {
+            // A marker that cannot be read is not worth failing the start over; the user can press
+            // the gesture twice.
+            log?.Invoke($"clear-the-screen: could not check the earlier session: {exception.Message}");
+        }
+    }
+
+    /// <summary>Writes or clears the marker, and never lets that stop the gesture.</summary>
+    private static void Remember(bool cleared, Action<string>? log)
+    {
+        try
+        {
+            if (!cleared)
+            {
+                File.Delete(MarkerPath);
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(MarkerPath)!);
+            File.WriteAllText(MarkerPath, _countBeforeClear.ToString());
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke($"clear-the-screen: could not record the state: {exception.Message}");
+        }
+    }
+
+    /// <summary>
     /// Clears the screen, or puts it back if the last press cleared it.
     /// </summary>
     /// <remarks>
@@ -65,6 +154,7 @@ public static class DesktopWindows
         {
             var restored = UndoMinimizeAll(log);
             _countBeforeClear = -1;
+            Remember(cleared: false, log);
 
             return restored;
         }
@@ -76,7 +166,41 @@ public static class DesktopWindows
 
         _countBeforeClear = now;
 
+        // Written after the shell has been asked, not before: a marker naming a screen that was
+        // never cleared would make the next start raise windows nobody minimised.
+        Remember(cleared: true, log);
+
         return true;
+    }
+
+    /// <summary>
+    /// Puts the windows back if SteamXBox is the reason they are down.
+    /// </summary>
+    /// <remarks>
+    /// Called when the environment closes. Clearing the screen is a gesture of the environment, so
+    /// it has no business outliving it: quitting while cleared leaves an empty desktop and nothing
+    /// left to undo it, and the user puts seven windows back one taskbar button at a time. That is
+    /// the whole of "restoring the windows is slow" — measured, the shell does it in two
+    /// milliseconds when it is asked, and the animations were already off on the machine where it
+    /// felt slow.
+    ///
+    /// <para>
+    /// Nothing happens when the screen was not cleared by us. Somebody who minimised their own
+    /// windows before quitting meant them minimised.
+    /// </para>
+    /// </remarks>
+    public static void RestoreOnExit(Action<string>? log = null)
+    {
+        if (_countBeforeClear < 0)
+        {
+            return;
+        }
+
+        log?.Invoke("clear-the-screen: putting the windows back before quitting.");
+
+        UndoMinimizeAll(log);
+        _countBeforeClear = -1;
+        Remember(cleared: false, log);
     }
 
     /// <summary>Minimises every window, and says whether the shell accepted.</summary>
@@ -96,43 +220,82 @@ public static class DesktopWindows
     /// </remarks>
     public static bool UndoMinimizeAll(Action<string>? log = null) => Ask("UndoMinimizeALL", log);
 
-    /// <summary>Puts one request to the shell.</summary>
+    /// <summary>
+    /// The shell automation object, created once and kept.
+    /// </summary>
+    /// <remarks>
+    /// Measured, not assumed. Creating one per call leaked about twenty handles <b>inside
+    /// explorer.exe</b> every time the screen was cleared — eighty-nine over one short session, and
+    /// they were not given back when SteamXBox exited. Releasing our side with
+    /// <c>FinalReleaseComObject</c> did not prevent it: the activation itself makes objects in the
+    /// shell's own process, and after ten hours of use explorer had grown from seven thousand
+    /// handles to nine and a half thousand, with window ordering degrading as it went.
+    ///
+    /// <para>
+    /// One activation for the life of the session instead. It is dropped and remade if the shell
+    /// ever refuses it — explorer can restart, and a reference to the old one would then be dead
+    /// for the rest of the session.
+    /// </para>
+    /// </remarks>
+    private static object? _shell;
+
     private static bool Ask(string method, Action<string>? log)
     {
-        object? shell = null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var type = Type.GetTypeFromProgID("Shell.Application");
+
+                if (type is null)
+                {
+                    log?.Invoke($"{method}: Shell.Application is not registered.");
+                    return false;
+                }
+
+                _shell ??= Activator.CreateInstance(type);
+
+                type.InvokeMember(method, BindingFlags.InvokeMethod, null, _shell, null);
+
+                log?.Invoke($"{method}: the shell accepted.");
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                // Most likely a shell that has restarted under us, taking the object with it. Drop
+                // it and try once more; a second failure is a real one.
+                Release();
+
+                if (attempt == 1)
+                {
+                    log?.Invoke($"{method} failed: {exception.GetType().Name}: {exception.Message}");
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Lets go of the shell object, on the way out or after a failure.</summary>
+    public static void Release()
+    {
+        if (_shell is null)
+        {
+            return;
+        }
 
         try
         {
-            var type = Type.GetTypeFromProgID("Shell.Application");
-
-            if (type is null)
-            {
-                log?.Invoke($"{method}: Shell.Application is not registered.");
-                return false;
-            }
-
-            shell = Activator.CreateInstance(type);
-
-            type.InvokeMember(method, BindingFlags.InvokeMethod, null, shell, null);
-
-            log?.Invoke($"{method}: the shell accepted.");
-
-            return true;
+            Marshal.FinalReleaseComObject(_shell);
         }
-        catch (Exception exception)
+        catch (ArgumentException)
         {
-            // The shell is out of reach — busy, restarting, or refusing the automation call. One
-            // shortcut does nothing; nothing else about the session is affected.
-            log?.Invoke($"{method} failed: {exception.GetType().Name}: {exception.Message}");
-            return false;
+            // Already released, or never a COM object. Either way there is nothing to free.
         }
-        finally
-        {
-            if (shell is not null)
-            {
-                Marshal.FinalReleaseComObject(shell);
-            }
-        }
+
+        _shell = null;
     }
 
     /// <summary>

@@ -5,8 +5,49 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Sc2Xboxed.Osk</AssemblyName>
+
+    <!--
+      uiAccess : ce qu'il faudra faire, et pourquoi ce n'est pas fait ici.
+
+      Ce clavier a l'ecran tourne au privilege de l'utilisateur depuis le 11 aout 2026, ce qui lui
+      interdit de taper dans une fenetre elevee : gestionnaire des taches, editeur du registre, un
+      installeur qui demande l'administrateur. La reponse propre n'est pas de re-elever le processus
+      — cette fenetre est topmost, et elevee elle ne pouvait plus etre remise derriere aucune autre,
+      ce qui etait le defaut signale depuis le debut du projet.
+
+      La reponse propre est uiAccess="true" dans app.manifest : l'acces aux fenetres elevees sans
+      elever le processus. Windows l'accorde a deux conditions, toutes les deux obligatoires :
+
+        1. le binaire est signe numeriquement par un certificat de confiance ;
+        2. il est installe dans un emplacement sur — Program Files ou System32.
+
+      Mesure du 11 aout 2026 : avec uiAccess="true", non signe et lance depuis D:, Windows REFUSE de
+      demarrer le processus. Pas de degradation, pas d'avertissement — le clavier a l'ecran ne se
+      lance plus du tout. Basculer ce drapeau avant d'avoir le certificat casse la fonctionnalite au
+      lieu de l'ameliorer.
+
+      MESURE DU 11 AOUT 2026, les deux conditions eprouvees separement :
+
+        * uiAccess="true", NON signe, depuis D:        -> Windows REFUSE de demarrer.
+        * uiAccess="true", SIGNE et horodate, depuis %TEMP% -> Windows REFUSE ENCORE.
+
+      La signature seule ne suffit donc pas : l'emplacement sur est une condition a part entiere, et
+      c'est l'installeur qui la remplit.
+
+      D'ou les deux manifestes ci-dessous. Le portable garde uiAccess="false" et fonctionne partout ;
+      la version signee prend uiAccess="true" et n'est utilisable qu'installee. Un seul manifeste
+      aurait force a choisir entre les deux, et laisser uiAccess="true" dans la copie portable la
+      rendrait tout simplement inlancable.
+    -->
+    <ApplicationManifest Condition="'$(SteamXBoxSignThumbprint)' != '' or '$(SteamXBoxSignCertificate)' != ''">app.uiaccess.manifest</ApplicationManifest>
+
+    <!-- Un seul fichier autonome. Voir Sc2Xboxed.App.Console.csproj : la meme omission y avait
+         produit un binaire qui demarre puis ne trouve pas son propre .dll. -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
     <RootNamespace>Sc2Xboxed.Osk</RootNamespace>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(ApplicationManifest)' == ''">app.manifest</ApplicationManifest>
     <ApplicationIcon>OverlayKeyboard.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
 

@@ -276,9 +276,17 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
     TritonHapticSink haptics,
     Sc2Xboxed.App.Console.OskInstanceSet oskInstances,
     Action<string> log,
+    DiagnosticLog diagnostics,
     CancellationToken cancellationToken)
 {
     log("Releasing the controller to Steam.");
+
+    // The one that actually matters, and the one that was missing. Everything else released here
+    // is held in user space: haptics, the overlay, the virtual pads. HidHide is a filter driver —
+    // while it hides the controller, Steam cannot see it no matter how politely SteamXBox has
+    // stood down. So SteamXBox let go of everything except the thing that was in the way, and the
+    // controller lost its native Steam support without anything on screen to say why.
+    Sc2Xboxed.App.Console.ControllerCloak.Release(diagnostics);
 
     // Mute before dropping the stream so a queued overlay tick cannot reopen the device.
     haptics.Muted = true;
@@ -312,9 +320,21 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
 
     haptics.Muted = false;
 
+    // Steam does not put the controller back the way it found it. Steam Input takes over the
+    // firmware layer for as long as it runs, and on the way out it leaves whatever it last wrote —
+    // so a controller that has been through a Steam session is in a state neither Steam nor
+    // SteamXBox chose. Reclaiming has to start from a known one rather than assume.
+    //
+    // The reset is a request, not a step that may fail the reclaim: the device may still be busy,
+    // or gone with Steam. Whatever it answers, the source below reopens it and applies the
+    // firmware layer this session wants.
+    Sc2Xboxed.App.Console.ControllerReset.ToNative(log);
+
     // No replug here: pads are created on first use, so the next frame a controller sends in
-    // Xbox mode connects its own pad again.
-    log("Reclaiming; virtual pads will reappear on the next Xbox input.");
+    // Xbox mode connects its own pad again. The cloak comes back the same way, on the next
+    // ControllerCloak.Apply — hiding it now would take the controller from Steam's own
+    // shutdown, which is still finishing.
+    log("Reclaiming; virtual pads and cloaking return on the next controller input.");
 
     return true;
 }
@@ -855,6 +875,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         cancellation.Cancel();
     };
 
+    // And every other way of being asked to stop. CancelKeyPress covers Ctrl+C and nothing else;
+    // the window's close button, a log-off and a shutdown all reached the end of this process
+    // without any of the cleanup below ever running.
+    Sc2Xboxed.App.Console.GracefulShutdown.Arm(cancellation);
+
     DLog($"Initial mode: {initialMode}");
     DLog($"Switch buttons: {switchButtons}");
     DLog($"Mode switch enabled: {enableModeSwitch}");
@@ -1035,7 +1060,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             profileMapper.Reset();
             mapper.ResetTransientState();
 
-            if (!await WaitWhileSteamOwnsAsync(steamWatcher, virtualPads, haptics, oskInstances, DLog, cancellation.Token))
+            if (!await WaitWhileSteamOwnsAsync(
+                    steamWatcher, virtualPads, haptics, oskInstances, DLog, log, cancellation.Token))
             {
                 break;
             }
@@ -1077,7 +1103,13 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             // Every attached controller, not one chosen from among them. Choosing is what made
             // split-screen impossible and what silently bound the whole bridge to a third-party
             // virtual gamepad that answers XInput with zeros.
+            // Before anything is opened: a session killed earlier may have left a controller hidden
+            // from every game on the machine, and this is where that gets repaired.
+            Sc2Xboxed.App.Console.ControllerCloak.Reset(log);
+
             var attached = Sc2Xboxed.App.Console.AttachedControllers.Open(physicalXInputSlots, forced, DLog);
+
+            Sc2Xboxed.App.Console.ControllerCloak.Apply(log);
 
             if (attached.Count == 0)
             {
@@ -1101,12 +1133,34 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             // The rescan closure re-enumerates exactly as the first call did, so a pad switched on
             // later is opened the same way as one present at launch. The XInput snapshot stays the
             // one taken before any virtual pad existed: a slot that fills afterwards is ours.
-            var multi = new Sc2Xboxed.Windows.ParallelControllerSource(
+            // Released at the end of every turn of this loop. It was not, and the loop turns every
+            // time the last controller is switched off and comes back — so each nap left a source
+            // behind whose arrivals watcher went on rescanning for the rest of the session, opening
+            // devices and announcing controllers next to its own replacement. Two naps, three
+            // watchers, and the same pad reported as arriving three times.
+            await using var multi = new Sc2Xboxed.Windows.ParallelControllerSource(
                 attached,
                 DLog,
-                onLeft: identity => _ = virtualPads.ForgetAsync(identity.Id),
-                rescan: () => Sc2Xboxed.App.Console.AttachedControllers.Open(
-                    physicalXInputSlots, forced, DLog));
+                onLeft: identity =>
+                {
+                    _ = virtualPads.ForgetAsync(identity.Id);
+
+                    // And its device goes back to everyone else at the same moment. The reason it
+                    // was hidden — that its buttons would reach the foreground as well as us — ends
+                    // when the controller does, not when SteamXBox does.
+                    Sc2Xboxed.App.Console.ControllerCloak.ReleaseOne(identity.Id, log);
+                },
+                rescan: () =>
+                {
+                    var found = Sc2Xboxed.App.Console.AttachedControllers.Open(
+                        physicalXInputSlots, forced, DLog);
+
+                    // A pad plugged in mid-session has to be hidden too, or it is the one controller
+                    // whose buttons reach the foreground.
+                    Sc2Xboxed.App.Console.ControllerCloak.Apply(log);
+
+                    return found;
+                });
             source = attached[0].Source;
 
             log.WriteBlock(
@@ -1537,12 +1591,30 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                         // overlay finds a server waiting rather than retrying.
                                         var instance = oskInstances.Open(frameSource);
 
+                                        // Already resident and waiting: showing it costs writing one
+                                        // file. The overlay was started with --prewarm when this
+                                        // controller was opened, and a close hides it rather than
+                                        // ending it — so the four seconds the .NET host needs before
+                                        // the first line of that program runs were paid once, at the
+                                        // start of the session, instead of on every press.
+                                        //
+                                        // One resident overlay PER CONTROLLER, never one shared. A
+                                        // single instance on the default channels existed once and
+                                        // answered for every controller, swallowing the frames meant
+                                        // for the window that had just been opened for one of them.
+                                        // The suffix is what keeps them apart.
+                                        if (Sc2Xboxed.App.Console.OskPrewarmSet.Wake(instance.Naming, DLog))
                                         {
-                                            // A window of its own, told which channels are its own.
-                                            // No resident instance to wake instead: one existed, on
-                                            // the default channels, and it answered for every
-                                            // controller — swallowing the frames meant for the
-                                            // window that had just been launched for one of them.
+                                            profileMapper.OskActive = true;
+
+                                            var wokenMode = OskSettings.Load().TypingMode;
+                                            profileMapper.DaisywheelActive = wokenMode == OskTypingMode.Daisywheel;
+                                            DLog($"OSK woken from prewarm; typing mode: {wokenMode}");
+                                        }
+                                        else
+                                        {
+                                            // Nothing resident for this controller — the prewarm
+                                            // failed, or it has since died. Cold start, as before.
                                             var psi = new ProcessStartInfo
                                             {
                                                 FileName = overlayPath,
@@ -1560,8 +1632,34 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                             psi.ArgumentList.Add(
                                                 profileMapper.Settings.OskFloating ? "1" : "0");
 
+                                            // Started resident. Closing this keyboard now hides it
+                                            // instead of ending it, so this cold start is the only
+                                            // one this controller pays for the whole session — every
+                                            // press after it is a signal file.
+                                            //
+                                            // Launched here rather than when the controller is
+                                            // opened, and that is deliberate: the overlay expects its
+                                            // pipe to already be listening, and the pipe is opened by
+                                            // the line above. Pre-opening a pipe for every attached
+                                            // controller would make the keyboard instant from the
+                                            // first press too — at the cost of a server per
+                                            // controller whether or not anybody types.
+                                            psi.ArgumentList.Add("--prewarm");
+
                                             var proc = Process.Start(psi);
                                             DLog($"OSK overlay launched for {frameSource}: PID={proc?.Id}");
+
+                                            // Bound to this session's life by the kernel. An overlay
+                                            // keyboard left behind is the worst orphan this product
+                                            // can make: its window puts itself above everything, and
+                                            // once the session that opened it is gone, nothing on the
+                                            // machine will close it.
+                                            if (proc is not null)
+                                            {
+                                                Sc2Xboxed.Windows.ChildProcesses.Adopt(proc, DLog);
+                                                Sc2Xboxed.App.Console.OskPrewarmSet.Remember(
+                                                    instance.Naming, proc, DLog);
+                                            }
                                         }
 
                                         profileMapper.OskActive = true;
@@ -1955,7 +2053,22 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     log.Info(LogCategory.Session, "Releasing virtual Xbox 360 pads.");
     Console.WriteLine("Virtual Xbox 360 pads released.");
     await padSender.DisposeAsync();
+
+    // The controllers go back to everyone else. Only the tidy exits reach this line — a crash or a
+    // force-kill does not — which is why the reset at startup exists rather than only this.
+    Sc2Xboxed.App.Console.ControllerCloak.Release(log);
+
+    // The resident keyboards are asked to leave, not merely hidden. A close signal now means "hide"
+    // for them, so without this they would sit invisible until the kernel ends them with this
+    // session — which it would, but a process asked to leave puts its own pipes away first.
+    Sc2Xboxed.App.Console.OskPrewarmSet.StopAll(message => log.Info(LogCategory.Osk, message));
+
     log.Info(LogCategory.Session, "=== SteamXBox session end ===");
+
+    // Releases whoever asked us to close. A close request is being held until this line, so that
+    // the controllers are given back before the window disappears.
+    Sc2Xboxed.App.Console.GracefulShutdown.Done();
+
     // The log is disposed by its using declaration.
 }
 
@@ -2533,6 +2646,19 @@ static void StopOtherInstances(bool waitForExit)
 
             try
             {
+                // Asked before being killed. This used to go straight to Kill, which is why the
+                // session's cleanup — giving the controllers back, releasing the virtual pads,
+                // turning HidHide's cloaking off — was never reached by any of the three ways a user
+                // has of stopping SteamXBox. A controller stayed hidden from every game as a result.
+                if (Sc2Xboxed.App.Console.PoliteStop.Ask(process, TimeSpan.FromSeconds(6)))
+                {
+                    stopped++;
+                    continue;
+                }
+
+                Console.WriteLine(
+                    $"Process {process.Id} did not answer the stop request; stopping it outright.");
+
                 process.Kill(entireProcessTree: true);
                 if (waitForExit)
                 {

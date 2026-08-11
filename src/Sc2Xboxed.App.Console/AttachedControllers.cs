@@ -49,6 +49,39 @@ public static class AttachedControllers
     /// here.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The devices opened by the last call to <see cref="Open"/>, as Windows instance identifiers.
+    /// </summary>
+    /// <remarks>
+    /// Collected here because this is the one place all three families are opened, so it is the one
+    /// place that knows what SteamXBox is actually holding — which is the only safe answer to "what
+    /// may be hidden from other applications".
+    ///
+    /// <para>
+    /// Interface paths are converted to instance identifiers because that is the form HidHide names
+    /// devices by. Anything that cannot be converted is left out rather than guessed at.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> LastOpenedDeviceInstanceIds { get; private set; } = [];
+
+    /// <summary>
+    /// Which device each controller was opened from, by its durable identity.
+    /// </summary>
+    /// <remarks>
+    /// Kept so that a controller leaving mid-session can have its own device given back, instead of
+    /// staying hidden from every other application until SteamXBox closes. A pad put to sleep at
+    /// half past nine was invisible to games for the rest of the evening.
+    ///
+    /// <para>
+    /// Recorded where each path is collected rather than paired afterwards by position. The two
+    /// lists look parallel and are not: an XInput slot contributes an identity always and a path
+    /// only when the device tree can name one, so the indices drift apart on any machine with a pad
+    /// the tree does not recognise — silently, and in favour of unhiding the wrong device.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyDictionary<string, string> DeviceByIdentity { get; private set; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     public static IReadOnlyList<(ControllerIdentity Identity, IPhysicalControllerSource Source)> Open(
         IReadOnlyCollection<int> physicalSlots,
         string forcedKind = "",
@@ -58,6 +91,13 @@ public static class AttachedControllers
         ControllerIdentityFactory.DurableKeyResolver ??= path => DeviceTree.DurableKeyFor(path, log);
 
         var opened = new List<(ControllerIdentity, IPhysicalControllerSource)>();
+        var devicePaths = new List<string>();
+
+        
+
+        // Filled beside devicePaths, never derived from it afterwards: see DeviceByIdentity.
+
+        var pathByIdentity = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var wantsSteam = forcedKind is "" or "steam";
         var wantsXInput = forcedKind is "" or "xinput";
@@ -67,6 +107,9 @@ public static class AttachedControllers
             var discovery = new SteamHidDiscovery(log);
             if (discovery.FindPreferredControllerDevice() is { } device)
             {
+                devicePaths.Add(device.DevicePath);
+                pathByIdentity[ControllerIdentityFactory.FromHidPath(device.DevicePath)] = device.DevicePath;
+
                 opened.Add((
                     new ControllerIdentity(
                         ControllerKind.SteamController,
@@ -110,6 +153,9 @@ public static class AttachedControllers
                         + $"longest input report ({device.GetMaxInputReportLength()} bytes).");
                 }
 
+                devicePaths.Add(device.DevicePath);
+                pathByIdentity[group.Key] = device.DevicePath;
+
                 opened.Add((
                     new ControllerIdentity(
                         ControllerKind.DualSense,
@@ -132,6 +178,18 @@ public static class AttachedControllers
             foreach (var slot in XInputControllerSource.ConnectedSlots()
                          .Where(slot => XInputDurableIdentity.LooksPhysical(slot, log) ?? physicalSlots.Contains(slot)))
             {
+                // Physical pads only — the helper refuses a ViGEm one, which is what keeps SteamXBox
+                // from hiding the very pad it creates for games.
+                if (XInputDurableIdentity.PhysicalInterfacePathFor(slot, log) is { } xusbPath)
+                {
+                    devicePaths.Add(xusbPath);
+
+                    // The same expression the identity below is built from, so the two cannot drift.
+                    pathByIdentity[
+                        XInputDurableIdentity.For(slot, log)
+                            ?? ControllerIdentityFactory.FromXInputSlot(slot)] = xusbPath;
+                }
+
                 // The durable key when the device tree can give one. Filed under the slot, this
                 // pad's settings would follow the position rather than the pad.
                 opened.Add((
@@ -144,6 +202,23 @@ public static class AttachedControllers
                     new XInputControllerSource(slot)));
             }
         }
+
+        // Converted once, here, so a caller never has to know that HidHide names devices differently
+        // from the way they are opened. Anything that will not convert is dropped: a half-recognised
+        // path is not something to hand to a driver that hides hardware.
+        LastOpenedDeviceInstanceIds = devicePaths
+            .Select(path => DeviceTree.ToInstanceId(path))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        // Same conversion, same rule: anything that will not convert is left out rather than
+        // guessed at. A controller absent from this map simply keeps its device hidden until the
+        // session ends, which is where it was before.
+        DeviceByIdentity = pathByIdentity
+            .Select(pair => (pair.Key, Id: DeviceTree.ToInstanceId(pair.Value)))
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Id))
+            .ToDictionary(pair => pair.Key, pair => pair.Id, StringComparer.OrdinalIgnoreCase);
 
         return opened;
     }
@@ -161,11 +236,81 @@ public static class AttachedControllers
     /// PlayStation and Xbox. Detecting only the Valve one is what left the Core standing by forever
     /// after a Steam Controller was switched off and a DualSense switched on instead.
     /// </remarks>
+    /// <summary>
+    /// A log that drops a line it has just written.
+    /// </summary>
+    /// <remarks>
+    /// <b>For the wait, not for the work.</b> Standing by for a controller asks the same question
+    /// every two seconds and gets the same answer for as long as the controller is off — and the
+    /// enumeration is chatty, six lines an answer. Measured on one ten-minute session: <b>2 097 of
+    /// its 2 831 lines were that question repeating</b>, and an earlier log had reached eight
+    /// megabytes the same way.
+    ///
+    /// <para>
+    /// The cost is not the polling, which is a deliberate two-second beat and is fine. The cost is
+    /// that the answer buries everything worth reading, which is the whole purpose of a log.
+    /// Repeated lines are dropped and anything new is written the moment it differs, so a controller
+    /// coming back is as visible as it ever was.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// Static, and a whole block rather than a line. The repetition happens <b>between</b> calls,
+    /// one every two seconds, and each call writes the same six lines in the same order — so
+    /// comparing a line with the one before it, which was the first attempt, suppressed only the two
+    /// that happened to be identical neighbours and left the block intact.
+    /// </para>
+    /// </remarks>
+    private static string[] _lastAnswer = [];
+
+    /// <summary>
+    /// Asks whether any controller is attached, and says so in the log only when the answer changes.
+    /// </summary>
+    /// <remarks>
+    /// <b>The polling is fine; the logging was not.</b> Standing by beats every two seconds by
+    /// design, which is cheap. But the enumeration underneath is chatty, and repeating it verbatim
+    /// for as long as a controller stays off buried everything else: measured on one ten-minute
+    /// session, <b>2 097 of its 2 831 lines</b> were this question repeating, and an earlier log had
+    /// reached eight megabytes the same way. A log nobody can read is not a log.
+    ///
+    /// <para>
+    /// The lines are collected, compared with the previous answer, and written only if they differ —
+    /// so a controller coming back is exactly as visible as it was before.
+    /// </para>
+    /// </remarks>
     public static bool AnyAttached(
         IReadOnlyCollection<int> physicalSlots,
         string forcedKind = "",
         Action<string>? log = null)
     {
+        if (log is null)
+        {
+            return Look(physicalSlots, forcedKind, null);
+        }
+
+        var said = new List<string>();
+        var attached = Look(physicalSlots, forcedKind, said.Add);
+        var answer = said.ToArray();
+
+        if (!answer.SequenceEqual(_lastAnswer, StringComparer.Ordinal))
+        {
+            _lastAnswer = answer;
+
+            foreach (var line in answer)
+            {
+                log(line);
+            }
+        }
+
+        return attached;
+    }
+
+    private static bool Look(
+        IReadOnlyCollection<int> physicalSlots,
+        string forcedKind,
+        Action<string>? log)
+    {
+
         if (forcedKind is "" or "steam")
         {
             try

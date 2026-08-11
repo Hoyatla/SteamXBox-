@@ -35,6 +35,19 @@ namespace SteamXBox.Desktop.Tools;
 /// of the copy, so it cannot be created on demand like the calculator. Worth discovering now rather
 /// than after a plugin contract had been frozen without it.
 /// </param>
+/// <param name="IsSystem">
+/// SteamXBox itself rather than a tool of it, and therefore not something to switch off.
+/// </param>
+/// <remarks>
+/// <para>
+/// <b>Why the distinction exists.</b> The controller configuration and the settings window are the
+/// product, not accessories to it. Listing them where tools are switched off and archived offers
+/// the user a way to lock themselves out: turning off the settings tile removes the only tile that
+/// opens the screen it would be turned back on from, and archiving would invite the system to
+/// compress itself. A tool is something the environment can live without; these two are what the
+/// environment is.
+/// </para>
+/// </remarks>
 public sealed record ToolDescriptor(
     string Id,
     string Label,
@@ -43,4 +56,5 @@ public sealed record ToolDescriptor(
     Func<Window, string>? Run = null,
     string Executable = "",
     string Arguments = "",
-    Action? Start = null);
+    Action? Start = null,
+    bool IsSystem = false);

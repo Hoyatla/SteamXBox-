@@ -44,6 +44,7 @@ public sealed record DoubleTapGesture(string Name, IReadOnlySet<int> Keys, Actio
 public sealed class DoubleTapHotkey : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
+    private const int WM_QUIT = 0x0012;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
@@ -80,37 +81,110 @@ public sealed class DoubleTapHotkey : IDisposable
         _callback = OnKey;
     }
 
-    /// <summary>Installs the hook. Safe to call twice.</summary>
+    /// <summary>
+    /// Installs the hook on a thread of its own. Safe to call twice.
+    /// </summary>
+    /// <remarks>
+    /// <b>A low-level keyboard hook is delivered on the thread that installed it, and that thread
+    /// must be pumping messages for a keystroke to get through.</b> Not on "whatever thread Windows
+    /// chose", which is what the comment in this file used to claim — the mistake mattered, because
+    /// it made the interface thread look like a harmless place to install from.
+    ///
+    /// <para>
+    /// It is not. Every keystroke on the machine, in every application, waits for this hook to
+    /// answer. Installed from the interface thread, anything that blocks that thread blocks the
+    /// keyboard of the whole computer — measured: copying a folder in the file manager made the
+    /// clipboard listener open the clipboard on the interface thread, and the keyboard was dead
+    /// everywhere for thirty-three seconds, until SteamXBox was closed and the hook went with it.
+    /// </para>
+    ///
+    /// <para>
+    /// So the hook gets a thread that does nothing else and can therefore never be busy. The work a
+    /// gesture triggers is still posted to the interface thread, as it always was; what changed is
+    /// that the interface thread's troubles are no longer the keyboard's.
+    /// </para>
+    /// </remarks>
     public void Start()
     {
-        if (_hook != IntPtr.Zero)
+        if (_thread is not null)
         {
             return;
         }
 
+        var ready = new ManualResetEventSlim(false);
+
+        _thread = new Thread(() => Pump(ready))
+        {
+            IsBackground = true,
+            Name = "SteamXBox keyboard hook",
+        };
+
+        _thread.Start();
+
+        // Waited for so that Stop can rely on the thread identifier being known. Bounded, because a
+        // hook that failed to install must not hold up the start of the environment.
+        ready.Wait(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>The hook's whole life: install, pump, unhook.</summary>
+    private void Pump(ManualResetEventSlim ready)
+    {
+        _threadId = GetCurrentThreadId();
+
         // The module handle of this process. A managed hook needs one that is loaded, and passing
         // zero makes SetWindowsHookEx refuse for a low-level hook on some versions.
-        using var self = Process.GetCurrentProcess();
-        using var module = self.MainModule;
-
-        _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _callback, GetModuleHandle(module?.ModuleName), 0);
+        using (var self = Process.GetCurrentProcess())
+        using (var module = self.MainModule)
+        {
+            _hook = SetWindowsHookEx(WH_KEYBOARD_LL, _callback, GetModuleHandle(module?.ModuleName), 0);
+        }
 
         _log?.Invoke(_hook == IntPtr.Zero
             ? $"double-tap hotkeys unavailable: SetWindowsHookEx failed ({Marshal.GetLastWin32Error()})."
-            : $"double-tap hotkeys installed: {_names}.");
-    }
+            : $"double-tap hotkeys installed on their own thread: {_names}.");
 
-    /// <summary>Removes the hook. The machine stops paying for it immediately.</summary>
-    public void Stop()
-    {
+        ready.Set();
+
         if (_hook == IntPtr.Zero)
         {
             return;
         }
 
+        // A plain message loop, and deliberately nothing else. This thread exists to be idle: any
+        // work put here would be paid for by every keystroke on the machine.
+        while (GetMessage(out var message, IntPtr.Zero, 0, 0) > 0)
+        {
+            TranslateMessage(ref message);
+            DispatchMessage(ref message);
+        }
+
         UnhookWindowsHookEx(_hook);
         _hook = IntPtr.Zero;
         _log?.Invoke("double-tap hotkeys removed.");
+    }
+
+    /// <summary>Removes the hook. The machine stops paying for it immediately.</summary>
+    /// <remarks>
+    /// The hook has to be removed by the thread that installed it, so this asks rather than does:
+    /// quitting that thread's message loop is what unhooks.
+    /// </remarks>
+    public void Stop()
+    {
+        if (_thread is null)
+        {
+            return;
+        }
+
+        if (_threadId != 0)
+        {
+            PostThreadMessage(_threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        // Bounded, because closing the environment must not hang on this. The thread is a background
+        // one, so the process can end regardless.
+        _thread.Join(TimeSpan.FromSeconds(2));
+        _thread = null;
+        _threadId = 0;
     }
 
     public void Dispose() => Stop();
@@ -131,9 +205,8 @@ public sealed class DoubleTapHotkey : IDisposable
             {
                 foreach (var gesture in _router.Press(key, _clock.ElapsedMilliseconds))
                 {
-                    // Posted, never run here. The callback runs on whatever thread Windows chose and
-                    // holds up every keystroke on the machine until it returns; doing the work inside
-                    // it would stall the whole keyboard.
+                    // Posted, never run here. This callback holds up every keystroke on the machine
+                    // until it returns, so it does the least it can: decide, hand over, get out.
                     Application.Current?.Dispatcher.BeginInvoke(gesture.Triggered);
                 }
             }
@@ -153,7 +226,37 @@ public sealed class DoubleTapHotkey : IDisposable
         return CallNextHookEx(_hook, code, wParam, lParam);
     }
 
+    private Thread? _thread;
+    private uint _threadId;
+
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr Window;
+        public uint Message;
+        public IntPtr WParam;
+        public IntPtr LParam;
+        public uint Time;
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out MSG message, IntPtr window, uint first, uint last);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref MSG message);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref MSG message);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc callback, IntPtr module, uint threadId);
