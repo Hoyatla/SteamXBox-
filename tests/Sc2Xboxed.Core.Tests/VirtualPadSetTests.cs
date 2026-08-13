@@ -126,6 +126,20 @@ public class VirtualPadSetTests
         Assert.Empty(made[1].Submitted);
     }
 
+    [Fact]
+    public async Task TargetedNeutralisationDoesNotReachAnotherPad()
+    {
+        var (set, made) = Build();
+
+        await set.ForAsync(PadA, default);
+        await set.ForAsync(PadB, default);
+
+        await set.SubmitForAsync(PadA, Xbox360Report.Neutral, default);
+
+        Assert.Single(made[0].Submitted);
+        Assert.Empty(made[1].Submitted);
+    }
+
     // Sending neutral to only the pad that sent the last frame leaves the other players holding
     // whatever they were last told — a stuck stick or a held trigger.
     [Fact]

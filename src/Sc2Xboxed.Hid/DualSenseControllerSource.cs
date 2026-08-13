@@ -147,6 +147,11 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                 _isBluetooth = IsBluetoothPath(device.DevicePath);
             }
 
+            if (RequestFullBluetoothReports && IsBluetoothPath(device.DevicePath))
+            {
+                AskForFullReports(device, stream);
+            }
+
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
@@ -249,6 +254,82 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
                     _activeStreamGate = null;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The calibration feature report. Reading it is what switches a Bluetooth DualSense out of
+    /// compatibility mode; its contents are not used here.
+    /// </summary>
+    private const byte CalibrationFeatureReportId = 0x05;
+
+    /// <summary>
+    /// Off. Asking for full reports works, and costs more than it gives as things stand.
+    /// </summary>
+    /// <remarks>
+    /// Turned on on 12 August and turned off the same night. The request itself succeeds — the pad
+    /// switched to <c>0x31</c> and delivered its analogue triggers, its touchpad and its gyroscope,
+    /// which is what a DualSense is supposed to give. What came with it was the frame rate: from
+    /// about 60 a second to an average of 175 with peaks at 554, taking the whole pipeline to 617,
+    /// and severe input lag reported within the hour.
+    ///
+    /// <para>
+    /// The lag is not a full queue — the channel is bounded and drops the oldest, and the counters
+    /// show every frame being consumed. So the cost is somewhere else and is not yet understood,
+    /// and a controller that lags is worse than one missing its gyroscope. This goes back on when
+    /// the cost has been measured, not before.
+    /// </para>
+    /// </remarks>
+    private const bool RequestFullBluetoothReports = false;
+
+    /// <summary>
+    /// Asks a Bluetooth DualSense for its full reports instead of the compatibility ones.
+    /// </summary>
+    /// <remarks>
+    /// Connected over Bluetooth, the DualSense does not send its full <c>0x31</c> report until some
+    /// host asks for the calibration feature report. Until then it sends <c>0x01</c>: the sticks and
+    /// the face buttons, and nothing else — no analogue triggers, no touchpad, no gyroscope. Worse
+    /// for diagnosis, that report is sent on change rather than on a clock, so the frame rate follows
+    /// how hard the thumbs are working. Measured on 12 August before this existed: an average of 196
+    /// frames a second swinging between 8 and 541, against a steady 64 for every other pad, and every
+    /// report logged as <c>id=0x01 len=78</c> with its payload ending at byte seven.
+    ///
+    /// <para>
+    /// The read is the whole point — the calibration values are discarded. Wired pads never come here:
+    /// over USB the full report is what arrives from the first frame.
+    /// </para>
+    ///
+    /// <para>
+    /// Best effort by design. Windows does not reliably carry feature reports over Bluetooth HID — the
+    /// same limitation <see cref="SendPowerOff"/> documents — so a refusal is reported and the pad
+    /// keeps working exactly as it did before, reduced but alive. Failing to ask is not a reason to
+    /// drop a controller.
+    /// </para>
+    /// </remarks>
+    private void AskForFullReports(HidDevice device, HidStream stream)
+    {
+        try
+        {
+            var length = device.GetMaxFeatureReportLength();
+
+            if (length <= 0)
+            {
+                _log?.Invoke("DualSense: no feature report length advertised; staying in compatibility mode.");
+                return;
+            }
+
+            var feature = new byte[length];
+            feature[0] = CalibrationFeatureReportId;
+
+            stream.GetFeature(feature);
+
+            _log?.Invoke("DualSense: full Bluetooth reports requested (calibration feature read). "
+                         + "Expect report id 0x31 from here.");
+        }
+        catch (Exception failure)
+        {
+            _log?.Invoke($"DualSense: could not ask for full reports ({failure.GetType().Name}: {failure.Message}). "
+                         + "The pad stays in compatibility mode: sticks and face buttons only.");
         }
     }
 

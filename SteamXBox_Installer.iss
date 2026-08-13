@@ -2,7 +2,7 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.6"
+#define MyAppVersion "4.7"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -78,6 +78,14 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Working
 ; laisse une manette invisible pour tous les jeux.
 Filename: "{app}\SteamXBox.Core.exe"; Parameters: "stop"; Flags: runhidden; RunOnceId: "StopCore"
 Filename: "{app}\SteamXBox.Core.exe"; Parameters: "hidhide-off"; Flags: runhidden; RunOnceId: "ReleasePads"
+
+; Les traces des manettes virtuelles creees par le produit. Voir le commentaire etendu dans
+; SteamXBox_Full_Installer.iss : Windows garde indefiniment l'enregistrement de tout appareil apparu
+; une fois, chaque manette virtuelle en laisse trois, et leur accumulation empeche SteamXBox
+; d'associer un slot XInput a une manette.
+;
+; Apres le stop et le hidhide-off, et limite a ce que le registre a note.
+Filename: "{app}\SteamXBox.Core.exe"; Parameters: "pads-cleanup"; Flags: runhidden; RunOnceId: "CleanPadRecords"
 
 [Code]
 // Voir SteamXBox_Full_Installer.iss pour le detail : les curseurs de Windows survivent a la

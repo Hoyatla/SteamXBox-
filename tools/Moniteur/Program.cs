@@ -65,6 +65,8 @@ internal static class Program
         var shellWell = true;
         var foreground = "";
 
+        StartPointerWatch();
+
         while (true)
         {
             Thread.Sleep(Beat);
@@ -73,6 +75,7 @@ internal static class Program
             WatchKeys(keys, reported);
             shellWell = WatchShell(shellWell);
             foreground = WatchForeground(foreground);
+            WatchPointer();
         }
     }
 
@@ -291,6 +294,211 @@ internal static class Program
         _log.WriteLine("    └────────────────────────────────────────────────────");
         _log.Flush();
     }
+
+    // ---- The pointer ----
+
+    /// <summary>
+    /// Separates what SteamXBox injects, what the real hardware sends, and what the cursor does.
+    /// </summary>
+    /// <remarks>
+    /// Added on 12 August, after a night spent unable to answer "did the cursor stop, or did nothing
+    /// ever ask it to move". The product injects pointer motion with <c>SendInput</c>, the user also
+    /// has a real mouse, and until now the log showed neither — only windows and key state. Three
+    /// separate readings are needed and no two of them can be inferred from each other:
+    ///
+    /// <list type="bullet">
+    ///   <item><b>injected</b> — <c>SendInput</c> reached the input queue, so SteamXBox did its part.</item>
+    ///   <item><b>physical</b> — a real mouse moved, which tells whether the user was even trying.</item>
+    ///   <item><b>cursor</b> — the pointer actually changed position, which is the only thing the user sees.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// Injected motion with a cursor that never moves means something swallows the events downstream.
+    /// No injected motion at all means the product never tried — a different fault entirely, and the
+    /// one that took a day to name because nothing distinguished it from the first.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The callback does nothing but count.</b> A low-level hook is called on the thread that
+    /// installed it and every event in the machine waits for it to return; the keyboard hook in
+    /// SteamXBox.Desktop froze the whole machine for 33 seconds by doing real work in one of these.
+    /// So: its own thread, no logging, no allocation, and the flags read at a fixed offset rather
+    /// than marshalled into a structure. The beat thread does the reporting.
+    /// </para>
+    /// </remarks>
+    private static int _injectedMoves;
+    private static int _physicalMoves;
+    private static int _injectedClicks;
+    private static int _physicalClicks;
+    private static int _cursorSteps;
+
+    private static HookProc? _mouseProc;
+    private static (int X, int Y) _cursorWas;
+    private static DateTime _pointerReportedAt = DateTime.Now;
+
+    /// <summary>Enough motion in one second that a motionless cursor cannot be a coincidence.</summary>
+    private const int EnoughToExpectMovement = 5;
+
+    private static void StartPointerWatch()
+    {
+        // Primed, or the first sample compares against (0,0) and reports a movement that never
+        // happened. A single false step in the first second is small and completely misleading.
+        if (GetCursorPos(out var start))
+        {
+            _cursorWas = (start.X, start.Y);
+        }
+
+        var thread = new Thread(PointerPump) { IsBackground = true, Name = "moniteur-pointeur" };
+        thread.Start();
+    }
+
+    private static void PointerPump()
+    {
+        // Held in a field: a delegate passed to Win32 and then collected leaves the hook calling
+        // into freed memory, which takes the whole desktop's input with it.
+        _mouseProc = OnMouseEvent;
+
+        var hook = SetWindowsHookExW(WH_MOUSE_LL, _mouseProc, GetModuleHandleW(null), 0);
+
+        if (hook == IntPtr.Zero)
+        {
+            Loud($"pointeur : crochet indisponible ({Marshal.GetLastWin32Error()}). Injecté et physique ne seront pas distingués.");
+            return;
+        }
+
+        Loud("pointeur : crochet posé — injecté, physique et curseur sont distingués.");
+
+        // A low-level hook is only delivered to a thread that pumps messages.
+        while (GetMessageW(out _, IntPtr.Zero, 0, 0) > 0)
+        {
+        }
+
+        UnhookWindowsHookEx(hook);
+    }
+
+    private static IntPtr OnMouseEvent(int code, IntPtr message, IntPtr data)
+    {
+        if (code >= 0)
+        {
+            // Offset 12 in MSLLHOOKSTRUCT: two ints of position, then mouseData, then the flags.
+            // Read directly rather than marshalled — this runs ahead of every mouse event on the
+            // machine, and PtrToStructure would allocate on each one.
+            var injected = (Marshal.ReadInt32(data, 12) & LLMHF_INJECTED) != 0;
+
+            if ((int)message == WM_MOUSEMOVE)
+            {
+                if (injected)
+                {
+                    Interlocked.Increment(ref _injectedMoves);
+                }
+                else
+                {
+                    Interlocked.Increment(ref _physicalMoves);
+                }
+            }
+            else if (injected)
+            {
+                Interlocked.Increment(ref _injectedClicks);
+            }
+            else
+            {
+                Interlocked.Increment(ref _physicalClicks);
+            }
+        }
+
+        return CallNextHookEx(IntPtr.Zero, code, message, data);
+    }
+
+    /// <summary>
+    /// Samples where the cursor is, and once a second says what the three readings disagreed about.
+    /// </summary>
+    /// <remarks>
+    /// <b>The cursor count is sampled, the other two are counted.</b> Movement is read once per beat,
+    /// so several events inside the same 20 ms become one step: 40 injected moves measured 29 steps
+    /// when this was verified. That gap is the sampler, not lost input, and the two numbers are not
+    /// meant to match. Only the difference between "some" and "none" is load-bearing here — which is
+    /// why the fault below is <c>steps == 0</c> and not a ratio.
+    /// </remarks>
+    private static void WatchPointer()
+    {
+        if (GetCursorPos(out var now) && (now.X != _cursorWas.X || now.Y != _cursorWas.Y))
+        {
+            _cursorWas = (now.X, now.Y);
+            _cursorSteps++;
+        }
+
+        if (DateTime.Now - _pointerReportedAt < TimeSpan.FromSeconds(1))
+        {
+            return;
+        }
+
+        _pointerReportedAt = DateTime.Now;
+
+        var injectedMoves = Interlocked.Exchange(ref _injectedMoves, 0);
+        var physicalMoves = Interlocked.Exchange(ref _physicalMoves, 0);
+        var injectedClicks = Interlocked.Exchange(ref _injectedClicks, 0);
+        var physicalClicks = Interlocked.Exchange(ref _physicalClicks, 0);
+        var steps = _cursorSteps;
+        _cursorSteps = 0;
+
+        // Silence when nothing happened, or the log is one line of zeroes per second all night.
+        if ((injectedMoves | physicalMoves | injectedClicks | physicalClicks | steps) == 0)
+        {
+            return;
+        }
+
+        Quiet($"pointeur  mouvements inj/phys={injectedMoves}/{physicalMoves} "
+              + $"curseur={steps} clics inj/phys={injectedClicks}/{physicalClicks}");
+
+        if (steps == 0 && injectedMoves + physicalMoves >= EnoughToExpectMovement)
+        {
+            Loud($"CURSEUR SOURD : {injectedMoves} mouvement(s) injecté(s) et {physicalMoves} physique(s) "
+                 + "en une seconde, et le curseur n'a pas bougé d'un pixel.");
+            Incident();
+        }
+    }
+
+    private const int WH_MOUSE_LL = 14;
+    private const int WM_MOUSEMOVE = 0x0200;
+    private const int LLMHF_INJECTED = 0x00000001;
+
+    private delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Message
+    {
+        public IntPtr Window;
+        public uint Value;
+        public IntPtr WParam;
+        public IntPtr LParam;
+        public uint Time;
+        public Point Where;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookExW(int hook, HookProc callback, IntPtr module, uint thread);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessageW(out Message message, IntPtr window, uint first, uint last);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetModuleHandleW(string? name);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out Point point);
 
     // ---- Win32 ----
 

@@ -12,10 +12,13 @@ namespace Sc2Xboxed.Core.Runtime;
 /// them apart all the way to the game is what makes the second player real.
 ///
 /// <para>
-/// Pads are created on first use, not up front. A controller that is attached but never touched
-/// would otherwise still appear to every game as a connected player — which in a split-screen title
-/// means a phantom second player occupying a slot, and in a single-player one means the game
-/// choosing the wrong pad. A pad appears when its controller actually sends something.
+/// A pad is connected as soon as its controller is attached, and released when the controller
+/// leaves. It used to be created on the first frame the controller sent in Xbox mode, which meant
+/// switching to Xbox while a game was already running hot-plugged a brand-new device into it — and
+/// games that enumerate controllers at launch never see a pad that appears mid-session, so the
+/// switch read as "the controller stopped responding". The pad now exists before the game starts;
+/// in Profile mode it simply receives neutral reports. The cost is the one the old design existed
+/// to avoid: an attached controller occupies an XInput slot even before any game uses it.
 /// </para>
 ///
 /// <para>
@@ -33,19 +36,45 @@ public sealed class VirtualPadSet : IAsyncDisposable
     private readonly Dictionary<string, IVirtualXbox360Sink> _pads = new(StringComparer.Ordinal);
     private readonly Func<IVirtualXbox360Sink> _factory;
     private readonly Action<string>? _log;
+    private readonly Func<IDisposable>? _recordCreation;
 
     /// <param name="factory">Creates one virtual pad. Called once per physical controller.</param>
     /// <param name="log">Optional diagnostic sink.</param>
-    public VirtualPadSet(Func<IVirtualXbox360Sink> factory, Action<string>? log = null)
+    /// <param name="recordCreation">
+    /// Optional. Called around the connection, and disposed once it has completed, so a caller that
+    /// knows how to read the device tree can write down the records the new pad brought into being.
+    /// </param>
+    /// <remarks>
+    /// The hook wraps the connection rather than the factory because the device does not exist until
+    /// the connection completes — a snapshot taken around <paramref name="factory"/> would see
+    /// nothing new. It is a callback rather than a direct call because this class is deliberately
+    /// free of Windows: the device tree lives a layer out, and is testable only on a real machine.
+    /// </remarks>
+    public VirtualPadSet(
+        Func<IVirtualXbox360Sink> factory,
+        Action<string>? log = null,
+        Func<IDisposable>? recordCreation = null)
     {
         _factory = factory;
         _log = log;
+        _recordCreation = recordCreation;
     }
 
     /// <summary>How many virtual pads are currently connected.</summary>
     public int Count
     {
         get { lock (_gate) return _pads.Count; }
+    }
+
+    /// <summary>Whether a controller already has a virtual pad connected.</summary>
+    /// <remarks>
+    /// The cheap check the frame loop uses before asking <see cref="ForAsync"/> to create one: pads
+    /// are now connected at attach time, so on the steady path this answers true and the request
+    /// never has to go through the async connect path.
+    /// </remarks>
+    public bool Has(string controllerId)
+    {
+        lock (_gate) return _pads.ContainsKey(controllerId);
     }
 
     /// <summary>The controllers that have a virtual pad, in creation order.</summary>
@@ -55,7 +84,8 @@ public sealed class VirtualPadSet : IAsyncDisposable
     }
 
     /// <summary>
-    /// The virtual pad belonging to one controller, creating and connecting it on first use.
+    /// The virtual pad belonging to one controller, connecting it when the controller does not have
+    /// one yet.
     /// </summary>
     public async ValueTask<IVirtualXbox360Sink> ForAsync(string controllerId, CancellationToken cancellationToken)
     {
@@ -68,7 +98,11 @@ public sealed class VirtualPadSet : IAsyncDisposable
         }
 
         var pad = _factory();
-        await pad.ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+        using (_recordCreation?.Invoke())
+        {
+            await pad.ConnectAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         IVirtualXbox360Sink? redundant = null;
         lock (_gate)
@@ -120,6 +154,48 @@ public sealed class VirtualPadSet : IAsyncDisposable
             {
                 _log?.Invoke($"submitting to a virtual pad: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Sends one report to one controller's pad, and to no other.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of <see cref="SubmitAllAsync"/>, for what concerns a single player. Leaving
+    /// Xbox mode is the case: the pad of the controller that switched must go neutral, and the pads
+    /// of everyone still playing must not — a whole-set neutralisation there drops the sticks of
+    /// every other player at once, which in a game reads as everybody's controller failing at the
+    /// moment one person changed mode.
+    ///
+    /// <para>
+    /// Does nothing when the controller has no pad. That is not an error: a controller that left
+    /// between the decision and this call has already had its pad released, and creating one here
+    /// just to neutralise it would connect a device to the game to say nothing with it.
+    /// </para>
+    /// </remarks>
+    public async ValueTask SubmitForAsync(string controllerId, Xbox360Report report, CancellationToken cancellationToken)
+    {
+        IVirtualXbox360Sink? pad;
+
+        lock (_gate)
+        {
+            _pads.TryGetValue(controllerId, out pad);
+        }
+
+        if (pad is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await pad.SubmitAsync(report, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Reported, never propagated: one driver refusing a report must not take down the loop
+            // that feeds every other player.
+            _log?.Invoke($"submitting to the virtual pad of {controllerId}: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

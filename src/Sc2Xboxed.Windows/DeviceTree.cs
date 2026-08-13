@@ -336,6 +336,135 @@ public static class DeviceTree
         Pid = 2,
     };
 
+    /// <summary>DEVPKEY_Device_Service — the driver that owns a node.</summary>
+    private static DevpropKey DevpkeyDeviceService => new()
+    {
+        Fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"),
+        Pid = 6,
+    };
+
+    /// <summary>The bus driver whose children are the pads this product creates.</summary>
+    private const string VirtualPadBusService = "ViGEmBus";
+
+    /// <summary>
+    /// Whether a pad is one the machine emulates rather than one somebody is holding.
+    /// </summary>
+    /// <remarks>
+    /// SteamXBox creates a virtual Xbox 360 pad so that games see a controller it understands. Its
+    /// own discovery loop then found that pad and adopted it as an arriving controller — measured on
+    /// 12 August, four tenths of a second after creating it. It went on to allocate the phantom a
+    /// keyboard instance, launch an overlay process for it, and hide it with HidHide: the output
+    /// existed so games could see it, and the product concealed it from them.
+    ///
+    /// <para>
+    /// <b>The vendor and product cannot be the test.</b> A ViGEmBus pad presents itself as
+    /// <c>VID_045E&amp;PID_028E</c> precisely because that is a wired Xbox 360 controller — being
+    /// indistinguishable is its entire purpose. Filtering on that pair would throw away every real
+    /// Xbox 360 pad a customer owns.
+    /// </para>
+    ///
+    /// <para>
+    /// The ancestry answers it instead. A physical pad hangs off a USB hub and, above that, a PCI
+    /// host controller; an emulated one hangs off a root-enumerated bus node — on this machine
+    /// <c>ROOT\SYSTEM\0003</c>, whose instance id says nothing at all. So the node is asked which
+    /// driver owns it, which is exact and cannot collide with a real device.
+    /// </para>
+    /// </remarks>
+    public static bool IsEmulatedPad(string interfacePath, Action<string>? log = null)
+    {
+        try
+        {
+            foreach (var ancestor in AncestorInstanceIds(interfacePath))
+            {
+                if (!string.Equals(ServiceOf(ancestor), VirtualPadBusService, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                log?.Invoke($"emulated pad ignored: {interfacePath} hangs off {ancestor} ({VirtualPadBusService}).");
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Not emulated is the safe answer: a pad wrongly called virtual disappears for the user,
+            // while one wrongly called real is the behaviour that existed before this check.
+            log?.Invoke($"deciding whether {interfacePath} is emulated: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The device nodes an emulated pad occupies, from its interface up to but not including the bus.
+    /// </summary>
+    /// <remarks>
+    /// One virtual pad is not one record. Measured on 12 August, a single one left three: the pad
+    /// itself as <c>USB\VID_045E&amp;PID_028E\01</c>, and an XInput and a HID interface beneath it,
+    /// each carrying an instance number Windows mints fresh every time. The pad node is reused; the
+    /// two interfaces are not, which is how twenty-nine of them accumulated.
+    ///
+    /// <para>
+    /// The bus is excluded deliberately. It is the driver's own node, installed with ViGEmBus and
+    /// belonging to it — removing that would uninstall the bus out from under every application on
+    /// the machine that uses it, not just this one.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> EmulatedPadNodes(string interfacePath)
+    {
+        var nodes = new List<string>();
+
+        try
+        {
+            foreach (var ancestor in AncestorInstanceIds(interfacePath))
+            {
+                if (string.Equals(ServiceOf(ancestor), VirtualPadBusService, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Reached the bus: everything gathered below it is the pad, and the bus is not ours.
+                    return nodes;
+                }
+
+                nodes.Add(ancestor);
+            }
+        }
+        catch
+        {
+            return [];
+        }
+
+        // Walked to the top without meeting the bus, so this was never an emulated pad.
+        return [];
+    }
+
+    private static string? ServiceOf(string instanceId)
+    {
+        try
+        {
+            if (CM_Locate_DevNodeW(out var node, instanceId, 0) != CrSuccess)
+            {
+                return null;
+            }
+
+            var key = DevpkeyDeviceService;
+            var buffer = new byte[256];
+            var size = (uint)buffer.Length;
+
+            if (CM_Get_DevNode_PropertyW(node, ref key, out var type, buffer, ref size, 0) != CrSuccess
+                || type != DevpropTypeString
+                || size == 0)
+            {
+                return null;
+            }
+
+            return Encoding.Unicode.GetString(buffer, 0, (int)size).TrimEnd('\0');
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private const uint DevpropTypeGuid = 0x0000000D;
 
     [StructLayout(LayoutKind.Sequential)]

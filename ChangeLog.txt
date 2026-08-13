@@ -2,6 +2,86 @@ SteamXBox - Change log
 ======================
 
 
+4.7
+---
+  Ce que SteamXBox laissait derriere lui
+
+  Un defaut signale depuis le debut du projet — « SteamXBox casse mon systeme, et
+  ca continue apres l'avoir ferme » — etait traite chaque fois comme un incident
+  isole. Il ne l'etait pas : le produit posait de l'etat en dehors de son propre
+  processus, et presque tous ses chemins de restauration supposaient une sortie
+  propre. Cette version est le resultat de l'inventaire de tout ce qu'il touche,
+  ecrit dans EMPREINTE-SYSTEME.md.
+
+  * Il n'existait AUCUNE sortie propre. La croix de la fenetre, Stop-SteamXBox.cmd
+    et « Core.exe stop » appelaient tous les trois Process.Kill, donc la ligne qui
+    rend les manettes n'etait jamais atteinte. Les trois sont propres desormais.
+
+  * Le clavier de toute la machine pouvait se figer. Le crochet clavier bas niveau
+    etait installe depuis le fil d'interface, et le service presse-papiers lisait
+    le presse-papiers dans la pompe a messages du meme fil. Copier un dossier dans
+    l'explorateur bloquait donc la frappe dans TOUTES les applications — mesure :
+    33 secondes. Le crochet a son propre fil ; le presse-papiers ne lit plus rien
+    dans la pompe et ignore les fichiers copies.
+
+  * Les executables ne demandent plus l'administrateur. La justification supposee
+    etait HidHide ; mesure faite, lecture et ecriture du pilote reussissent sans.
+    L'elevation coupait l'environnement de ses propres composants par l'isolation
+    de privilege des fenetres, et rendait le clavier a l'ecran impossible a passer
+    derriere une autre fenetre.
+
+  * Le clavier et la souris physiques ne peuvent plus etre masques. Un ensemble
+    manette-clavier arrive comme un seul appareil composite ; masquer son parent
+    aurait emporte le clavier et la souris. Regle inscrite, garde en place.
+
+  * Le masquage des manettes est rendu au depart d'une manette, a la sortie, et
+    repare au demarrage suivant. Sa note vit desormais dans l'etat partage : elle
+    etait a cote de l'executable, donc perdue avec la copie qui l'avait ecrite.
+
+  * Steam retrouve la manette. Le retrait devant Steam relachait les haptiques,
+    le clavier et les manettes virtuelles, mais jamais le masquage — la seule
+    chose qui empechait Steam de voir l'appareil. Et la manette est remise a zero
+    quand Steam s'en va, car Steam ne la rend pas dans l'etat ou il l'a prise.
+
+  * Rien ne survit plus a la session : les processus enfants sont lies a sa vie
+    par le noyau, les fenetres reduites par §§ sont rendues au demarrage suivant,
+    et une fuite qui construisait une source par manette toutes les trois secondes
+    sans jamais la liberer est fermee.
+
+  Confidentialite
+
+  * L'index du courrier et l'historique de recherche sont chiffres au repos. Ils
+    contenaient dix-sept megaoctets de correspondance en clair, lisibles par tout
+    ce qui sait ouvrir un fichier.
+
+  Conversions
+
+  * Aucune conversion depuis un PDF ne passe plus par LibreOffice : docx, odt,
+    rtf, html, txt, pptx, odp, xlsx, ods et csv ont chacune leur route. Le format
+    libre et le format proprietaire donnent le meme resultat.
+
+  * Les images sont replacees dans le fil du texte, et les presentations gardent
+    la mise en page exacte — une page devient une diapositive.
+
+  * Un message peut devenir un document, ses pieces jointes extraites a cote.
+
+  Clavier a l'ecran
+
+  * Il reste resident apres sa premiere ouverture. L'hote .NET met environ quatre
+    secondes avant la premiere ligne du programme ; ce prix n'est plus paye qu'une
+    fois par manette et par session.
+
+  Manettes virtuelles
+
+  * Le pad virtuel Xbox de chaque manette est connecte des que la manette est
+    attachee, et non plus au premier appui en mode Xbox. Un pad cree au moment du
+    changement de mode etait un hot-plug dans un jeu deja lance, et les jeux qui
+    enumerent leurs manettes au demarrage ne voient jamais un appareil apparu en
+    cours de partie — le switch en Xbox se lisait comme "la manette ne repond
+    plus". Le pad existe desormais avant le lancement du jeu ; en mode Profil il
+    recoit simplement des rapports neutres.
+
+
 4.6
 ---
   Identity

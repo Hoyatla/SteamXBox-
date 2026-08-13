@@ -138,6 +138,9 @@ public partial class ProfileViewModel : ObservableObject
         if (ActiveEdit == null) return;
         ActiveEdit.Buttons[key] = value;
         OnPropertyChanged(ButtonPropName(key));
+
+        // Same reason as the sliders: rebinding a button and walking away used to lose it.
+        RequestSave();
     }
     private string GetMotion(string key) =>
         ActiveEdit?.Motions.GetValueOrDefault(key) ?? DefaultMotions.GetValueOrDefault(key) ?? "";
@@ -342,7 +345,99 @@ public partial class ProfileViewModel : ObservableObject
         write(ActiveEdit, FromPercent(percent, min, max));
         OnPropertyChanged(percentName);
         OnPropertyChanged(displayName);
+        RequestSave();
     }
+
+    /// <summary>
+    /// Writes the edited profile to disk shortly after the last change.
+    /// </summary>
+    /// <remarks>
+    /// Every slider and every button box wrote into <see cref="ActiveEdit"/> and stopped there. The
+    /// file was only touched by the Save and Apply buttons, so a user who moved a slider and went
+    /// back to playing lost the change, and nothing anywhere said so — the core then went on
+    /// applying a profile written days earlier, faithfully and to the wrong values.
+    ///
+    /// <para>
+    /// Measured 12 August: the haptic pulse leaving for the controller was 594 µs, exactly the
+    /// 0.99 force stored in "Steam Controller perso" on the 10th, while the day's adjustments had
+    /// never reached the disk. Not one profile file had been written that day.
+    /// </para>
+    ///
+    /// <para>
+    /// The overlay's own settings already saved themselves from their setters; the profile's did
+    /// not. Two opposite behaviours in one window is not a preference the user can learn.
+    /// </para>
+    ///
+    /// <para>
+    /// Delayed rather than immediate because a slider raises this on every pixel of the drag, and a
+    /// file rewritten a hundred times per gesture is a file that will one day be caught half
+    /// written. Only the assignment stays manual: saving the values is what the user expects to be
+    /// automatic, binding a profile to a controller is a decision.
+    /// </para>
+    /// </remarks>
+    private void RequestSave()
+    {
+        // A profile with no name has no file to be written to, and inventing one here would leave
+        // stray profiles behind every time somebody opened the editor.
+        if (ActiveEdit is not { } edit || string.IsNullOrWhiteSpace(edit.Name))
+        {
+            return;
+        }
+
+        // A throttle rather than a plain delay, and the difference matters: a plain delay writes
+        // nothing until the gesture stops, so closing the window on the last move loses it. Writing
+        // the first change at once puts the value on disk immediately and coalesces only what
+        // follows inside the same drag.
+        var since = DateTimeOffset.UtcNow - _savedAt;
+
+        if (since >= SaveDelay)
+        {
+            Write(edit);
+            return;
+        }
+
+        _saveDelay?.Cancel();
+        _saveDelay = new CancellationTokenSource();
+
+        var token = _saveDelay.Token;
+        var wait = SaveDelay - since;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(wait, token).ConfigureAwait(false);
+                Write(edit);
+            }
+            catch (OperationCanceledException)
+            {
+                // Another change arrived first; that one carries this one's values too.
+            }
+        });
+
+        void Write(ProfileData profile)
+        {
+            _savedAt = DateTimeOffset.UtcNow;
+
+            try
+            {
+                _service.Save(profile);
+            }
+            catch (Exception failure)
+            {
+                // Named rather than swallowed. A save that fails in silence is what let a whole day
+                // of adjustments disappear without a single line anywhere.
+                Sc2Xboxed.Core.Diagnostics.UiLog.Failure(
+                    $"saving the profile '{profile.Name}'", failure);
+            }
+        }
+    }
+
+    /// <summary>Long enough to cover a slider drag, short enough to survive closing the window.</summary>
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(600);
+
+    private CancellationTokenSource? _saveDelay;
+    private DateTimeOffset _savedAt = DateTimeOffset.MinValue;
 
     public double RightPadSensitivityPercent
     {

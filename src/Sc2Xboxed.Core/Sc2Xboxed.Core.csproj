@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sc2Xboxed.Core.Tests" />
+  </ItemGroup>
+
 </Project>

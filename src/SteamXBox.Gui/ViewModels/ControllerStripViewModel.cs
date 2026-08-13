@@ -132,7 +132,24 @@ public partial class ControllerStripViewModel : ObservableObject
         // identities — the GUI saving a profile the Core never looks up.
         var roster = ControllerRoster.Build(
             SafeHidPaths(),
-            Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots(),
+
+            // Physical pads only. Every attached controller now gets its virtual Xbox pad as soon as
+            // it connects, rather than on the first frame sent in Xbox mode — that is what lets a
+            // game started later enumerate it. The side effect is that each controller occupies a
+            // second XInput slot from the moment it is plugged in, and this list would show it as
+            // another controller: one pad in the user's hands, two chips in the strip, and no way to
+            // tell which is which.
+            //
+            // The user sees the slot of the controller they are holding. The pad SteamXBox creates
+            // for it is machinery, not a device anyone owns.
+            //
+            // Only a slot positively identified as emulated is hidden. A slot that cannot be resolved
+            // stays in the list: hiding a controller the user is holding is far worse than showing
+            // one entry too many, and the resolution is ambiguous whenever two identical pads are
+            // attached.
+            Sc2Xboxed.Windows.XInputControllerSource.ConnectedSlots()
+                .Where(slot => !Sc2Xboxed.Windows.XInputDurableIdentity.IsEmulatedSlot(slot)),
+
             SafeDualSensePaths(),
             slot => Sc2Xboxed.Windows.XInputDurableIdentity.For(slot));
 

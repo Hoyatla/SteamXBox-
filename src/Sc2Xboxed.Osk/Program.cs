@@ -20,9 +20,22 @@ public static class Program
     private static StreamWriter? _logFile;
     internal static OskSettings Settings = OskSettings.Load();
 
+    /// <summary>Whether the keyboard is on screen right now, as this process knows it.</summary>
+    /// <remarks>
+    /// Kept here rather than read from <c>form.Visible</c> because the watcher runs on its own
+    /// thread, and asking a control for a property across threads is the kind of thing that works
+    /// until it does not. Set on the UI thread where the showing and hiding actually happen.
+    /// </remarks>
+    private static volatile bool _overlayShowing;
+
     internal static void Log(string msg)
     {
-        var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+        // Local time, like every other log in the product. This line used to read UtcNow, and the
+        // two hours of difference cost a day of diagnosis on 11 August: the overlay's entries looked
+        // like they stopped two hours before an incident the other logs placed at 23:44, so the
+        // overlay was ruled out as "not covering the window". It had been showing and hiding right
+        // through it. Logs that cannot be laid side by side are worse than no logs — they answer.
+        var line = $"[{DateTimeOffset.Now:HH:mm:ss.fff}] {msg}";
         try { _logFile?.WriteLine(line); _logFile?.Flush(); } catch { }
     }
 
@@ -360,6 +373,7 @@ public static class Program
         var closeSignalPath = Path.Combine(AppContext.BaseDirectory, naming.CloseSignalFile);
         var showSignalPath = Path.Combine(AppContext.BaseDirectory, naming.ShowSignalFile);
         var exitSignalPath = Path.Combine(AppContext.BaseDirectory, naming.ExitSignalFile);
+        var visibleBeatPath = Path.Combine(AppContext.BaseDirectory, naming.VisibleBeatFile);
         // Close and exit signals left by a previous run are stale and must go. A show signal is not:
         // the resident overlay takes several seconds to start, and a toggle pressed during that
         // window writes its signal before the watcher exists. Deleting it here swallowed the very
@@ -381,10 +395,34 @@ public static class Program
 
         var closeWatcher = new Thread(() =>
         {
+            var lastBeat = 0;
+
             while (!cts.Token.IsCancellationRequested)
             {
                 try
                 {
+                    // The report the core reads. Refreshed while the keyboard is on screen and left
+                    // to go stale otherwise — including when this process dies, which is the whole
+                    // reason it is a beat and not a marker laid down once.
+                    //
+                    // Throttled: this loop turns every 60 ms while resident, and touching a file
+                    // sixteen times a second to say "still here" is a lot of nothing.
+                    if (_overlayShowing)
+                    {
+                        if (Environment.TickCount - lastBeat > 400)
+                        {
+                            lastBeat = Environment.TickCount;
+                            try { File.WriteAllText(visibleBeatPath, Environment.ProcessId.ToString()); } catch { }
+                        }
+                    }
+                    else if (lastBeat != 0)
+                    {
+                        // Hidden on purpose: stop beating and take the file away, so the core does
+                        // not have to wait out the staleness window for the ordinary case.
+                        lastBeat = 0;
+                        try { File.Delete(visibleBeatPath); } catch { }
+                    }
+
                     if (File.Exists(exitSignalPath))
                     {
                         File.Delete(exitSignalPath);
@@ -424,7 +462,11 @@ public static class Program
                                 form.Show();
                                 form.BringToFront();
                                 // The overlay is layered and never activates, so no external probe
-                                // can tell whether it is on screen. Report it ourselves.
+                                // can tell whether it is on screen. Report it ourselves — to the log
+                                // for a human, and from here on to the core as well, through the
+                                // heartbeat the watcher keeps. The log alone was never enough: the
+                                // core was left guessing and guessed wrong for a whole session.
+                                _overlayShowing = true;
                                 Log($"Overlay shown. Visible={form.Visible} mode={mode} " +
                                     $"placement={form.LastPlacement} at ({form.BoardX:F0},{form.BoardY:F0})");
                             });
@@ -445,6 +487,7 @@ public static class Program
                                 {
                                     form.HideAll();
                                     form.Hide();
+                                    _overlayShowing = false;
                                     Log($"Overlay hidden (resident). Visible={form.Visible}");
                                 });
                             }
@@ -501,8 +544,15 @@ public static class Program
             // them. Neither the pinned rule nor the floating one had ever run.
             form.UpdatePlacement();
             form.Show();
+            _overlayShowing = true;
             Log("Overlay form shown.");
             Application.Run(form);
+
+            // Application.Run returned, so the form is gone and this process is on its way out. The
+            // beat stops here whatever happens next; saying so plainly costs nothing and spares the
+            // core the staleness window on an ordinary exit.
+            _overlayShowing = false;
+            try { File.Delete(visibleBeatPath); } catch { }
         }
 
         Log("Application.Run exited.");

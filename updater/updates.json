@@ -1,0 +1,43 @@
+{
+  "instance": {
+    "helpUrl": "https://github.com/Hoyatla/SteamXBox-"
+  },
+  "shared": {
+    "windowTitle": "Mise à jour de SteamXBox",
+    "productName": "SteamXBox",
+    "detectionMethod": "RegistryValue",
+    "detection": {
+      "$type": "RegistryValueConfig",
+      "view": "Default",
+      "hive": "HKLM",
+      "key": "SOFTWARE\\Hoyatla\\SteamXBox",
+      "value": "Version"
+    },
+    "productBusyDetection": {
+      "imageNames": [
+        "SteamXBox.exe",
+        "SteamXBox.Core.exe",
+        "SteamXBox.Desktop.exe",
+        "Sc2XboxedPads.Osk.exe",
+        "Sc2XboxedSticks.Osk.exe"
+      ],
+      "pollIntervalSeconds": 60,
+      "maxWaitMinutes": 120
+    }
+  },
+  "releases": [
+    {
+      "name": "SteamXBox 4.7",
+      "version": "4.7.0.0",
+      "publishedAt": "2026-08-11T00:00:00Z",
+      "summary": "# SteamXBox 4.7\n\n## Ce que SteamXBox laissait derrière lui\n\nUn défaut signalé depuis le début du projet — « SteamXBox casse mon système, et ça continue après l'avoir fermé » — était traité chaque fois comme un incident isolé. Il ne l'était pas.\n\n- **Il n'existait aucune sortie propre.** La croix de la fenêtre, `Stop-SteamXBox.cmd` et `Core.exe stop` tuaient tous les trois le processus, donc la ligne qui rend les manettes n'était jamais atteinte.\n- **Le clavier de toute la machine pouvait se figer** 33 secondes en copiant un dossier dans l'explorateur.\n- **Les exécutables ne demandent plus l'administrateur.** La justification supposée était HidHide ; mesure faite, elle était fausse.\n- **Le clavier et la souris physiques ne peuvent plus être masqués**, même sur un appareil combiné manette-clavier.\n- **Steam retrouve la manette** quand SteamXBox se met en retrait, et la manette est remise à zéro quand Steam s'en va.\n\n## Confidentialité\n\nL'index du courrier et l'historique de recherche sont **chiffrés au repos**. Ils contenaient dix-sept mégaoctets de correspondance en clair.\n\n## Conversions\n\nAucune conversion depuis un PDF ne passe plus par LibreOffice : `docx`, `odt`, `rtf`, `html`, `txt`, `pptx`, `odp`, `xlsx`, `ods` et `csv` ont chacune leur route. Le format libre et le format propriétaire donnent le même résultat.\n\n## Clavier à l'écran\n\nIl reste résident après sa première ouverture : les quatre secondes de démarrage ne sont plus payées qu'une fois par session.",
+      "downloadUrl": "https://github.com/Hoyatla/SteamXBox-/releases/download/v4.7.0/SteamXBox_Full_Setup_4.7_win-x64.exe",
+      "downloadSize": 0,
+      "launchArguments": "/SILENT /NORESTART",
+      "exitCode": {
+        "skipCheck": false,
+        "successCodes": [0, 3010, 1641]
+      }
+    }
+  ]
+}

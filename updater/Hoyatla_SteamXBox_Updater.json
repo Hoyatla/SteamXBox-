@@ -1,0 +1,34 @@
+{
+  "instance": {
+    "serverUrlTemplate": "https://hoyatla.github.io/SteamXBox-/api/{}/updates.json",
+    "authority": "Remote"
+  },
+  "shared": {
+    "windowTitle": "Mise à jour de SteamXBox",
+    "productName": "SteamXBox",
+
+    "detectionMethod": "RegistryValue",
+    "detection": {
+      "$type": "RegistryValueConfig",
+      "view": "Default",
+      "hive": "HKLM",
+      "key": "SOFTWARE\\Hoyatla\\SteamXBox",
+      "value": "Version"
+    },
+
+    "productBusyDetection": {
+      "imageNames": [
+        "SteamXBox.exe",
+        "SteamXBox.Core.exe",
+        "SteamXBox.Desktop.exe",
+        "Sc2XboxedPads.Osk.exe",
+        "Sc2XboxedSticks.Osk.exe"
+      ],
+      "pollIntervalSeconds": 60,
+      "maxWaitMinutes": 120
+    },
+
+    "signatureVerificationMode": "WhenPresent",
+    "signaturePolicy": "Relaxed"
+  }
+}

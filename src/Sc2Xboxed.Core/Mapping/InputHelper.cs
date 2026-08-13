@@ -76,6 +76,49 @@ public static class InputHelper
 	[DllImport("user32.dll", SetLastError = true)]
 	private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+	private static int _refused;
+	private static int _lastError;
+
+	/// <summary>
+	/// Sends input, and remembers when Windows refuses it.
+	/// </summary>
+	/// <remarks>
+	/// Every call here used to discard the return value. <c>SendInput</c> reports how many events it
+	/// actually inserted, and it inserts none when the injection is refused — most often because a
+	/// window running at a higher integrity level holds the foreground, which is exactly the state a
+	/// user is in when something stops responding.
+	///
+	/// <para>
+	/// The counters were incremented regardless, so the log read "mouse events=103" for a second in
+	/// which nothing had been sent at all. Measured 12 August: the core claimed 103 movements while
+	/// the monitor's low-level hook, watching the whole machine, saw not one injected event. A
+	/// counter that reports success it did not verify is worse than no counter — it sends the search
+	/// somewhere else entirely, and it did, for hours.
+	/// </para>
+	/// </remarks>
+	private static uint Send(uint count, INPUT[] inputs)
+	{
+		var sent = SendInput(count, inputs, Marshal.SizeOf<INPUT>());
+
+		if (sent < count)
+		{
+			Interlocked.Increment(ref _refused);
+			_lastError = Marshal.GetLastWin32Error();
+		}
+
+		return sent;
+	}
+
+	/// <summary>How many injections Windows has refused, and why the last one failed.</summary>
+	public static (int Count, int LastError) Refused => (Volatile.Read(ref _refused), _lastError);
+
+	/// <summary>Reads the refusals since the last call and clears the tally.</summary>
+	public static (int Count, int LastError) DrainRefused()
+	{
+		var count = Interlocked.Exchange(ref _refused, 0);
+		return (count, _lastError);
+	}
+
 	[DllImport("user32.dll")]
 	private static extern bool SetCursorPos(int X, int Y);
 
@@ -103,7 +146,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void KeyUp(ushort vk)
@@ -120,7 +163,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void KeyTap(ushort vk)
@@ -155,7 +198,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(2, new[] { down, up }, Marshal.SizeOf<INPUT>());
+		Send(2, new[] { down, up });
 	}
 
 	public static void KeyCombination(ushort[] vks)
@@ -181,7 +224,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseLeftDown()
@@ -194,7 +237,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_LEFTDOWN }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseLeftUp()
@@ -207,7 +250,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_LEFTUP }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseRightDown()
@@ -220,7 +263,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_RIGHTDOWN }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseRightUp()
@@ -233,7 +276,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_RIGHTUP }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseMiddleDown()
@@ -246,7 +289,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_MIDDLEDOWN }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseMiddleUp()
@@ -259,7 +302,7 @@ public static class InputHelper
 				Mouse = new MOUSEINPUT { DwFlags = MOUSEEVENTF_MIDDLEUP }
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	/// <summary>Horizontal wheel, used for side-scrolling from the left pad's X axis.</summary>
@@ -277,7 +320,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void MouseWheel(int delta)
@@ -294,7 +337,7 @@ public static class InputHelper
 				}
 			}
 		};
-		SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+		Send(1, new[] { input });
 	}
 
 	public static void LaunchOrBringToFront(string processName, string? arguments = null)

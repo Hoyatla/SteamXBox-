@@ -9,6 +9,14 @@ public sealed class ProfileMapper
 {
 	private bool _prevRightTriggerDown;
 	private bool _prevLeftTriggerDown;
+
+	// What we pressed and have not released yet. Separate from the _prev flags above, which follow
+	// the controller: these follow us. See HandleHold and ReleaseHeldInput.
+	private bool _owedMouseLeft;
+	private bool _owedMouseRight;
+	private bool _owedVolumeUp;
+	private bool _owedVolumeDown;
+	private bool _prevLive = true;
 	private bool _prevRightPadClick;
 	private bool _prevLeftPadClick;
 	private bool _prevL4;
@@ -497,11 +505,17 @@ public sealed class ProfileMapper
 		// still tracked so nothing fires on release once the overlay closes.
 		bool live = !OskActive;
 
+		// The moment the overlay takes over, give back whatever is still pressed. Everything the
+		// mapper holds is machine-wide, and the overlay is about to use the same triggers.
+		if (_prevLive && !live)
+			ReleaseHeldInput();
+		_prevLive = live;
+
 		bool rightTriggerDown = state.RightTrigger > 0.5;
 		bool leftTriggerDown = state.LeftTrigger > 0.5;
 
-		HandleEdge(ref _prevRightTriggerDown, rightTriggerDown, live, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
-		HandleEdge(ref _prevLeftTriggerDown, leftTriggerDown, live, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
+		HandleHold(ref _prevRightTriggerDown, ref _owedMouseLeft, rightTriggerDown, live, () => InputHelper.MouseLeftDown(), () => InputHelper.MouseLeftUp());
+		HandleHold(ref _prevLeftTriggerDown, ref _owedMouseRight, leftTriggerDown, live, () => InputHelper.MouseRightDown(), () => InputHelper.MouseRightUp());
 
 		// A controller with no trackpads never enters the pad path at all. A DualSense and an Xbox
 		// pad report both pads permanently released, so the smoothing, the trackball, its inertia
@@ -551,9 +565,9 @@ public sealed class ProfileMapper
 			() => InputHelper.KeyCombination(new ushort[] { InputHelper.VK_LWIN, InputHelper.VK_TAB }),
 			() => { });
 
-		HandleEdge(ref _prevDPadUp, state.Buttons.HasFlag(SteamControllerButtons.DPadUp), live,
+		HandleHold(ref _prevDPadUp, ref _owedVolumeUp, state.Buttons.HasFlag(SteamControllerButtons.DPadUp), live,
 			() => InputHelper.KeyDown(0xAF), () => InputHelper.KeyUp(0xAF));
-		HandleEdge(ref _prevDPadDown, state.Buttons.HasFlag(SteamControllerButtons.DPadDown), live,
+		HandleHold(ref _prevDPadDown, ref _owedVolumeDown, state.Buttons.HasFlag(SteamControllerButtons.DPadDown), live,
 			() => InputHelper.KeyDown(0xAE), () => InputHelper.KeyUp(0xAE));
 		HandleEdge(ref _prevDPadLeft, state.Buttons.HasFlag(SteamControllerButtons.DPadLeft), live,
 			() => InputHelper.KeyTap(0xB1), () => { });
@@ -758,5 +772,106 @@ public sealed class ProfileMapper
 		// Tracked regardless of enabled: the flags must follow the physical state or a button
 		// released under the overlay would fire its shortcut the moment the overlay closes.
 		prev = current;
+	}
+
+	// The same edge, for the four bindings that press something and hold it: the two triggers
+	// (mouse buttons) and the two volume keys. The overload above suspends the release along with
+	// the press, which is right for a shortcut and wrong for a hold: pull the trigger, open the
+	// overlay, let the trigger go, and the left mouse button stays down for the whole machine. The
+	// cursor still moves, so it does not look like a freeze — everything simply becomes a drag,
+	// clicks land nowhere, and no window responds until something releases the button.
+	//
+	// So the debt is tracked apart from the physical state. "enabled" governs the press only;
+	// whatever we pressed, we release, overlay or no overlay.
+	// Internal rather than private so the edge can be exercised on its own: the presses themselves
+	// go through InputHelper, which is static and injects into the real desktop — a test driving the
+	// mapper end to end would click on the machine running it.
+	internal static void HandleHold(ref bool prev, ref bool owed, bool current, bool enabled, Action onDown, Action onUp)
+	{
+		if (enabled && current && !prev)
+		{
+			onDown();
+			owed = true;
+		}
+		else if (!current && prev && owed)
+		{
+			onUp();
+			owed = false;
+		}
+
+		prev = current;
+	}
+
+	private DateTimeOffset? _overlayUnconfirmedSince;
+
+	/// <summary>
+	/// How long the keyboard may claim the pad without showing itself before the claim lapses.
+	/// </summary>
+	/// <remarks>
+	/// Long enough for a cold start, which was measured at about four seconds before the overlay was
+	/// made resident and is still the path taken the very first time. Too short and the toggle would
+	/// cancel itself while the keyboard is still coming up; too long and a pad stays dead for that
+	/// many seconds. Six is above the one and well under a session.
+	/// </remarks>
+	private static readonly TimeSpan OverlayGrace = TimeSpan.FromSeconds(6);
+
+	/// <summary>
+	/// Gives the pad back when the keyboard says it claimed it and is not there.
+	/// </summary>
+	/// <remarks>
+	/// <see cref="OskActive"/> is the core's intent — it flips when the toggle button is pressed. It
+	/// was also being read as the truth, and the two are not the same thing. A resident overlay can
+	/// hide without the core hearing it, and then the pointer path is skipped forever: measured on
+	/// 12 August, the last toggle of the session was at 02:21:30 and the controller moved no cursor
+	/// again, while the physical mouse was unaffected the whole time.
+	///
+	/// <para>
+	/// So the intent is now checked against a report. Only in this direction: a keyboard that shows
+	/// itself without being asked is a different bug and suppressing the pad on the strength of a
+	/// file would be believing the report as blindly as the flag was believed before.
+	/// </para>
+	/// </remarks>
+	/// <param name="overlayShowing">Whether the keyboard's heartbeat says it is on screen.</param>
+	/// <returns><c>true</c> when the pad was just given back, so the caller can say so once.</returns>
+	public bool ReconcileOverlay(bool overlayShowing, DateTimeOffset now)
+	{
+		if (!OskActive || overlayShowing)
+		{
+			_overlayUnconfirmedSince = null;
+			return false;
+		}
+
+		_overlayUnconfirmedSince ??= now;
+
+		if (now - _overlayUnconfirmedSince < OverlayGrace)
+		{
+			return false;
+		}
+
+		OskActive = false;
+		DaisywheelActive = false;
+		_overlayUnconfirmedSince = null;
+
+		// The overlay owned the triggers while it claimed the pad. Whatever it left pressed is ours
+		// to give back now that the profile is running again.
+		ReleaseHeldInput();
+
+		return true;
+	}
+
+	/// <summary>
+	/// Releases everything the mapper is currently holding down.
+	/// </summary>
+	/// <remarks>
+	/// Called when the overlay takes the controller over, and available for shutdown. Waiting for
+	/// the physical release is not enough on its own: the user may keep the trigger pulled across
+	/// the transition, and a mouse button held under the overlay fights the key it is committing.
+	/// </remarks>
+	public void ReleaseHeldInput()
+	{
+		if (_owedMouseLeft) { InputHelper.MouseLeftUp(); _owedMouseLeft = false; }
+		if (_owedMouseRight) { InputHelper.MouseRightUp(); _owedMouseRight = false; }
+		if (_owedVolumeUp) { InputHelper.KeyUp(0xAF); _owedVolumeUp = false; }
+		if (_owedVolumeDown) { InputHelper.KeyUp(0xAE); _owedVolumeDown = false; }
 	}
 }

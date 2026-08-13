@@ -64,6 +64,33 @@ public sealed class OskInstanceNaming
     /// <summary>File signal asking this keyboard to quit.</summary>
     public string ExitSignalFile => SignalFile("osk-exit");
 
+    /// <summary>
+    /// Touched repeatedly by this keyboard for as long as it is actually on screen.
+    /// </summary>
+    /// <remarks>
+    /// The other five names are orders. This one is a report, and it exists because the orders were
+    /// being trusted as though they were reports.
+    ///
+    /// <para>
+    /// The overlay is layered and never activates, so nothing outside it can ask Windows whether it
+    /// is showing. The core therefore tracked its own intent — a flag flipped when the toggle button
+    /// was pressed — and treated that as the truth. Once the overlay became resident it could hide
+    /// without the core hearing about it, and the flag stayed on forever: the pointer path is skipped
+    /// while the keyboard owns the pad, so the controller stopped moving the cursor for the rest of
+    /// the session. Measured 12 August, 02:21:30 — the last toggle of the session, and no pointer
+    /// afterwards.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A heartbeat, not a marker.</b> A file written on show and deleted on hide answers wrongly
+    /// the moment the overlay dies without deleting it — the same deadlock, with a stale file holding
+    /// it instead of a stale flag. A file whose timestamp is refreshed while visible needs no cleanup
+    /// at all: the beat stops when the process does. This is the rule the inventory already states —
+    /// when the choice exists, maintain state by a beat rather than by a departure.
+    /// </para>
+    /// </remarks>
+    public string VisibleBeatFile => SignalFile("osk-visible");
+
     private string SignalFile(string stem)
         => Suffix.Length == 0 ? $"{stem}.signal" : $"{stem}-{Suffix}.signal";
 

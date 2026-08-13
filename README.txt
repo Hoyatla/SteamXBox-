@@ -1,5 +1,5 @@
 SteamXBox
-Version 4.6 - win-x64
+Version 4.7 - win-x64
 
 
 SteamXBox turns a game controller into a way of using Windows.

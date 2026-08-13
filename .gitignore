@@ -45,7 +45,9 @@ Library/Exclusif/
 /Sc2Xboxed.Osk.exe
 /Sc2XboxedPads.Osk.exe
 /Sc2XboxedSticks.Osk.exe
+/SteamXBox.Debug.exe
 /publish/
+/artifacts/
 
 # Artefacts d'execution.
 *.signal

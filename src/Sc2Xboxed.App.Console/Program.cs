@@ -23,7 +23,10 @@ if (args.Length > 0)
         var logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
         DebugLog = (string msg) =>
         {
-            var line = $"[{DateTimeOffset.UtcNow:HH:mm:ss.fff}] {msg}";
+            // Local time: these lines land in steamxbox-debug.log beside the structured ones, which
+            // are local. In UTC the same file carried two clocks two hours apart — see the note in
+            // the overlay's Log, where that difference sent a diagnosis down the wrong road.
+            var line = $"[{DateTimeOffset.Now:HH:mm:ss.fff}] {msg}";
             Console.WriteLine(line);
             logFile.WriteLine(line);
         };
@@ -147,6 +150,9 @@ static async Task RunCommandAsync(string[] args, Action<string>? debugLog = null
             return;
         case "hidhide-off":
             DisableHidHide();
+            return;
+        case "pads-cleanup":
+            CleanUpVirtualPadRecords();
             return;
         case "help":
             PrintUsage();
@@ -330,10 +336,10 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
     // firmware layer this session wants.
     Sc2Xboxed.App.Console.ControllerReset.ToNative(log);
 
-    // No replug here: pads are created on first use, so the next frame a controller sends in
-    // Xbox mode connects its own pad again. The cloak comes back the same way, on the next
-    // ControllerCloak.Apply — hiding it now would take the controller from Steam's own
-    // shutdown, which is still finishing.
+    // No replug here: the pads come back the moment the controller is re-opened, in the loop's
+    // next turn, when the attached controllers are given their pads again. The cloak comes back
+    // the same way, on the next ControllerCloak.Apply — hiding it now would take the controller
+    // from Steam's own shutdown, which is still finishing.
     log("Reclaiming; virtual pads and cloaking return on the next controller input.");
 
     return true;
@@ -590,6 +596,44 @@ static ProfileMapper BuildMapperFor(
 /// every case this project actually produces.
 /// </para>
 /// </remarks>
+/// <summary>
+/// Removes the device records SteamXBox's own virtual pads left behind.
+/// </summary>
+/// <remarks>
+/// Run from the uninstaller, which is already elevated. Leaving them is the same fault the 3.2
+/// uninstaller committed with its startup entry: state that outlives the product and that nobody
+/// will ever come back for.
+///
+/// <para>
+/// Only what the ledger recorded. The rule "every absent VID_045E&amp;PID_028E" also matches a real
+/// wired Xbox 360 controller, because being indistinguishable from one is what the emulation is for.
+/// </para>
+/// </remarks>
+static void CleanUpVirtualPadRecords()
+{
+    var recorded = Sc2Xboxed.Windows.VirtualPadLedger.Read();
+
+    Console.WriteLine($"Ledger: {Sc2Xboxed.Windows.VirtualPadLedger.Path}");
+    Console.WriteLine($"Recorded device nodes: {recorded.Count}");
+
+    if (recorded.Count == 0)
+    {
+        return;
+    }
+
+    var (removed, refused) = Sc2Xboxed.Windows.VirtualPadLedger.Cleanup(Console.WriteLine);
+
+    Console.WriteLine($"Removed {removed}, refused {refused}.");
+
+    if (refused > 0)
+    {
+        // Named rather than swallowed. Refusals here almost always mean the command ran without
+        // administrator, and a cleanup that reports success while removing nothing is worse than one
+        // that does not run.
+        Console.WriteLine("Refusals are usually a missing administrator. What resisted stays in the ledger.");
+    }
+}
+
 static string Shorten(string id)
     => id.Length <= 20 ? id : id[..8] + "…" + id[^8..];
 /// <summary>Reads --source steam|xinput, or an empty string when the choice is automatic.</summary>
@@ -947,12 +991,13 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         LogCategory.Session,
         $"Physical XInput slots before any virtual pad: [{string.Join(", ", physicalXInputSlots)}].");
 
-    // One virtual pad per physical controller, created the first time that controller sends
-    // something. The always-connected single pad this replaces showed up to every game as a
-    // connected player from the moment the Core started — a phantom occupying player one even
-    // with nothing attached — which is the failure mode the per-controller design exists to
-    // prevent: a pad appears when its controller actually sends something, and stays gone
-    // otherwise.
+    // One virtual pad per physical controller, connected as soon as the controller is attached.
+    // The always-connected single pad this replaces showed up to every game as a connected player
+    // from the moment the Core started — a phantom occupying player one even with nothing attached
+    // — which is the failure mode the per-controller design exists to prevent. The pad is now
+    // connected per controller at attach time: the per-controller split stays, and the "nothing is
+    // attached" case still connects nothing, because the pads are created only for controllers the
+    // enumeration actually found.
 
     // Rumble is wired per pad rather than once on a single whole-bridge pad. Games address
     // feedback to the pad of the player being hit, and each pad is its own ViGEm device, so the
@@ -978,15 +1023,25 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             };
             return sink;
         },
-        message => log.Info(LogCategory.Mapping, message));
+        message => log.Info(LogCategory.Mapping, message),
+
+        // Windows records every device that has ever appeared and keeps the record for good. Each
+        // virtual pad leaves three, two of which carry a fresh instance number every time, so they
+        // pile up: twenty-nine had gathered by 12 August, and a crowd of indistinguishable XUSB
+        // candidates is what makes slot-to-pad matching give up. Nothing is removed here — that
+        // needs administrator, and this process deliberately has none. It only writes down what we
+        // made, so the uninstaller removes exactly ours and nothing a customer owns.
+        () => Sc2Xboxed.Windows.VirtualPadLedger.RecordCreation(
+            message => log.Info(LogCategory.Mapping, message)));
 
     // The overlay keyboard process asks for haptics over a pipe rather than opening its own
     // HID stream, so this sink stays the single writer for the device. Each keyboard's requests
     // arrive on its own pipe, created with the instance inside OskInstanceSet above.
     log.Info(LogCategory.Pipe, "Haptic request pipes are created with each keyboard instance.");
 
-    // No pad here. One appears on the first frame a controller sends in Xbox mode; nothing is
-    // connected to any game until then.
+    // No pad here. The controllers attached at this point were given their pads when they were
+    // opened; a game that starts now enumerates an XInput device that already exists, instead of
+    // having one hot-plugged into it at the moment of the switch to Xbox.
     Console.WriteLine(enableModeSwitch
         ? $"Mode switch enabled. Current mode: {modeSwitcher.CurrentMode}."
         : $"Mode switch disabled. Current mode: {modeSwitcher.CurrentMode}.");
@@ -1111,6 +1166,27 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
             Sc2Xboxed.App.Console.ControllerCloak.Apply(log);
 
+            // Every attached controller gets its virtual pad now, whatever mode we are in — not on
+            // the first frame it sends in Xbox mode. A pad created at the moment of the switch is a
+            // hot-plug into whatever game is already running, and games that enumerate controllers
+            // at launch never see a device that appears mid-session: the switch to Xbox read as
+            // "the controller stopped responding". The pad now exists before the game starts and is
+            // simply fed neutral reports in Profile mode. In Xbox mode it is fed the mapped gamepad.
+            //
+            // Before the pending fallback below: the "waiting for a controller" placeholder must not
+            // claim a slot, and the fallback list is exactly the case where nothing real is attached.
+            foreach (var controller in attached)
+            {
+                try
+                {
+                    await virtualPads.ForAsync(controller.Identity.Id, cancellation.Token);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    DLog($"connecting a virtual pad for {controller.Identity.Id}: {exception.GetType().Name}: {exception.Message}");
+                }
+            }
+
             if (attached.Count == 0)
             {
                 // Nothing is attached. The Steam source is still opened, because it is the one that
@@ -1186,33 +1262,58 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 profileMapper = session.ProfileMapper;
                 modeSwitcher = session.ModeSwitcher;
 
+                // The controllers present when the source was opened got their pads above. This
+                // catches one that arrived mid-session (the rescan found it, this is its first
+                // frame): its pad connects the moment it speaks, whatever mode we are in, so a game
+                // started afterwards finds it already there.
+                if (!virtualPads.Has(frameSource))
+                {
+                    try
+                    {
+                        await virtualPads.ForAsync(frameSource, cancellation.Token);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        DLog($"connecting a virtual pad for {frameSource}: {exception.GetType().Name}: {exception.Message}");
+                    }
+                }
+
+                // The keyboard's claim on this pad, weighed against whether the keyboard is actually
+                // there. The flag below is the core's intent and was being read as the truth; once
+                // the overlay became resident it could hide without saying so, and the pointer path
+                // stayed suspended for the rest of the session. The overlay now beats a file while
+                // it is on screen, and a claim nobody backs up lapses.
+                var checkedAt = DateTimeOffset.UtcNow;
+
+                if (profileMapper.ReconcileOverlay(
+                        Sc2Xboxed.App.Console.OskPresence.IsShowing(OskInstanceNaming.For(frameSource), checkedAt),
+                        checkedAt))
+                {
+                    log.Info(LogCategory.Osk,
+                        $"profile given back to {Shorten(frameSource)}: the keyboard claimed the pad and is not on screen.");
+                }
+
                 // This controller's own typing state, mirrored onto nobody: each controller now has
                 // its own keyboard with its own channels, so one player opening one must not put
                 // every other pad into typing mode.
                 var oskActive = profileMapper.OskActive;
                 mapper = session.XboxMapper;
 
-                // Leaving Xbox mode releases every virtual pad. They were created on the first frame
-                // a controller sent in Xbox mode and nothing ever took them away, so each switch to
-                // Xbox added one more pad that games kept seeing for the rest of the session — a
-                // phantom player accumulating on every toggle. A virtual pad only has a reason to
-                // exist while Xbox mode does.
-                // When nobody is in Xbox mode any more — not when this frame's controller is not.
+                // Pads are no longer tied to Xbox mode. Each controller's pad connects when the
+                // controller is attached and is released only when it leaves, so switching modes
+                // mid-game never unplugs and replugs a device a running game may have enumerated at
+                // launch. In Profile mode the pads are fed neutral reports below.
                 //
-                // Comparing one session's mode against a shared previous value was catastrophic and
-                // is worth spelling out: the mode became per controller with the sessions, so a pad
-                // in Xbox mode and a phantom in Profile mode alternate frames, every frame reads as
-                // a transition, and a ViGEm device was created and destroyed every fifteen
-                // milliseconds. Creating and tearing down a kernel driver at frame rate nearly took
-                // Windows down with it. The eighth time in this work that a shared variable was fed
-                // by per-controller state, and the only one that reached the kernel.
+                // The disposal this replaces existed for an older failure: pads were created on the
+                // first Xbox frame and nothing ever took them away, so each switch to Xbox added one
+                // more pad that games kept seeing for the rest of the session — a phantom player
+                // accumulating on every toggle. Creating a pad once at attach closes both ends of
+                // that: there is nothing to accumulate, and nothing to tear down on the way out.
+                //
+                // When nobody is in Xbox mode any more — not when this frame's controller is not.
+                // The mode is still tracked per frame because the per-second line reports it; it
+                // just no longer decides the life of the virtual pads.
                 var anyInXbox = sessions.All.Any(s => s.ModeSwitcher.CurrentMode == ControllerOutputMode.Xbox360);
-
-                if (!anyInXbox && lastOutputMode == ControllerOutputMode.Xbox360 && virtualPads.Count > 0)
-                {
-                    log.Info(LogCategory.Mode, $"Leaving Xbox mode: releasing {virtualPads.Count} virtual pad(s).");
-                    await virtualPads.DisposeAsync();
-                }
 
                 lastOutputMode = anyInXbox ? ControllerOutputMode.Xbox360 : ControllerOutputMode.Profile;
 
@@ -1220,9 +1321,29 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 // when an event asks for it. The unconditional per-frame write this replaces produced
                 // megabytes per minute and buried everything else.
                 frameBuffer.Add(state);
-                counters.Frame(
-                    state.RightPad.IsTouched || state.RightPad.IsPressed,
-                    state.LeftPad.IsTouched || state.LeftPad.IsPressed);
+
+                var rightUnderFinger = state.RightPad.IsTouched || state.RightPad.IsPressed;
+                var leftUnderFinger = state.LeftPad.IsTouched || state.LeftPad.IsPressed;
+
+                // Named per source: one controller should be one source, and the counter line calls
+                // it out when it is not. A pad read twice over has its button edges computed across
+                // two interleaved streams, which fires them dozens of times a second.
+                counters.Frame(rightUnderFinger, leftUnderFinger, Shorten(frameSource));
+
+                // Where the fingers are, so the distance they cover can be told apart from the time
+                // they spend resting. "Touched" alone cannot: a thumb laid still on the pad is
+                // touched on every frame and must move nothing, and reading that as a fault reported
+                // twenty-one imaginary defects in one session on 12 August.
+                counters.PadAt($"{Shorten(frameSource)}/r", rightUnderFinger, state.RightPad.X, state.RightPad.Y);
+                counters.PadAt($"{Shorten(frameSource)}/l", leftUnderFinger, state.LeftPad.X, state.LeftPad.Y);
+
+                // A finger on the pad while the overlay owns it. The pointer path is skipped by
+                // design here, and from outside that is indistinguishable from a pointer that broke
+                // — the two need opposite fixes, so the reason is recorded rather than inferred.
+                if (oskActive && (rightUnderFinger || leftUnderFinger))
+                {
+                    counters.PadIgnored("OSK actif");
+                }
 
                 if (log.IsEnabled(LogLevel.Trace, LogCategory.Frame))
                 {
@@ -1244,10 +1365,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     DumpFrameContext("power-off chord held");
                     log.Info(LogCategory.Session, "*** Power-off chord (Menu + View, 2s) ***");
 
-                    // Every player's pad, not just the one whose frame this is. Neutralising only
-                    // the last sender leaves the others holding whatever they were last told, which
-                    // in a game reads as a stuck stick or a held trigger.
-                    await virtualPads.SubmitAllAsync(Xbox360Report.Neutral, cancellation.Token);
+                    // The chord and power-off request belong to this physical controller only.
+                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
+                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
 
                     bool poweredOff;
                     try
@@ -1297,14 +1417,22 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // An explicit toggle beats automatic switching for the app in front.
                     foregroundArbiter?.SuspendForForegroundApp();
                     DumpFrameContext($"manual mode switch -> {modeSwitcher.CurrentMode}");
-                    log.Info(LogCategory.Mode, $"*** MODE SWITCH -> {modeSwitcher.CurrentMode} (manual) ***");
+                    // Named, because the mode belongs to one controller and not to the session. Every
+                    // pad has its own ModeSwitcher, so one going to Xbox leaves the others on their
+                    // profile — and a line that says only "MODE SWITCH -> Xbox360" reads, in a log
+                    // shared by four controllers, as though the whole session had moved. On 12 August
+                    // that is exactly how it was read: ordinary keyboard toggles from a pad still on
+                    // its profile were taken for proof that shortcuts were firing during a game, and
+                    // a defect was reported that does not exist.
+                    log.Info(LogCategory.Mode,
+                        $"*** MODE SWITCH -> {modeSwitcher.CurrentMode} (manual) for {Shorten(frameSource)} ***");
                     mapper.ResetTransientState();
                     profileMapper.Reset();
 
-                    // Every player's pad, not just the one whose frame this is. Neutralising only
-                    // the last sender leaves the others holding whatever they were last told, which
-                    // in a game reads as a stuck stick or a held trigger.
-                    await virtualPads.SubmitAllAsync(Xbox360Report.Neutral, cancellation.Token);
+                    // Modes are per controller. Neutralising every pad here interrupts players that
+                    // are still in Xbox mode.
+                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
+                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
                     Console.WriteLine($"Mode switched to {modeSwitcher.CurrentMode}.");
                 }
 
@@ -1347,15 +1475,16 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 if (foregroundArbiter?.Poll() is { } suggestedMode && suggestedMode != modeSwitcher.CurrentMode)
                 {
                     DumpFrameContext($"auto mode switch -> {suggestedMode}");
-                    log.Info(LogCategory.Mode, $"*** AUTO MODE -> {suggestedMode} (foreground={foregroundArbiter.LastForegroundProcess}) ***");
+                    log.Info(LogCategory.Mode,
+                        $"*** AUTO MODE -> {suggestedMode} for {Shorten(frameSource)} "
+                        + $"(foreground={foregroundArbiter.LastForegroundProcess}) ***");
                     modeSwitcher.SetMode(suggestedMode);
                     mapper.ResetTransientState();
                     profileMapper.Reset();
 
-                    // Every player's pad, not just the one whose frame this is. Neutralising only
-                    // the last sender leaves the others holding whatever they were last told, which
-                    // in a game reads as a stuck stick or a held trigger.
-                    await virtualPads.SubmitAllAsync(Xbox360Report.Neutral, cancellation.Token);
+                    // The foreground decision changes this controller's session, not every pad.
+                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
+                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
                     Console.WriteLine($"Mode switched to {suggestedMode} ({foregroundArbiter.LastForegroundProcess}).");
                 }
 
@@ -1538,10 +1667,10 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     if (source is INativeLayerControl nativeLayer)
                         await nativeLayer.SetNativeLayerEnabledAsync(false);
 
-                    // Every player's pad, not just the one whose frame this is. Neutralising only
-                    // the last sender leaves the others holding whatever they were last told, which
-                    // in a game reads as a stuck stick or a held trigger.
-                    await virtualPads.SubmitAllAsync(Xbox360Report.Neutral, cancellation.Token);
+                    // A Profile frame must keep only its own virtual pad neutral. Sending neutral to
+                    // every pad here cuts input from controllers currently in Xbox mode.
+                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
+                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
 
                     if (profileMapper.OskToggleRequested)
                     {
@@ -1716,6 +1845,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             // a latched SHIFT itself and would leave the physical keyboard uppercase.
                             InputHelper.KeyUp(0xA0);
 
+                            // And the same for the mouse buttons and the volume keys. A latched SHIFT
+                            // makes the keyboard shout; a latched mouse button makes the whole desktop
+                            // stop answering, because every click becomes the middle of a drag.
+                            profileMapper.ReleaseHeldInput();
+
                             log.Info(LogCategory.Osk, "OSK overlay stopped.");
                         }
                     }
@@ -1877,7 +2011,16 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                     // Appended only in Xbox mode: in Profile mode these are always zero and would
                     // just make the line harder to read.
-                    if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360)
+                    //
+                    // Gated on lastOutputMode, the same value that writes "mode=Xbox360" at the head
+                    // of this line. It used to ask modeSwitcher.CurrentMode instead — the mode of
+                    // whichever controller happened to send the last frame of the second. With three
+                    // sources feeding one line that is almost never the pad in Xbox mode, so the line
+                    // announced mode=Xbox360 and then omitted every Xbox figure. The one path this
+                    // product exists for was invisible for as long as more than one controller was
+                    // connected, which is to say always. Found 12 August, after "j'ai switch en xbox
+                    // pour lancer le jeu et rien ne répondait" could not be checked against anything.
+                    if (lastOutputMode == ControllerOutputMode.Xbox360)
                     {
                         summary += $" | xbox buttons={xboxButtonFrames} sticks={xboxStickFrames}"
                                  + $" triggers={xboxTriggerFrames} submitFail={xboxSubmitFailures}"
@@ -1938,6 +2081,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         }
         finally
         {
+            // Before anything else: give back what the mapper is holding. A controller switched off
+            // mid-hold sends no further frames, so the release edge never comes and the button stays
+            // down for the whole machine — the second road to the same defect as the overlay one.
+            profileMapper.ReleaseHeldInput();
+
             if (source is not null)
             {
                 DLog("Disposing HID source...");
@@ -2894,6 +3042,8 @@ static void PrintUsage()
     Console.WriteLine("  haptic-probe   Sweep haptic actuator indices to find out which exist.");
     Console.WriteLine("                Options: --max N (default 8)");
     Console.WriteLine("  hidhide-off    Disable HidHide cloaking.");
+    Console.WriteLine("  pads-cleanup   Remove the device records our own virtual pads left behind.");
+    Console.WriteLine("                 Needs administrator. Run by the uninstaller.");
     Console.WriteLine("  help           Print this help.");
     Console.WriteLine("  sanity         Run a static mapping sanity check.");
 }

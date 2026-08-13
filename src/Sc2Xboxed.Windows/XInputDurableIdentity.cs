@@ -78,6 +78,18 @@ public static class XInputDurableIdentity
             return null;
         }
 
+        // Nothing rejects an emulated pad here any more, and that is deliberate. A rejection at this
+        // point returns false for the *slot*, and the caller reads false as "not a real controller"
+        // — so when the ambiguous VID_045E&PID_028E match resolved a real pad's slot onto the
+        // virtual device, the real controller vanished from the session. Measured 12 August.
+        //
+        // The emulated pads are dropped from the candidate list instead, in XusbInterfacePaths, so
+        // no slot can resolve to one and this question never has to be asked.
+        //
+        // What used to stand here also never worked: it walked for an ancestor containing "VIGEM",
+        // but the bus node is ROOT\SYSTEM\0003 and carries that name only in its driver, and in any
+        // case the USB test below matched first — an emulated pad presents as USB precisely because
+        // that is what the emulation is for.
         foreach (var ancestor in DeviceTree.AncestorInstanceIds(device))
         {
             var id = ancestor.ToUpperInvariant();
@@ -87,12 +99,6 @@ public static class XInputDurableIdentity
                 || id.StartsWith("BTH\\", StringComparison.Ordinal))
             {
                 return true;
-            }
-
-            if (id.Contains("VIGEM", StringComparison.Ordinal))
-            {
-                log?.Invoke($"XInput slot {slot}: virtual pad on the ViGEm bus; not read back as input.");
-                return false;
             }
         }
 
@@ -121,9 +127,29 @@ public static class XInputDurableIdentity
         => LooksPhysical(slot, log) == true ? DeviceForSlot(slot, log) : null;
 
     /// <summary>The XUSB device behind a slot, or null when it cannot be told which.</summary>
-    private static string? DeviceForSlot(int slot, Action<string>? log)
+    /// <summary>
+    /// Whether the pad on a slot is one SteamXBox emulates rather than one somebody is holding.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the unfiltered list on purpose. <see cref="XusbInterfacePaths"/> drops emulated pads
+    /// so that no slot can ever resolve onto one — which is what keeps a real Xbox 360 controller
+    /// from being thrown away with its slot, since ViGEm gives its pads the identical vendor and
+    /// product. The consequence is that <see cref="LooksPhysical"/> can no longer answer "false" for
+    /// an emulated pad: it answers null, because it cannot see it at all.
+    ///
+    /// <para>
+    /// The GUI needs the opposite question. Every attached controller now gets a virtual pad the
+    /// moment it connects, so the strip would show each pad twice — the one in the user's hands and
+    /// the one made for it. This names the second so it can be left out.
+    /// </para>
+    /// </remarks>
+    public static bool IsEmulatedSlot(int slot, Action<string>? log = null)
+        => DeviceForSlot(slot, log, includeEmulated: true) is { } device
+           && DeviceTree.IsEmulatedPad(device, log);
+
+    private static string? DeviceForSlot(int slot, Action<string>? log, bool includeEmulated = false)
     {
-        var devices = XusbInterfacePaths(log);
+        var devices = XusbInterfacePaths(log, includeEmulated);
 
         if (devices.Count == 0)
         {
@@ -227,7 +253,7 @@ public static class XInputDurableIdentity
     }
 
     /// <summary>Every XUSB device interface Windows currently exposes.</summary>
-    private static IReadOnlyList<string> XusbInterfacePaths(Action<string>? log)
+    internal static IReadOnlyList<string> XusbInterfacePaths(Action<string>? log, bool includeEmulated = false)
     {
         try
         {
@@ -248,8 +274,20 @@ public static class XInputDurableIdentity
             }
 
             // A REG_MULTI_SZ: strings back to back, the last one empty.
+            //
+            // The pads we emulate are dropped here, before anything is matched to a slot, and that
+            // placement is the whole point. A real wired Xbox 360 controller and a ViGEm pad carry
+            // the identical VID_045E&PID_028E — being indistinguishable is what the emulation is
+            // for — so with both present the slot-to-device match is ambiguous and can resolve a
+            // real pad's slot onto the virtual device. Rejecting it afterwards then throws the slot
+            // away with the real controller inside it.
+            //
+            // Measured 12 August: the physical pad dev:vid_37d7&pid_2501 stopped arriving at all
+            // the moment that rejection was added downstream. A candidate that must never win is a
+            // candidate that must never stand.
             return new string(buffer)
                 .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                .Where(path => includeEmulated || !DeviceTree.IsEmulatedPad(path, log))
                 .ToList();
         }
         catch (Exception exception)

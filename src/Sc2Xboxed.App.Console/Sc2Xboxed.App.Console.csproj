@@ -18,7 +18,24 @@
     <Description>Steam Controller to Xbox 360 virtual controller bridge.</Description>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      Deux manifestes, choisis par la presence d'un certificat, exactement comme Sc2Xboxed.Osk.
+
+      La copie ordinaire demande requireAdministrator. La version signee prend a la place
+      asInvoker + uiAccess="true" : les deux sont incompatibles, uiAccess existant precisement pour
+      donner le droit d'injecter des entrees SANS etre administrateur.
+
+      Mesure du 12 aout : eleve, SendInput a ete refuse mille fois par seconde avec l'erreur 5
+      pendant qu'un lanceur de jeu tenait le premier plan. L'elevation monte le processus en
+      integrite High, ce qui ne franchit ni System ni un processus protege par un anti-triche.
+      uiAccess est le mecanisme documente pour cela, et il exige un binaire signe ET installe dans
+      un emplacement sur - Program Files, pas un dossier de travail.
+
+      uiAccess="true" dans une copie portable non signee la rend simplement inlancable, d'ou le
+      conditionnel plutot qu'un seul manifeste.
+    -->
+    <ApplicationManifest Condition="'$(SteamXBoxSignThumbprint)' != '' or '$(SteamXBoxSignCertificate)' != ''">app.uiaccess.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(ApplicationManifest)' == ''">app.manifest</ApplicationManifest>
 
     <!--
       Un seul fichier, autonome, comme les autres executables du produit.

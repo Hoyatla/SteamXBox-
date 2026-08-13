@@ -123,6 +123,92 @@ autre question.
 C'est le second cas d'état qui n'a besoin d'aucune restauration, après le mode lézard : **sa durée de
 vie est déjà celle du processus.**
 
+#### Le produit lisait sa propre sortie comme une entrée
+
+**Mesuré le 12 août**, en quatre lignes de journal :
+
+```
+03:27:54.250  virtual pad 1 connected for usb:…838bfc41
+03:27:54.645  durable key usb:vid_045e&pid_028e:01
+03:27:55.782  OSK overlay launched for usb:vid_045e&pid_028e:01  PID=38208
+03:27:56.576  HidHide: gave back USB\VID_045E&PID_028E\01
+```
+
+Quatre dixièmes de seconde après avoir créé une manette virtuelle pour que les jeux la voient,
+SteamXBox la redécouvrait, l'adoptait comme manette entrante, lui allouait un clavier et un processus
+d'incrustation — et la **masquait avec HidHide**. La sortie annulait son propre but.
+
+Un garde-fou existait et n'a jamais fonctionné, pour deux raisons distinctes qu'il fallait mesurer
+pour voir :
+
+1. L'ascendance d'une manette émulée est `HID\…` puis **`USB\VID_045E&PID_028E\01`** puis le bus.
+   Se présenter comme un périphérique USB *est* le but de l'émulation, donc le test « commence par
+   `USB\` » gagnait au deuxième maillon et répondait « physique » avant d'atteindre le bus.
+2. Même atteint, le nœud du bus vaut `ROOT\SYSTEM\0003` sur cette machine. Son identifiant ne
+   contient aucun « VIGEM » et n'en a jamais contenu — c'est le **pilote** derrière qui porte le nom.
+
+**On ne peut pas filtrer sur le couple `VID_045E&PID_028E`** : c'est l'identité d'une vraie manette
+Xbox 360 filaire, et être indiscernable est précisément la fonction de l'émulation. Filtrer là-dessus
+retirerait aux clients leurs manettes réelles.
+
+La question est donc posée au pilote qui possède le nœud parent (`DEVPKEY_Device_Service`), ce qui est
+exact et ne peut collisionner avec aucun matériel.
+
+#### Mais sa trace, elle, reste
+
+Ce qui précède reste vrai et ne dit pas tout. L'**appareil** disparaît ; son **enregistrement dans la
+base PnP** survit. Windows garde une entrée par appareil jamais vu, marquée absente, et elle ne part
+jamais d'elle-même.
+
+**Mesuré le 12 août : 29 entrées fantômes `VID_045E&PID_028E`, zéro appareil présent.** Les trois
+manettes virtuelles `\01 \02 \03`, plus onze jeux d'interfaces `IG_00` à `IG_0A` empilés au fil des
+sessions.
+
+Ce n'est pas cosmétique. SteamXBox associe un slot XInput à une manette physique en énumérant les
+appareils XUSB ; avec une dizaine de candidats indiscernables il **renonce**, et le dit :
+
+```
+XInput slot 2 : 9 XUSB devices and no way to say which; keeping the slot.
+```
+
+L'entrée d'une manette peut alors être attribuée à une autre. C'est la cause du « les autres manettes
+ne fonctionnent pas correctement » du 12 août ; la manette Steam, qui ne passe pas par XInput, n'était
+pas touchée.
+
+Retirer ces entrées est sans risque — Windows les recrée au branchement suivant — mais demande
+l'élévation.
+
+**Mesure du rythme :** 29 → 0 après nettoyage → **3 après une seule session** en mode Xbox. Une
+manette virtuelle laisse trois enregistrements : elle-même (`…\01`, réutilisée) et ses deux interfaces
+XInput et HID, dont Windows frappe un numéro neuf à chaque fois. Environ deux par session.
+
+#### Un registre, parce qu'une règle serait une supposition
+
+SteamXBox note désormais, à chaque création, les nœuds que sa propre manette virtuelle a fait
+apparaître — la différence entre l'état du bus avant et après la connexion. Le fichier est
+`%LOCALAPPDATA%\SteamXBox\virtual-pads.txt`.
+
+Le nettoyage évident serait « retirer tout `VID_045E&PID_028E` absent », et c'est ce que le premier
+passage a fait ici. Ça marche sur cette machine et **c'est une supposition** : ce couple identifie
+aussi une vraie manette Xbox 360 filaire, puisque en être indiscernable est toute la fonction de
+l'émulation. Chez un client, la même règle effacerait la trace d'une manette qui lui appartient. Sans
+gravité — Windows la recrée — mais ce n'est pas notre enregistrement à effacer. Le registre transforme
+la supposition en liste.
+
+Rien n'est retiré pendant l'usage : cela demande l'administrateur, et le produit a délibérément cessé
+de le demander. `SteamXBox.Core.exe pads-cleanup` est appelé **par le désinstalleur**, après `stop` et
+`hidhide-off` — retirer des enregistrements pendant que le produit tient encore ses manettes
+retirerait des appareils en service. Ce qui résiste reste inscrit plutôt que d'être oublié.
+
+**Pourquoi pas une purge mensuelle :** il faudrait une tâche planifiée élevée à demeure. Une surface
+privilégiée permanente pour un problème cosmétique jusqu'au jour où il ne l'est plus, chez des clients
+qui traitent des données sensibles, est un mauvais échange. Et l'utilisateur dont les manettes se
+mélangent a besoin du nettoyage maintenant, pas dans trois semaines.
+
+**Ce qu'il reste à faire :** en créer moins — une connexion par session plutôt qu'à chaque bascule de
+mode — et un nettoyage à l'installation, qui est déjà élevé, pour rattraper l'arriéré. Le registre ne
+couvre que ce qui sera créé à partir de maintenant.
+
 ---
 
 ## 2. Crochets et écoutes à portée système
@@ -144,6 +230,89 @@ jusqu'à la fermeture de SteamXBox.
 
 Le crochet a désormais un fil dédié qui ne fait rien d'autre. Le presse-papiers ne lit plus rien dans
 la pompe et ignore les fichiers copiés.
+
+### Ce que les instruments savent voir, au 12 août
+
+Trois questions ont coûté une journée parce que rien ne les mesurait. Elles le sont désormais.
+
+| Question | Où c'est lu | Ce qui apparaît |
+|---|---|---|
+| Le curseur a-t-il bougé ? | moniteur, 20 ms | `pointeur mouvements inj/phys=… curseur=…` |
+| Est-ce SteamXBox ou l'utilisateur ? | moniteur, crochet `WH_MOUSE_LL` | `inj/phys` — le drapeau `LLMHF_INJECTED` |
+| Combien de sources lisent une manette ? | noyau, ligne `Counter` | `SOURCES MULTIPLES=3 pad-a:66 pad-b:66 pad-c:66` |
+| Le pad est-il touché sans rien produire ? | noyau, ligne `Counter` | `PAD SOURD`, et `pad ignoré=N (raison)` |
+
+Deux pièges retirés au passage :
+
+- **Le journal de l'incrustation horodatait en UTC**, tout le reste en heure locale. Le 11 août, ces
+  deux heures ont fait écarter la bonne hypothèse au motif qu'elle « ne couvrait pas la fenêtre ».
+  Des journaux qu'on ne peut pas superposer sont pires que pas de journaux : ils répondent.
+- **Un pad touché qui n'émettait rien ne comptait pas comme activité**, donc la seconde qui comptait
+  pouvait n'être pas écrite. L'instrument se taisait exactement sur ce qu'il surveillait.
+
+Le crochet souris du moniteur ne fait qu'incrémenter des compteurs, sur son propre fil, sans écrire
+ni allouer — la leçon des 33 secondes de clavier mort s'applique telle quelle.
+
+---
+
+### Une intention n'est pas un constat
+
+Le clavier à l'écran prend la main sur les pads : tant qu'il tape, le chemin pointeur est sauté —
+c'est voulu, les pads visent des lettres et ne poussent pas un curseur.
+
+Le noyau enregistrait cette prise de main quand on appuyait sur le bouton de bascule, et **relisait
+ensuite son propre souvenir comme s'il s'agissait d'un fait**. Tant que fermer le clavier voulait
+dire tuer son processus, les deux coïncidaient forcément. Depuis que l'incrustation est résidente,
+elle peut se cacher sans que le noyau l'apprenne — et la prise de main lui survit sans limite.
+
+**Mesuré le 12 août :** dernière bascule à 02:21:30, plus un seul mouvement injecté jusqu'à la fin de
+la session dix secondes plus tard, pendant que la souris physique fonctionnait normalement. Le
+moniteur l'a montré d'une ligne : `inj/phys=0/701`.
+
+L'incrustation **bat** désormais un fichier tant qu'elle est à l'écran, et une prise de main que
+personne ne confirme pendant six secondes est rendue. Un battement et non un marqueur posé-retiré :
+un marqueur qu'un processus mort laisse derrière lui rebloquerait le pad à l'identique, avec un
+fichier périmé à la place d'un drapeau périmé. C'est la règle 2 appliquée telle quelle.
+
+Six secondes parce que le démarrage à froid en demandait quatre, et qu'annuler la prise de main
+pendant que le clavier monte ferait paraître la toute première pression sans effet.
+
+La vérification ne va **que dans ce sens**. Un clavier qui s'affiche sans qu'on l'ait demandé est un
+autre défaut, et suspendre le pad sur la foi d'un fichier serait croire le constat aussi aveuglément
+qu'on croyait l'intention.
+
+---
+
+### L'état enfoncé est lui aussi à portée système
+
+| État posé | Portée | Qui retire | Survit à la fermeture ? |
+|---|---|---|---|
+| **Bouton de souris enfoncé** (gâchettes) | toute la machine | le mapper, à l'arête de relâchement | **oui** — rien ne le rend |
+| **Touche de volume enfoncée** (croix haut/bas) | toute la machine | idem | **oui** |
+| **Maj verrouillée** par l'OSK | toute la machine | garde-fou explicite `KeyUp(0xA0)` | non, depuis longtemps |
+
+Un bouton enfoncé n'est pas envoyé à une fenêtre : il change l'état du périphérique. Il survit donc à
+tout, y compris à la fermeture de SteamXBox — seul un redémarrage le défait.
+
+**Défaut trouvé et corrigé le 12 août :** l'arête suspendait le **relâchement** en même temps que
+l'appui pendant que l'OSK tenait la manette. C'est juste pour un raccourci — une touche tapée sous
+l'incrustation serait un fantôme au milieu d'un mot — et faux pour un maintien. La séquence :
+gâchette tirée, OSK ouvert, gâchette relâchée. Le relâchement n'était pas émis, mais le drapeau
+suivait quand même la manette, si bien qu'**il ne restait plus aucune arête à déclencher, jamais**.
+Le bouton gauche restait enfoncé pour toutes les applications.
+
+Le symptôme ne ressemble pas à sa cause : **le curseur continue de bouger**, parce que déplacer est
+un événement distinct d'appuyer. Ce qui s'arrête, c'est tout le reste — chaque geste devient le
+milieu d'un glisser, les clics ne portent nulle part, aucune fenêtre ne répond. « La souris ne répond
+plus » est exactement la forme que prend un bouton verrouillé.
+
+Un second chemin menait au même endroit : une manette éteinte en plein maintien n'envoie plus de
+trames, donc l'arête de relâchement n'arrive jamais.
+
+Désormais la dette est suivie à part de l'état physique : ce que le mapper a appuyé, il le relâche —
+incrustation ou non — et il rend tout ce qu'il tient quand l'OSK prend la main, quand la manette
+s'en va et à l'arrêt. Quatre bindings seulement sont concernés ; tout le reste passe par `KeyTap` et
+`KeyCombination`, qui se relâchent d'eux-mêmes.
 
 ---
 
@@ -305,6 +474,31 @@ moins réel : rien ne garantit qu'il le reste.
 ---
 
 ## 8. Privilèges — la frontière que le produit s'inflige
+
+> **Renversé le 12 août.** Les quatre exécutables demandent désormais `requireAdministrator`.
+> Ce qui suit décrit la décision précédente et reste vrai sur les pilotes ; c'est la conclusion qui
+> était trop large.
+>
+> **La mesure était juste, la conclusion ne l'était pas.** HidHide n'exige effectivement pas
+> l'élévation. Mais ce n'est pas le pilote qui l'exige — c'est **l'injection d'entrée**. Windows
+> interdit à un processus d'envoyer une frappe ou un clic à une fenêtre d'intégrité supérieure, et
+> un lanceur de jeu AAA en est une. Sans élévation, la manette cesse de commander dès qu'un de ces
+> programmes passe au premier plan, et c'est le cas d'usage central du produit.
+>
+> **Mesuré le 12 août** : le noyau comptait `mouse events=103` pendant que le crochet bas niveau du
+> moniteur, qui voit toute l'entrée de la machine, n'en voyait **aucun** partir. `SendInput` renvoie
+> le nombre d'événements réellement insérés et en insère zéro quand l'injection est refusée ; les
+> douze appels d'`InputHelper` jetaient cette valeur. Le journal affirmait donc un succès qu'il
+> n'avait jamais vérifié — et a envoyé la recherche ailleurs pendant des heures.
+>
+> Le Bureau est élevé en plus du noyau parce que c'est lui qui le lance : un parent non élevé
+> provoquerait une invite UAC à chaque démarrage de l'enfant au lieu d'une seule à l'ouverture.
+>
+> Le coût est réel et assumé : une invite UAC par session, et un produit qui tourne en
+> administrateur chez des clients qui traitent des données sensibles. Ce qui reste à faire :
+> `uiAccess="true"` avec signature, qui donnerait le même accès **sans** l'élévation complète — le
+> manifeste `app.uiaccess.manifest` de l'OSK existe déjà pour ça et attend un certificat.
+
 
 > **Corrigé le 11 août 2026.** Les cinq exécutables demandent désormais `asInvoker`, vérifié dans les
 > binaires déployés. La section est conservée entière parce qu'elle explique une classe entière de

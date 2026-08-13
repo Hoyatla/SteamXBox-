@@ -16,6 +16,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>SteamXBox.Desktop</AssemblyName>
+
+    <!--
+      Le manifeste demande l'administrateur, et le commentaire est ici parce qu'un commentaire dans
+      le XML du manifeste a deja rendu un executable indemarrable ("configuration cote-a-cote
+      incorrecte").
+
+      SteamXBox avait cesse de demander l'elevation apres mesure que HidHide ne l'exigeait pas. La
+      mesure etait juste et la conclusion trop large : ce n'est pas le pilote qui l'exige, c'est
+      l'injection d'entree. Windows interdit a un processus d'envoyer une frappe ou un clic a une
+      fenetre d'integrite superieure, et un lanceur de jeu AAA en est une. Sans elevation la manette
+      cesse de commander des qu'un de ces programmes passe au premier plan — constate le 12 aout,
+      ou le noyau comptait 103 mouvements pendant que le crochet bas niveau du moniteur n'en voyait
+      aucun partir.
+
+      Le Bureau l'exige en plus du noyau parce que c'est lui qui le lance : un parent non eleve
+      declencherait une invite UAC a chaque demarrage de l'enfant, au lieu d'une seule a l'ouverture.
+    -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>SteamXBox.Desktop</RootNamespace>
     <ApplicationIcon>Desktop.ico</ApplicationIcon>
     <Product>SteamXBox</Product>

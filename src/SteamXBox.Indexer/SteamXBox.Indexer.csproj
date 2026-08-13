@@ -18,6 +18,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SteamXBox.Indexer</RootNamespace>
     <AssemblyName>SteamXBox.Indexer</AssemblyName>
+
+    <!--
+      Un seul fichier autonome. Quatrieme projet ou cette omission se rencontre : sans ces trois
+      lignes, la publication sort un apphost qui cherche ses assemblages a cote, et l'executable
+      copie seul a la racine demarre puis annonce qu'il ne trouve pas son propre .dll.
+
+      Constate le 11 aout 2026 : l'indexeur etait reste en 4.4.0 a la racine pendant que tout le
+      reste passait en 4.7.0, parce qu'il n'etait publie par aucune commande.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
     <Product>SteamXBox</Product>
     <AssemblyTitle>SteamXBox Indexer</AssemblyTitle>
     <Description>SteamXBox - alimente l'index documentaire.</Description>

@@ -133,8 +133,16 @@ public static class DualSenseReportParser
 
         if ((shoulders & 0x01) != 0) buttons |= SteamControllerButtons.LeftBumper;
         if ((shoulders & 0x02) != 0) buttons |= SteamControllerButtons.RightBumper;
-        if ((shoulders & 0x10) != 0) buttons |= SteamControllerButtons.View;     // create
-        if ((shoulders & 0x20) != 0) buttons |= SteamControllerButtons.Menu;     // options
+        // The rule is positional and it is the same on every pad: View is the left of the two small
+        // buttons, Menu is the right one. On a DualSense that is Create on the left and Options on
+        // the right, which is what these two bits are.
+        //
+        // Briefly swapped on 12 August on a report of "menu et view inversé", then put back the same
+        // minute: the swap was made before the rule had been stated, and it broke a mapping that
+        // already obeyed it. Nothing here is to be flipped again without the physical left and right
+        // being checked first.
+        if ((shoulders & 0x10) != 0) buttons |= SteamControllerButtons.View;     // create, left
+        if ((shoulders & 0x20) != 0) buttons |= SteamControllerButtons.Menu;     // options, right
         if ((shoulders & 0x40) != 0) buttons |= SteamControllerButtons.LeftStick;
         if ((shoulders & 0x80) != 0) buttons |= SteamControllerButtons.RightStick;
 
@@ -148,6 +156,18 @@ public static class DualSenseReportParser
         {
             var system = report[layout.Buttons + 2];
             if ((system & 0x01) != 0) buttons |= SteamControllerButtons.Steam;   // PS
+
+            // The mute button becomes Quick Access, and without this the DualSense could not change
+            // mode at all: the switch chord is QuickAccess by default, and nothing on this pad
+            // produced that flag — the whole session it was simply a button the controller did not
+            // have. Reported 12 August as "switch profil xbox fonctionne mal".
+            //
+            // Mute rather than the touchpad click, which is the other unused control here. On a
+            // Steam Controller Quick Access is a small dedicated button pressed on purpose; the
+            // DualSense touchpad is a wide surface under the thumbs during play, and putting a mode
+            // switch under it would change mode mid-game by accident. Mute is the pad's equivalent
+            // spare button.
+            if ((system & 0x04) != 0) buttons |= SteamControllerButtons.QuickAccess;  // mute
         }
 
         return new ControllerState(

@@ -3,7 +3,7 @@
 ; Compile: iscc SteamXBox_Full_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.6"
+#define MyAppVersion "4.7"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -71,11 +71,30 @@ Source: "THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; Icon
 Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
 
+; Agent de mise a jour. Le fichier de configuration doit porter EXACTEMENT le nom de l'executable
+; avec l'extension .json — c'est ainsi que l'agent le trouve — et le nom de l'executable lui-meme
+; encode le fabricant et le produit : "Hoyatla_SteamXBox_Updater.exe" construit l'adresse
+; .../api/Hoyatla/SteamXBox/updates.json.
+;
+; Installe dans Program Files et nulle part ailleurs : un agent de mise a jour ecrivable par un
+; utilisateur non eleve est un moyen d'executer n'importe quoi avec les droits de la tache planifiee.
+Source: "updater\Hoyatla_SteamXBox_Updater.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "updater\Hoyatla_SteamXBox_Updater.json"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
 ; Pilotes ViGEmBus + HidHide (embarqués)
 Source: "ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Tasks: vigembus
 Source: "HidHide_1.5.230_x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Tasks: hidhide
 
 [Registry]
+; La version installee, lue par l'agent de mise a jour. C'est le seul moyen qu'il a de savoir ce qui
+; tourne sur la machine : il compare cette valeur a celle du manifeste publie. Sans elle, il ne
+; proposera jamais rien.
+;
+; Sous HKLM parce que l'agent est lance par une tache planifiee qui ne sait pas quel utilisateur
+; a installe le produit. "uninsdeletekey" emporte la cle entiere a la desinstallation.
+Root: HKLM; Subkey: "SOFTWARE\Hoyatla\SteamXBox"; ValueType: string; ValueName: "Version"; \
+    ValueData: "{#MyAppVersion}.0.0"; Flags: uninsdeletekey
+
 ; Cette entree n'est PAS creee par l'installeur : c'est l'application qui l'ecrit quand l'utilisateur
 ; coche "lancer au demarrage" dans les parametres. Elle est declaree ici uniquement pour que la
 ; desinstallation l'emporte.
@@ -98,12 +117,36 @@ Filename: "{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe"; Parameters: "/quiet /norest
 ; 2. HidHide (silencieux, admin)
 Filename: "{tmp}\HidHide_1.5.230_x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installation HidHide (masquage manettes)..."; Tasks: hidhide; Flags: waituntilterminated shellexec
 
+; 3. Agent de mise a jour : autostart + tache planifiee quotidienne. "--install" ne verifie rien et
+; ne telecharge rien ; il enregistre seulement l'agent. La premiere verification a lieu a l'ouverture
+; de session suivante.
+Filename: "{app}\Hoyatla_SteamXBox_Updater.exe"; Parameters: "--install"; StatusMsg: "Enregistrement des mises a jour automatiques..."; Flags: runhidden waituntilterminated skipifdoesntexist
+
 [UninstallRun]
+; L'agent d'abord : il faut retirer la tache planifiee et l'autostart tant que l'executable est
+; encore la. Dans l'autre ordre, la tache resterait a pointer vers un fichier disparu — exactement
+; la faute que le desinstalleur de la 3.2 a commise avec son entree de demarrage.
+Filename: "{app}\Hoyatla_SteamXBox_Updater.exe"; Parameters: "--uninstall"; Flags: runhidden skipifdoesntexist; RunOnceId: "RemoveUpdater"
+
 ; Rendre les manettes avant de partir. Desinstaller pendant que le masquage HidHide est actif laisse
 ; une manette invisible pour tous les jeux, et le fichier qui dit comment la rendre se trouve dans
 ; les donnees d'application de l'utilisateur.
 Filename: "{app}\SteamXBox.Core.exe"; Parameters: "stop"; Flags: runhidden; RunOnceId: "StopCore"
 Filename: "{app}\SteamXBox.Core.exe"; Parameters: "hidhide-off"; Flags: runhidden; RunOnceId: "ReleasePads"
+
+; Les traces des manettes virtuelles que SteamXBox a creees. Windows enregistre tout appareil apparu
+; une fois et garde l'enregistrement indefiniment ; chaque manette virtuelle en laisse trois, dont
+; deux portent un numero neuf a chaque creation. Constate le 12 aout 2026 : vingt-neuf enregistrements
+; accumules, et SteamXBox qui renonce a associer un slot XInput a une manette faute de pouvoir les
+; distinguer.
+;
+; APRES le stop et le hidhide-off : retirer les enregistrements pendant que le produit tient encore
+; ses manettes retirerait des appareils en cours d'utilisation.
+;
+; Seulement ce que le registre a note. La regle "tout VID_045E&PID_028E absent" viserait aussi la
+; vraie manette Xbox 360 filaire d'un client, puisque en etre indiscernable est le but meme de
+; l'emulation.
+Filename: "{app}\SteamXBox.Core.exe"; Parameters: "pads-cleanup"; Flags: runhidden; RunOnceId: "CleanPadRecords"
 
 [Code]
 // Prevenir avant de partir : les curseurs de Windows survivent a la desinstallation, et

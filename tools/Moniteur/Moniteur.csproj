@@ -13,6 +13,19 @@
     <AssemblyName>SteamXBox-Moniteur</AssemblyName>
     <RootNamespace>SteamXBox.Moniteur</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Un seul fichier autonome, comme les executables du produit — c'est la troisieme fois que cette
+      omission se paie. Sans ces trois lignes, « dotnet publish » sort un apphost de 160 kilo-octets
+      qui cherche ses assemblages a cote : copie seule a la racine, elle demarre puis annonce qu'elle
+      ne trouve pas son propre .dll.
+
+      Il est livre avec le produit — l'outil « moniteur » des Plugins le lance — donc il doit
+      s'installer de la meme facon que le reste, meme s'il reste hors de la solution.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
 </Project>

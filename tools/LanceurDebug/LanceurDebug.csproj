@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Lance les instruments puis le produit, dans cet ordre.
+
+    Hors de la solution et hors des installeurs, comme le moniteur : c'est de l'outillage de
+    developpement. Il n'a rien a faire sur la machine d'un client, et l'ordre qu'il impose n'a de
+    sens que pour quelqu'un qui lit les journaux ensuite.
+  -->
+  <PropertyGroup>
+    <!--
+      WinExe et non Exe : un lanceur qui fait clignoter une console a chaque demarrage est du bruit,
+      et il n'a rien a dire quand tout va bien. Il parle par une boite de dialogue, et seulement
+      quand un instrument n'a pas demarre.
+    -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SteamXBox.Debug</AssemblyName>
+    <RootNamespace>SteamXBox.Debug</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <ApplicationIcon>..\..\SteamXBox.ico</ApplicationIcon>
+
+    <Product>SteamXBox</Product>
+    <AssemblyTitle>SteamXBox Debug</AssemblyTitle>
+    <Description>Lance le moniteur puis SteamXBox, dans l'ordre qui rend les journaux lisibles.</Description>
+
+    <!--
+      Un seul fichier autonome, comme tout le reste du dossier. Quatrieme projet ou l'omission de ces
+      trois lignes se paierait : sans elles la publication sort un apphost qui cherche ses assemblages
+      a cote, et l'executable copie seul a la racine demarre puis annonce qu'il ne trouve pas son
+      propre .dll.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+
+    <!--
+      PAS de PublishTrimmed, et ce n'est pas un oubli.
+
+      Rogne, ce lanceur tombait a 12,5 Mo au lieu de 70 — tentant pour trois appels systeme. Mais
+      l'antivirus de la machine de developpement (IObit Advanced SystemCare) garde un verrou
+      permanent sur un mono-fichier rogne : mesure le 12 aout, l'executable rogne est reste
+      impossible a lire, a copier et a lancer apres trente secondes d'essais, tandis que le meme
+      projet publie sans rognage se copiait du premier coup. Le moniteur, non rogne, n'a jamais pose
+      ce probleme.
+
+      Soixante-dix megaoctets est le poids de tous les executables du dossier ; celui-ci n'y est donc
+      pas une anomalie. Un outil qu'on ne peut pas lancer, si.
+    -->
+  </PropertyGroup>
+
+</Project>
