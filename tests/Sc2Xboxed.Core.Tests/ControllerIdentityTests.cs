@@ -4,12 +4,12 @@ using Xunit;
 namespace Sc2Xboxed.Core.Tests;
 
 /// <summary>
-/// The key a controller's profile is filed under.
+/// The key a controller family's profile is filed under.
 /// </summary>
 /// <remarks>
-/// Every connected controller is an input, so each carries its own profile. That only means
-/// something if the same controller is recognised again tomorrow — otherwise two players' settings
-/// quietly swap between sessions, and nothing looks broken.
+/// Settings are no longer filed per controller: one DualSense presented itself under two Bluetooth
+/// addresses on the author's machine, and a profile filed under the address it happened to connect
+/// with was gone the next time it connected with the other one. The family is what never changes.
 /// </remarks>
 public class ControllerIdentityTests
 {
@@ -114,12 +114,36 @@ public class ControllerIdentityTests
             ControllerIdentityFactory.FromXInputSlot(0),
             ControllerIdentityFactory.FromXInputSlot(1));
 
-    // What durability now means: a key built from something burned into the device.
+    // What durability used to mean, and why it was withdrawn. The same DualSense presented itself
+    // under two Bluetooth addresses on one machine — a public one and a rotating one — so nothing
+    // burned into the pad is reliable enough to file settings under. A per-controller key stopped
+    // finding the pad's settings and nothing said so.
     [Fact]
-    public void ABluetoothAddressKeyIsStable()
-        => Assert.True(ControllerIdentityFactory.IsStable("bt:44464836686d"));
+    public void ABluetoothAddressKeyIsNotStableEnoughForSettings()
+        => Assert.False(ControllerIdentityFactory.IsStable("bt:44464836686d"));
 
     [Fact]
-    public void AUsbSerialKeyIsStable()
-        => Assert.True(ControllerIdentityFactory.IsStable("usb:vid_054c&pid_0ce6:a1b2c3d4"));
+    public void AUsbSerialKeyIsNotStableEnoughForSettings()
+        => Assert.False(ControllerIdentityFactory.IsStable("usb:vid_054c&pid_0ce6:a1b2c3d4"));
+
+    // The three families the settings are now filed under.
+    [Theory]
+    [InlineData(ControllerKind.SteamController, "fam:steam")]
+    [InlineData(ControllerKind.DualSense, "fam:ps5")]
+    [InlineData(ControllerKind.XInput, "fam:xbox")]
+    public void EachFamilyHasItsOwnKey(ControllerKind kind, string expected)
+        => Assert.Equal(expected, ControllerIdentityFactory.FamilyKey(kind));
+
+    [Fact]
+    public void AFamilyKeyIsStable()
+        => Assert.True(ControllerIdentityFactory.IsStable("fam:ps5"));
+
+    // A controller never changes family, even when it changes identity: this is the whole point of
+    // filing settings by family rather than by pad.
+    [Theory]
+    [InlineData(ControllerKind.SteamController, "fam:steam")]
+    [InlineData(ControllerKind.DualSense, "fam:ps5")]
+    [InlineData(ControllerKind.XInput, "fam:xbox")]
+    public void AnIdentityKnowsItsFamily(ControllerKind kind, string expected)
+        => Assert.Equal(expected, new ControllerIdentity(kind, "id", "name", -1).FamilyId);
 }

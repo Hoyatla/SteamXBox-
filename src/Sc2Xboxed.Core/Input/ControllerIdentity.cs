@@ -21,12 +21,12 @@ public enum ControllerKind
 }
 
 /// <summary>
-/// One physical controller, and the key its settings are filed under.
+/// One physical controller, as seen by the rest of the runtime.
 /// </summary>
 /// <param name="Kind">How it is read.</param>
 /// <param name="Id">
-/// Stable key. Survives a disconnection, a reboot and a change in connection order — which is what
-/// makes a per-controller profile mean anything.
+/// Identity for this session. Two pads must not be conflated while both are attached, so each keeps
+/// its own key here; it is no longer filed under.
 /// </param>
 /// <param name="DisplayName">What to show the user.</param>
 /// <param name="Slot">XInput slot, or -1 for a controller that has none.</param>
@@ -34,27 +34,53 @@ public readonly record struct ControllerIdentity(
     ControllerKind Kind,
     string Id,
     string DisplayName,
-    int Slot);
+    int Slot)
+{
+    /// <summary>
+    /// The family this controller belongs to — the key its settings are filed under.
+    /// </summary>
+    /// <remarks>
+    /// Settings are not filed under the controller any more. The same DualSense presented itself
+    /// under two Bluetooth addresses on one machine — a public one and a rotating one — so nothing
+    /// about the pad is reliable enough to file settings under and have them found again. What never
+    /// changes is the family: Steam, PlayStation or Xbox. All three kinds map to one.
+    /// </remarks>
+    public string FamilyId => ControllerIdentityFactory.FamilyKey(Kind);
+}
 
 /// <summary>
-/// Builds the stable key a controller's profile is filed under.
+/// Builds the keys a controller's settings are filed under.
 /// </summary>
 /// <remarks>
-/// Every controller is an input, so each needs a name of its own — one profile per controller only
-/// means something if the controller can be recognised again tomorrow.
+/// Settings are filed by family, not by controller. This used to build a key per physical device —
+/// a Bluetooth address, a USB serial — and the config window filed a profile under it. Then one
+/// DualSense turned up under two different addresses on the author's machine, and the profile
+/// filed under the address the pad happened to connect with was gone the next time it connected
+/// with the other one. Nothing said so: the pad ran on the defaults, and the only symptom was a
+/// pad that "felt wrong". A family never has that problem — a Steam Controller is a Steam
+/// Controller tomorrow, whatever address it arrives on — so the family is what settings are
+/// filed under.
 ///
-/// The obvious key is the XInput slot, and it is the wrong one: Windows hands slots out in
-/// connection order, so today's controller 0 is tomorrow's controller 1 and the two players'
-/// profiles swap between sessions. Worse, it fails silently — nothing looks broken, the settings
-/// are simply attached to the wrong hands.
-///
-/// A HID device carries a real identity in its interface path, which contains the vendor, the
-/// product and the device instance. XInput exposes no such thing: the API gives a slot index and
-/// nothing else. That gap is named here rather than papered over, because it decides how far a
-/// per-controller profile can be trusted.
+/// The per-controller key still exists (<see cref="FromHidPath"/>, <see cref="FromXInputSlot"/>)
+/// because two pads must not be conflated while both are attached: sessions, deduplication and
+/// the roster all need to tell them apart. It is just never persisted as the owner of settings.
 /// </remarks>
 public static class ControllerIdentityFactory
 {
+    /// <summary>The key a family of controllers' settings are filed under.</summary>
+    /// <remarks>
+    /// One per family, because the three have genuinely different capabilities and a profile
+    /// written for trackpads means nothing on a pad that has none. An empty string for an unknown
+    /// kind, which falls back to the launch profile rather than claiming a family of its own.
+    /// </remarks>
+    public static string FamilyKey(ControllerKind kind)
+        => kind switch
+        {
+            ControllerKind.SteamController => "fam:steam",
+            ControllerKind.DualSense => "fam:ps5",
+            ControllerKind.XInput => "fam:xbox",
+            _ => "",
+        };
     /// <summary>Key for a HID controller, derived from its interface path.</summary>
     /// <remarks>
     /// Built from the vendor, the product and the device instance, and from nothing else.
@@ -138,28 +164,16 @@ public static class ControllerIdentityFactory
     public static string FromXInputSlot(int slot) => $"xinput-slot:{slot}";
 
     /// <summary>
-    /// Whether a key identifies the same physical device across sessions.
+    /// Whether a key is one settings may be filed under.
     /// </summary>
     /// <remarks>
-    /// Only a key built from something burned into the device: a Bluetooth address, or a USB serial
-    /// the controller reports itself. Everything else names a connection.
-    ///
-    /// This used to answer true for any <c>hid:</c> key, on the belief that a HID interface path was
-    /// durable. It is not — Windows issues a new instance segment on every Bluetooth reconnection —
-    /// and the consequence was invisible by construction: assignments were written to disk, the pad
-    /// came back under a new key, and it simply ran on the defaults with nothing saying why. A
-    /// method that lies about durability is worse than one that admits it has none.
-    /// </remarks>
-    /// <remarks>
-    /// <c>dev:</c> is Windows' own container id for a physical device, used for pads that report no
-    /// serial. It belongs here for the reason the other two do: it is not reassigned to a different
-    /// controller by the order things were switched on, which is the failure an XInput slot has and
-    /// the whole point of this test. Its own limit — a serial-less device takes its container id
-    /// from the port, so the same model in the same socket inherits — is closed where the key is
-    /// built, by naming the model in it.
+    /// Only family keys qualify. Everything naming a controller was withdrawn, after one DualSense
+    /// appeared under two Bluetooth addresses on the author's machine: <c>bt:</c> keys were trusted
+    /// to survive reconnections, and the same physical pad filed its settings under whichever
+    /// address it had connected with — the settings were never found again, and nothing said so.
+    /// A key that lies about durability is worse than one that admits it has none, so only the
+    /// family keys, which cannot change under a controller, are accepted.
     /// </remarks>
     public static bool IsStable(string id)
-        => id.StartsWith("bt:", StringComparison.Ordinal)
-           || id.StartsWith("usb:", StringComparison.Ordinal)
-           || id.StartsWith("dev:", StringComparison.Ordinal);
+        => id.StartsWith("fam:", StringComparison.Ordinal);
 }

@@ -92,7 +92,7 @@ public sealed class ProfileMapper
 	public ProfileMapper(Sc2XboxedProfileSettings settings)
 	{
 		_settings = settings;
-		_stickDeadZone = settings.StickDeadZone;
+		_stickDeadZone = settings.LeftStickDeadZone;
 		_rightTrackball = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
 		_leftScroll = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
 
@@ -135,8 +135,18 @@ public sealed class ProfileMapper
 			double sens = ReadDouble(root, "rightPadSensitivity", 900.0, origins);
 			bool invertY = ReadBool(root, "rightPadInvertY", true, origins);
 			bool invertX = ReadBool(root, "rightPadInvertX", false, origins);
-			double deadzone = ReadDouble(root, "stickDeadZone", 0.5, origins);
-			double gamepadDeadzone = ReadDouble(root, "xboxStickDeadZone", 0.08, origins);
+			// One dead zone per stick, each falling back to the single value profiles carried before.
+			// A number that governed both sticks could not be set: widening it to silence a drifting
+			// left stick blunted a right stick that was fine, and the user had to choose which of the
+			// two to spoil. The fallback keeps every existing profile behaving exactly as it did until
+			// its owner moves one of the two sliders.
+			double sharedDeadzone = ReadDouble(root, "stickDeadZone", defaults.LeftStickDeadZone, origins);
+			double leftDeadzone = ReadDouble(root, "leftStickDeadZone", sharedDeadzone, origins);
+			double rightDeadzone = ReadDouble(root, "rightStickDeadZone", sharedDeadzone, origins);
+
+			double sharedGamepadDeadzone = ReadDouble(root, "xboxStickDeadZone", defaults.GamepadLeftStickDeadZone, origins);
+			double gamepadLeftDeadzone = ReadDouble(root, "xboxLeftStickDeadZone", sharedGamepadDeadzone, origins);
+			double gamepadRightDeadzone = ReadDouble(root, "xboxRightStickDeadZone", sharedGamepadDeadzone, origins);
 			bool hasTrackpads = ReadHasTrackpads(root, origins);
 			bool oskFloating = ReadBool(root, "oskFloating", defaults.OskFloating, origins);
 			double stickPointerSpeed = ReadDouble(root, "stickPointerSpeed", defaults.StickPointerSpeed, origins);
@@ -190,8 +200,10 @@ public sealed class ProfileMapper
 
 			var settings = defaults with
 			{
-				StickDeadZone = deadzone,
-				GamepadStickDeadZone = gamepadDeadzone,
+				LeftStickDeadZone = leftDeadzone,
+				RightStickDeadZone = rightDeadzone,
+				GamepadLeftStickDeadZone = gamepadLeftDeadzone,
+				GamepadRightStickDeadZone = gamepadRightDeadzone,
 				HasTrackpads = hasTrackpads,
 				OskFloating = oskFloating,
 				StickPointerSpeed = stickPointerSpeed,
@@ -278,6 +290,7 @@ public sealed class ProfileMapper
 		var parsed = raw?.Trim().ToLowerInvariant() switch
 		{
 			"arrowkeys" => StickMotionMode.ArrowKeys,
+			"wheel" or "molette" => StickMotionMode.Wheel,
 			"pointer" or "souris" or "mouse" => StickMotionMode.Pointer,
 			"none" or "aucun" => StickMotionMode.None,
 			_ => (StickMotionMode?)null,

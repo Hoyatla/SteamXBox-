@@ -49,6 +49,10 @@ public class XInputStateMapperTests
     // them onto something else would make that something fire unexpectedly.
     //
     // Steam is no longer on that list: the Xbox button is a real button and it now produces it.
+    //
+    // QuickAccess stays on it, and that is the point of this test. The Xbox button launches Steam;
+    // it is not the mode switch. Mapping it onto QuickAccess to give the pad a switch was done on
+    // 14 August and reverted the same day — the switch is the L3+R3 hold, in InputModeHandler.
     [Fact]
     public void NothingIsMappedOntoTheSteamControllerOnlyButtons()
     {

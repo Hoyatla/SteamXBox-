@@ -1,15 +1,23 @@
+using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Output;
 
 namespace Sc2Xboxed.Core.Runtime;
 
 /// <summary>
-/// One virtual Xbox pad per physical controller.
+/// One virtual pad per physical controller, shaped for the controller's family.
 /// </summary>
 /// <remarks>
 /// The reason the whole multi-controller change exists. Reading several pads at once is only half
 /// of it: if they all feed one virtual pad, a split-screen game still sees a single player, and two
 /// people pressing at once produce one incoherent stream of input rather than two players. Keeping
 /// them apart all the way to the game is what makes the second player real.
+///
+/// <para>
+/// The family decides the pad's shape. A Steam Controller or an Xbox pad becomes a virtual Xbox 360
+/// pad; a DualSense becomes a virtual DualShock 4, so a game reads it as the PlayStation pad its
+/// labels promise rather than an Xbox controller it does not resemble. Each controller gets exactly
+/// one pad, of the family it arrived as, for the whole time it is attached.
+/// </para>
 ///
 /// <para>
 /// A pad is connected as soon as its controller is attached, and released when the controller
@@ -22,7 +30,7 @@ namespace Sc2Xboxed.Core.Runtime;
 /// </para>
 ///
 /// <para>
-/// The factory is injected so this can be tested without ViGEm, which needs a driver and real
+/// The factories are injected so this can be tested without ViGEm, which needs a driver and real
 /// hardware. What is worth testing here is the bookkeeping — one pad per controller, no duplicates,
 /// released on disconnect — and none of that is about ViGEm.
 /// </para>
@@ -30,15 +38,18 @@ namespace Sc2Xboxed.Core.Runtime;
 public sealed class VirtualPadSet : IAsyncDisposable
 {
     // The pad of a controller that goes away is released from a reader task while the main loop
-    // may be creating or submitting to other pads, so the dictionary is never touched without
+    // may be creating or submitting to other pads, so the dictionaries are never touched without
     // holding this. No await happens under the lock.
     private readonly object _gate = new();
-    private readonly Dictionary<string, IVirtualXbox360Sink> _pads = new(StringComparer.Ordinal);
-    private readonly Func<IVirtualXbox360Sink> _factory;
+    private readonly Dictionary<string, IVirtualXbox360Sink> _xboxPads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IVirtualDS4Sink> _ds4Pads = new(StringComparer.Ordinal);
+    private readonly Func<ControllerIdentity, IVirtualXbox360Sink> _xboxFactory;
+    private readonly Func<ControllerIdentity, IVirtualDS4Sink> _ds4Factory;
     private readonly Action<string>? _log;
     private readonly Func<IDisposable>? _recordCreation;
 
-    /// <param name="factory">Creates one virtual pad. Called once per physical controller.</param>
+    /// <param name="xboxFactory">Creates one virtual Xbox 360 pad. Called once per Xbox-family controller.</param>
+    /// <param name="ds4Factory">Creates one virtual DualShock 4 pad. Called once per DualSense controller.</param>
     /// <param name="log">Optional diagnostic sink.</param>
     /// <param name="recordCreation">
     /// Optional. Called around the connection, and disposed once it has completed, so a caller that
@@ -46,16 +57,24 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// </param>
     /// <remarks>
     /// The hook wraps the connection rather than the factory because the device does not exist until
-    /// the connection completes — a snapshot taken around <paramref name="factory"/> would see
-    /// nothing new. It is a callback rather than a direct call because this class is deliberately
-    /// free of Windows: the device tree lives a layer out, and is testable only on a real machine.
+    /// the connection completes — a snapshot taken around a factory call would see nothing new. It
+    /// is a callback rather than a direct call because this class is deliberately free of Windows:
+    /// the device tree lives a layer out, and is testable only on a real machine.
+    ///
+    /// <para>
+    /// The factory receives the controller's <see cref="ControllerIdentity"/>, not just its id,
+    /// because the pad's rumble has to be routed back to the physical controller that owns it — by
+    /// kind, by XInput slot, by HID path — and none of that can be derived from the id alone.
+    /// </para>
     /// </remarks>
     public VirtualPadSet(
-        Func<IVirtualXbox360Sink> factory,
+        Func<ControllerIdentity, IVirtualXbox360Sink> xboxFactory,
+        Func<ControllerIdentity, IVirtualDS4Sink> ds4Factory,
         Action<string>? log = null,
         Func<IDisposable>? recordCreation = null)
     {
-        _factory = factory;
+        _xboxFactory = xboxFactory;
+        _ds4Factory = ds4Factory;
         _log = log;
         _recordCreation = recordCreation;
     }
@@ -63,51 +82,76 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// <summary>How many virtual pads are currently connected.</summary>
     public int Count
     {
-        get { lock (_gate) return _pads.Count; }
+        get { lock (_gate) return _xboxPads.Count + _ds4Pads.Count; }
     }
 
     /// <summary>Whether a controller already has a virtual pad connected.</summary>
     /// <remarks>
-    /// The cheap check the frame loop uses before asking <see cref="ForAsync"/> to create one: pads
-    /// are now connected at attach time, so on the steady path this answers true and the request
-    /// never has to go through the async connect path.
+    /// The cheap check the frame loop uses before asking the family-aware connect methods to create
+    /// one: pads are now connected at attach time, so on the steady path this answers true and the
+    /// request never has to go through the async connect path.
     /// </remarks>
     public bool Has(string controllerId)
     {
-        lock (_gate) return _pads.ContainsKey(controllerId);
+        lock (_gate)
+        {
+            return _xboxPads.ContainsKey(controllerId) || _ds4Pads.ContainsKey(controllerId);
+        }
     }
 
     /// <summary>The controllers that have a virtual pad, in creation order.</summary>
     public IReadOnlyCollection<string> ControllerIds
     {
-        get { lock (_gate) return _pads.Keys.ToList(); }
+        get
+        {
+            lock (_gate)
+            {
+                return _xboxPads.Keys.Concat(_ds4Pads.Keys).ToList();
+            }
+        }
     }
 
     /// <summary>
-    /// The virtual pad belonging to one controller, connecting it when the controller does not have
-    /// one yet.
+    /// The virtual Xbox 360 pad belonging to one controller, connecting it when the controller does
+    /// not have one yet.
     /// </summary>
-    public async ValueTask<IVirtualXbox360Sink> ForAsync(string controllerId, CancellationToken cancellationToken)
+    public ValueTask<IVirtualXbox360Sink> ForAsync(ControllerIdentity identity, CancellationToken cancellationToken)
+        => ConnectAsync(identity, cancellationToken, _xboxPads, _xboxFactory);
+
+    /// <summary>
+    /// The virtual DualShock 4 pad belonging to one controller, connecting it when the controller
+    /// does not have one yet.
+    /// </summary>
+    public ValueTask<IVirtualDS4Sink> ForDS4Async(ControllerIdentity identity, CancellationToken cancellationToken)
+        => ConnectAsync(identity, cancellationToken, _ds4Pads, _ds4Factory);
+
+    private async ValueTask<T> ConnectAsync<T>(
+        ControllerIdentity identity,
+        CancellationToken cancellationToken,
+        Dictionary<string, T> pads,
+        Func<ControllerIdentity, T> factory) where T : IVirtualPadSink
     {
+        var controllerId = identity.Id;
+
         lock (_gate)
         {
-            if (_pads.TryGetValue(controllerId, out var existing))
+            if (pads.TryGetValue(controllerId, out var existing))
             {
                 return existing;
             }
         }
 
-        var pad = _factory();
+        var pad = factory(identity);
 
         using (_recordCreation?.Invoke())
         {
             await pad.ConnectAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        IVirtualXbox360Sink? redundant = null;
+        T? redundant = default;
         lock (_gate)
         {
-            if (_pads.TryGetValue(controllerId, out var existing))
+            if (pads.TryGetValue(controllerId, out var existing))
             {
                 // The controller left and came back while ours was being connected. Hand out the
                 // pad that won and discard the one just built, outside the lock.
@@ -116,8 +160,8 @@ public sealed class VirtualPadSet : IAsyncDisposable
             }
             else
             {
-                _pads[controllerId] = pad;
-                _log?.Invoke($"virtual pad {_pads.Count} connected for {controllerId}");
+                pads[controllerId] = pad;
+                _log?.Invoke($"virtual pad {Count} connected for {controllerId}");
             }
         }
 
@@ -129,43 +173,12 @@ public sealed class VirtualPadSet : IAsyncDisposable
         return pad;
     }
 
-    /// <summary>Sends one report to every connected pad.</summary>
+    /// <summary>Sends the neutral report to one controller's pad, of whichever family it is.</summary>
     /// <remarks>
-    /// For the transitions that must apply to everyone at once — leaving Xbox mode, handing the
-    /// controllers to Steam. Sending neutral to only the pad that happened to send the last frame
-    /// would leave the other players' pads holding whatever they were last told, which in a game
-    /// reads as a stuck stick or a held trigger.
-    /// </remarks>
-    public async ValueTask SubmitAllAsync(Xbox360Report report, CancellationToken cancellationToken)
-    {
-        List<IVirtualXbox360Sink> pads;
-        lock (_gate)
-        {
-            pads = _pads.Values.ToList();
-        }
-
-        foreach (var pad in pads)
-        {
-            try
-            {
-                await pad.SubmitAsync(report, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _log?.Invoke($"submitting to a virtual pad: {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Sends one report to one controller's pad, and to no other.
-    /// </summary>
-    /// <remarks>
-    /// The counterpart of <see cref="SubmitAllAsync"/>, for what concerns a single player. Leaving
-    /// Xbox mode is the case: the pad of the controller that switched must go neutral, and the pads
-    /// of everyone still playing must not — a whole-set neutralisation there drops the sticks of
-    /// every other player at once, which in a game reads as everybody's controller failing at the
-    /// moment one person changed mode.
+    /// The transition that must affect one player and no other — leaving Xbox mode, neutralising a
+    /// pad that switched to Profile — has to say the family's own neutral: a DualShock 4 report to
+    /// an Xbox pad is nonsense, and so is the reverse. This picks the report the pad was created
+    /// with.
     ///
     /// <para>
     /// Does nothing when the controller has no pad. That is not an error: a controller that left
@@ -173,29 +186,56 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// just to neutralise it would connect a device to the game to say nothing with it.
     /// </para>
     /// </remarks>
-    public async ValueTask SubmitForAsync(string controllerId, Xbox360Report report, CancellationToken cancellationToken)
+    public async ValueTask NeutralizeForAsync(string controllerId, CancellationToken cancellationToken)
     {
-        IVirtualXbox360Sink? pad;
+        IVirtualXbox360Sink? xboxPad;
+        IVirtualDS4Sink? ds4Pad;
 
         lock (_gate)
         {
-            _pads.TryGetValue(controllerId, out pad);
+            _xboxPads.TryGetValue(controllerId, out xboxPad);
+            _ds4Pads.TryGetValue(controllerId, out ds4Pad);
         }
 
-        if (pad is null)
+        if (xboxPad is not null)
         {
-            return;
+            try
+            {
+                await xboxPad.SubmitAsync(Xbox360Report.Neutral, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Reported, never propagated: one driver refusing a report must not take down the
+                // loop that feeds every other player.
+                _log?.Invoke($"neutralising the virtual pad of {controllerId}: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
-        try
+        if (ds4Pad is not null)
         {
-            await pad.SubmitAsync(report, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await ds4Pad.SubmitAsync(DS4Report.Neutral, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log?.Invoke($"neutralising the virtual pad of {controllerId}: {ex.GetType().Name}: {ex.Message}");
+            }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+    }
+
+    /// <summary>Sends the neutral report to every connected pad, each of its own family.</summary>
+    /// <remarks>
+    /// For the transitions that must apply to everyone at once — leaving Xbox mode, handing the
+    /// controllers to Steam. Sending neutral to only the pad that happened to send the last frame
+    /// would leave the other players' pads holding whatever they were last told, which in a game
+    /// reads as a stuck stick or a held trigger.
+    /// </remarks>
+    public async ValueTask NeutralizeAllAsync(CancellationToken cancellationToken)
+    {
+        foreach (var controllerId in ControllerIds)
         {
-            // Reported, never propagated: one driver refusing a report must not take down the loop
-            // that feeds every other player.
-            _log?.Invoke($"submitting to the virtual pad of {controllerId}: {ex.GetType().Name}: {ex.Message}");
+            await NeutralizeForAsync(controllerId, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -208,20 +248,45 @@ public sealed class VirtualPadSet : IAsyncDisposable
     /// </remarks>
     public async ValueTask ForgetAsync(string controllerId)
     {
-        IVirtualXbox360Sink? pad;
+        IVirtualXbox360Sink? xboxPad;
+        IVirtualDS4Sink? ds4Pad;
+
         lock (_gate)
         {
-            if (!_pads.Remove(controllerId, out pad))
-            {
-                return;
-            }
+            _xboxPads.Remove(controllerId, out xboxPad);
+            _ds4Pads.Remove(controllerId, out ds4Pad);
         }
 
+        if (xboxPad is not null)
+        {
+            await ReleaseAsync(controllerId, xboxPad).ConfigureAwait(false);
+        }
+
+        if (ds4Pad is not null)
+        {
+            await ReleaseAsync(controllerId, ds4Pad).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask ReleaseAsync(string controllerId, IVirtualXbox360Sink pad)
+    {
         try
         {
-            // Neutral before releasing: a pad disposed while holding a deflected stick can leave the
-            // game reading that deflection until it notices the disconnection.
             await pad.SubmitAsync(Xbox360Report.Neutral, CancellationToken.None).ConfigureAwait(false);
+            await pad.DisposeAsync().ConfigureAwait(false);
+            _log?.Invoke($"virtual pad released for {controllerId}");
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"releasing the virtual pad of {controllerId}: {ex.Message}");
+        }
+    }
+
+    private async ValueTask ReleaseAsync(string controllerId, IVirtualDS4Sink pad)
+    {
+        try
+        {
+            await pad.SubmitAsync(DS4Report.Neutral, CancellationToken.None).ConfigureAwait(false);
             await pad.DisposeAsync().ConfigureAwait(false);
             _log?.Invoke($"virtual pad released for {controllerId}");
         }
@@ -233,15 +298,9 @@ public sealed class VirtualPadSet : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        List<string> ids;
-        lock (_gate)
+        foreach (var controllerId in ControllerIds)
         {
-            ids = _pads.Keys.ToList();
-        }
-
-        foreach (var id in ids)
-        {
-            await ForgetAsync(id).ConfigureAwait(false);
+            await ForgetAsync(controllerId).ConfigureAwait(false);
         }
     }
 }

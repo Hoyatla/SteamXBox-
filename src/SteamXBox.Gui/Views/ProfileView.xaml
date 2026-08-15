@@ -152,14 +152,18 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="{loc:T Text='Sauvegarder'}" Command="{Binding SaveProfileCommand}"
-                            Style="{StaticResource PrimaryButton}" Margin="0,0,4,0" Height="36" FontSize="13"
+                    <Button Grid.Column="0" Content="{loc:T Text='Nouveau'}" Command="{Binding NewProfileCommand}"
+                            Style="{StaticResource SecondaryButton}" Margin="0,0,4,0" Height="36" FontSize="13"
                             IsEnabled="{Binding HasTarget}"/>
-                    <Button Grid.Column="1" Content="{loc:T Text='Appliquer'}" Command="{Binding ApplyProfileCommand}"
+                    <Button Grid.Column="1" Content="{loc:T Text='Sauvegarder'}" Command="{Binding SaveProfileCommand}"
+                            Style="{StaticResource PrimaryButton}" Margin="4,0" Height="36" FontSize="13"
+                            IsEnabled="{Binding HasTarget}"/>
+                    <Button Grid.Column="2" Content="{loc:T Text='Appliquer'}" Command="{Binding ApplyProfileCommand}"
                             Style="{StaticResource SecondaryButton}" Margin="4,0" Height="36" FontSize="13"
                             IsEnabled="{Binding HasTarget}"/>
-                    <Button Grid.Column="2" Content="{loc:T Text='Supprimer'}" Command="{Binding DeleteSelectedControllerProfileCommand}"
+                    <Button Grid.Column="3" Content="{loc:T Text='Supprimer'}" Command="{Binding DeleteSelectedControllerProfileCommand}"
                             Style="{StaticResource DangerButton}" Margin="4,0,0,0" Height="36" FontSize="13"
                             IsEnabled="{Binding HasTarget}"/>
                 </Grid>
@@ -281,8 +285,10 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <!-- Le pointeur du bureau : trois reglages distincts de ceux
                                          au-dessus, qui ne concernent que la manette virtuelle. -->
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
@@ -315,12 +321,20 @@
                                     <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickCurvePercent}"/>
                                 </DockPanel>
 
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:T Text='Dead zone sticks'}" VerticalAlignment="Center"
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:T Text='Dead zone stick gauche'}" VerticalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,4,0,4">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
-                                               Text="{Binding XboxStickDeadZoneDisplay}"/>
-                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxStickDeadZonePercent}"/>
+                                               Text="{Binding XboxLeftStickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxLeftStickDeadZonePercent}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:T Text='Dead zone stick droit'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="5" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding XboxRightStickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding XboxRightStickDeadZonePercent}"/>
                                 </DockPanel>
 
                                 <!-- Les trois au-dessus reglent la manette virtuelle envoyee aux jeux.
@@ -328,32 +342,45 @@
                                      autre chemin : une manette sans pave tactile pointe avec son stick
                                      droit, et ces valeurs etaient des constantes du programme,
                                      identiques pour toutes les manettes et invisibles ici. -->
-                                <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,4"
+                                <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,12,0,4"
                                            Text="{loc:T Text='Stick droit : pointeur du bureau'}" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextPrimaryBrush}"/>
 
-                                <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Vitesse'}" VerticalAlignment="Center"
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:T Text='Vitesse'}" VerticalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
-                                <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,0,4">
+                                <DockPanel Grid.Row="7" Grid.Column="1" Margin="0,4,0,4">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
                                                Text="{Binding StickPointerSpeedDisplay}"/>
                                     <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickPointerSpeedPercent}"/>
                                 </DockPanel>
 
-                                <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:T Text='Courbe'}" VerticalAlignment="Center"
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:T Text='Courbe'}" VerticalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
-                                <DockPanel Grid.Row="7" Grid.Column="1" Margin="0,4,0,4">
+                                <DockPanel Grid.Row="8" Grid.Column="1" Margin="0,4,0,4">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
                                                Text="{Binding StickPointerCurveDisplay}"/>
                                     <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickPointerCurvePercent}"/>
                                 </DockPanel>
 
-                                <TextBlock Grid.Row="8" Grid.Column="0" Text="{loc:T Text='Dead zone'}" VerticalAlignment="Center"
+                                <TextBlock Grid.Row="9" Grid.Column="0" Text="{loc:T Text='Dead zone stick droit (pointeur)'}" VerticalAlignment="Center"
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
-                                <DockPanel Grid.Row="8" Grid.Column="1" Margin="0,4,0,4">
+                                <DockPanel Grid.Row="9" Grid.Column="1" Margin="0,4,0,4">
                                     <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
-                                               Text="{Binding StickDeadZoneDisplay}"/>
-                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickDeadZonePercent}"/>
+                                               Text="{Binding RightStickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightStickDeadZonePercent}"/>
+                                </DockPanel>
+
+                                <!--
+                                    Le stick gauche a la sienne, comme le droit. Un seul reglage pour
+                                    les deux ne pouvait pas etre pose : la valeur qui fait taire un
+                                    stick gauche use n'est pas celle qui garde un stick droit precis.
+                                -->
+                                <TextBlock Grid.Row="10" Grid.Column="0" Text="{loc:T Text='Dead zone stick gauche'}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <DockPanel Grid.Row="10" Grid.Column="1" Margin="0,4,0,4">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
+                                               Text="{Binding LeftStickDeadZoneDisplay}"/>
+                                    <Slider Style="{StaticResource SliderCompact}" Value="{Binding LeftStickDeadZonePercent}"/>
                                 </DockPanel>
                             </Grid>
                         </StackPanel>
@@ -453,12 +480,12 @@
                             <ComboBox Grid.Row="5" Grid.Column="3" Style="{StaticResource ComboBoxDark}" Margin="0,4,0,4"
                                       ItemsSource="{Binding RightStickOptions}" ItemTemplate="{StaticResource LocalizedComboItem}" SelectedItem="{Binding MotionRightStick}"/>
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Dead zone stick'}" VerticalAlignment="Center"
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:T Text='Dead zone stick droit'}" VerticalAlignment="Center"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                             <DockPanel Grid.Row="6" Grid.Column="1" Margin="0,4,12,4">
                                 <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValueText}"
-                                           Text="{Binding StickDeadZoneDisplay}"/>
-                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding StickDeadZonePercent}"/>
+                                           Text="{Binding RightStickDeadZoneDisplay}"/>
+                                <Slider Style="{StaticResource SliderCompact}" Value="{Binding RightStickDeadZonePercent}"/>
                             </DockPanel>
 
                         </Grid>

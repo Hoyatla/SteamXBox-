@@ -45,9 +45,15 @@ Library/Exclusif/
 /Sc2Xboxed.Osk.exe
 /Sc2XboxedPads.Osk.exe
 /Sc2XboxedSticks.Osk.exe
+/Sc2XboxedSteam.Osk.exe
+/Sc2XboxedPS5.Osk.exe
+/Sc2XboxedXbox.Osk.exe
 /SteamXBox.Debug.exe
 /publish/
 /artifacts/
+
+# Sauvegardes locales des binaires a la racine
+/_backup_*/
 
 # Artefacts d'execution.
 *.signal

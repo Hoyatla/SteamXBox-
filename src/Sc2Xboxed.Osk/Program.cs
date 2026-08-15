@@ -20,6 +20,16 @@ public static class Program
     private static StreamWriter? _logFile;
     internal static OskSettings Settings = OskSettings.Load();
 
+    /// <summary>
+    /// Beyond this, a waiting show signal belongs to an earlier session and is thrown away.
+    /// </summary>
+    /// <remarks>
+    /// Generous compared with what it protects: a toggle pressed while the overlay is still starting
+    /// is seconds old at worst. Thirty covers the slowest cold start with room to spare, and still
+    /// leaves nothing that could reach the next launch.
+    /// </remarks>
+    private static readonly TimeSpan StaleShowSignal = TimeSpan.FromSeconds(30);
+
     /// <summary>Whether the keyboard is on screen right now, as this process knows it.</summary>
     /// <remarks>
     /// Kept here rather than read from <c>form.Visible</c> because the watcher runs on its own
@@ -160,6 +170,21 @@ public static class Program
     /// </remarks>
     private static OskControllerKind? KindFromExecutableName()
     {
+        // Fixed at compile time by the family's own project, not guessed from the file name.
+        //
+        // One binary used to be copied by hand under two names and read its own name back to decide
+        // which family it served — so PS5 and Xbox shared a single copy, and nothing in the build
+        // produced those names at all. A build that forgot the copy left stale executables running
+        // beside fresh ones, which is why four overlays could coexist and none of the logs could be
+        // matched to the window on screen.
+        //
+        // Three projects now compile this same source with one of these constants each.
+#if OSK_STEAM
+        return OskControllerKind.Steam;
+#elif OSK_PS5 || OSK_XBOX
+        return OskControllerKind.Sticks;
+#else
+        // The unmarked build keeps the old behaviour, so a single-controller session still works.
         var name = Path.GetFileNameWithoutExtension(Environment.ProcessPath) ?? "";
 
         if (name.Contains("Pads", StringComparison.OrdinalIgnoreCase))
@@ -170,6 +195,7 @@ public static class Program
         return name.Contains("Sticks", StringComparison.OrdinalIgnoreCase)
             ? OskControllerKind.Sticks
             : null;
+#endif
     }
 
     /// <summary>Set once at startup; overrides the kind carried on each frame.</summary>
@@ -229,11 +255,27 @@ public static class Program
 
     public static void Main(string[] args)
     {
-        // One log per executable: two specialised keyboards writing to one file would truncate
-        // each other on startup, and the survivor's log would look like the only one that ran.
+        // One log per instance, not per executable. Two controllers typing at once run two copies
+        // of the same exe, and they used to share one file: the first to open it with append:false
+        // held it for its whole life, and every later copy died on this line with a sharing
+        // violation before its banner or its window ever existed. The suffix makes each keyboard's
+        // log its own; the try/catch makes sure a log that cannot be opened never takes the
+        // keyboard down with it.
         var stem = Path.GetFileNameWithoutExtension(Environment.ProcessPath) ?? "osk";
-        var logPath = Path.Combine(AppContext.BaseDirectory, $"steamxbox-{stem}-debug.log");
-        _logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        var suffix = ReadInstanceSuffix();
+        var logPath = Path.Combine(AppContext.BaseDirectory,
+            $"steamxbox-{stem}{(suffix.Length == 0 ? "" : $"-{suffix}")}-debug.log");
+
+        try
+        {
+            _logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        }
+        catch
+        {
+            // No log at all is better than no keyboard: the overlay keeps working, only its
+            // story is lost.
+            _logFile = null;
+        }
 
         // Before the form exists, so the first paint is already skinned.
         OverlayPalette.Load(AppContext.BaseDirectory, Settings.Theme);
@@ -383,9 +425,28 @@ public static class Program
             try { if (File.Exists(stale)) File.Delete(stale); } catch { }
         }
 
+        // A show signal is kept only while it is fresh. The rule used to be "keep it whatever its
+        // age", to avoid swallowing a toggle pressed during the seconds the overlay takes to start.
+        // That reason holds for a signal written moments ago and for no other: one left behind by a
+        // session that ended days earlier made the keyboard appear on screen the instant SteamXBox
+        // was launched, before the user had asked for anything.
+        //
+        // Found 12 August: osk-show-bb342d70.signal, written on the 12th at 04:54, still on disk and
+        // still being honoured. The overlay opens when it is asked for, and a request from another
+        // session is not a request.
         if (File.Exists(showSignalPath))
         {
-            Log("A show signal was already waiting; honouring it.");
+            var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(showSignalPath);
+
+            if (age > StaleShowSignal)
+            {
+                try { File.Delete(showSignalPath); } catch { }
+                Log($"A show signal was waiting but is {age.TotalMinutes:F0} min old; discarded rather than honoured.");
+            }
+            else
+            {
+                Log("A show signal was already waiting; honouring it.");
+            }
         }
         Log($"Signal paths under {AppContext.BaseDirectory} (prewarm={prewarm})");
 
@@ -461,6 +522,7 @@ public static class Program
                                 form.UpdatePlacement();
                                 form.Show();
                                 form.BringToFront();
+                                form.AssertTopmost();
                                 // The overlay is layered and never activates, so no external probe
                                 // can tell whether it is on screen. Report it ourselves — to the log
                                 // for a human, and from here on to the core as well, through the
@@ -544,6 +606,7 @@ public static class Program
             // them. Neither the pinned rule nor the floating one had ever run.
             form.UpdatePlacement();
             form.Show();
+            form.AssertTopmost();
             _overlayShowing = true;
             Log("Overlay form shown.");
             Application.Run(form);

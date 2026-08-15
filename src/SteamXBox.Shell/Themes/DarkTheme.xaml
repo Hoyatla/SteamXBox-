@@ -22,6 +22,12 @@
         <TextBlock Text="{Binding Display}"/>
     </DataTemplate>
 
+    <!-- One Xbox 360 output entry: the shown name is the label stored beside the output value.
+         Same rule as OptionDisplayItem — an explicit template, never DisplayMemberPath. -->
+    <DataTemplate x:Key="OutputOptionItem">
+        <TextBlock Text="{Binding Label}"/>
+    </DataTemplate>
+
     <!--
         One row of the Xbox tab's button mapping: the name printed on the controller, then the
         Xbox 360 output it produces. Defined here rather than inline in the view so a skin can
@@ -38,7 +44,9 @@
             <ComboBox Grid.Column="1" Style="{DynamicResource ComboBoxDark}"
                       ItemsSource="{Binding DataContext.OutputOptions,
                                     RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                      SelectedItem="{Binding Output}"/>
+                      ItemTemplate="{StaticResource OutputOptionItem}"
+                      SelectedValuePath="Value"
+                      SelectedValue="{Binding Output}"/>
         </Grid>
     </DataTemplate>
 

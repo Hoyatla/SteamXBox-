@@ -22,6 +22,15 @@ public enum StickMotionMode
     /// <summary>Drives the mouse pointer (right stick) or the wheel (left stick).</summary>
     Pointer,
 
+    /// <summary>Drives the wheel (left stick only; the right stick has no wheel of its own).</summary>
+    /// <remarks>
+    /// Explicitly separate from <see cref="ArrowKeys"/>: before this existed the left stick was
+    /// wired to both the arrows and the wheel at once, so "Aucun" was the only way to stop the
+    /// wheel and the arrows kept firing anyway. One motion per stick per frame, and the choice is
+    /// what the Mouvements card shows.
+    /// </remarks>
+    Wheel,
+
     None,
 }
 

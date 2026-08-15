@@ -101,6 +101,25 @@ public static class ControllerCloak
     /// <summary>First line of the note when this product is also what turned cloaking on.</summary>
     private const string TurnedCloakOn = "cloak-on-by-steamxbox";
 
+    /// <summary>
+    /// Les appareils pretes au systeme le temps d'un mode natif, par chemin d'instance.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Apply"/> tourne a chaque rebalayage de peripheriques, quelques secondes apart, et
+    /// remasque tout ce qui est branche. Sans cette liste il reprenait la manette qu'une bascule
+    /// venait de rendre : mesure le 15 aout, "rendu au systeme (mode natif)" a 00:22:45.882 puis
+    /// "hiding 1 controller(s)" a 00:22:48.851. Trois secondes de mode natif, puis le masquage
+    /// revenait tout seul et la manette redevenait invisible pour le jeu sans que rien ne l'ait
+    /// demande.
+    ///
+    /// <para>
+    /// En memoire seulement, et c'est voulu : un pret ne survit pas a la session. Si SteamXBox meurt
+    /// pendant qu'une manette est prete, elle reste rendue — l'etat sur pour un utilisateur est
+    /// celui ou sa manette fonctionne.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> OnLoan = new(StringComparer.OrdinalIgnoreCase);
+
     private static bool _warned;
 
     /// <summary>Whether the repair of an earlier session has already been done in this one.</summary>
@@ -266,7 +285,19 @@ public static class ControllerCloak
             // combination is a single composite device: its gamepad interface is safe to hide, its
             // parent is not, and hiding the parent would leave the machine unable to type — which
             // includes being unable to reach the screen that would undo it.
-            var ours = candidates.Where(id => !DeviceTree.IsOrCarriesKeyboardOrMouse(id)).ToArray();
+            // Ni une manette pretee au systeme. Elle est branchee, elle est a nous, et c'est
+            // precisement pour ca qu'il ne faut pas la reprendre : son proprietaire l'a mise en mode
+            // natif il y a trois secondes.
+            string[] lent;
+            lock (OnLoan)
+            {
+                lent = OnLoan.ToArray();
+            }
+
+            var ours = candidates
+                .Where(id => !DeviceTree.IsOrCarriesKeyboardOrMouse(id))
+                .Where(id => !lent.Contains(id, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
 
             foreach (var refused in candidates.Except(ours, StringComparer.OrdinalIgnoreCase))
             {
@@ -376,6 +407,18 @@ public static class ControllerCloak
             return;
         }
 
+        // Une manette pretee au systeme n'est pas une manette partie. Demasquer la fait reapparaitre
+        // sous un autre jour au rebalayage, ce qui a ete lu comme un depart : le 15 aout a 00:23:04
+        // ce chemin a rendu le dernier appareil de la note et coupe le cloaking GLOBAL — donc
+        // demasque toutes les autres manettes — trois cents millisecondes apres une simple bascule.
+        lock (OnLoan)
+        {
+            if (OnLoan.Contains(device))
+            {
+                return;
+            }
+        }
+
         try
         {
             var lines = File.ReadAllLines(NotePath);
@@ -410,6 +453,110 @@ public static class ControllerCloak
         {
             // The device stays hidden and the note still names it, so the next launch repairs it.
             log.Info(LogCategory.Session, $"HidHide: could not give back {device}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Rend une manette au systeme le temps qu'elle soit en mode natif, et la reprend au retour.
+    /// </summary>
+    /// <remarks>
+    /// Separe de <see cref="ReleaseOne"/>, qui n'est pas fait pour ca et ne marchait pas ici.
+    /// <c>ReleaseOne</c> ne rend que ce que la note reclame, et la note ne nomme que les appareils
+    /// que CETTE session a ajoutes a la liste HidHide. Quand les manettes y figuraient deja d'une
+    /// session precedente — le cas ordinaire, celui que le journal du 15 aout montre a 00:17:35,
+    /// "already on its list but cloaking was off" — la note ne contient qu'un en-tete et zero
+    /// appareil. <c>ReleaseOne</c> concluait alors "rien de du" et sortait sans rien demasquer.
+    ///
+    /// <para>
+    /// La bascule disait donc "rendue au systeme" pendant que la manette restait invisible. Le
+    /// message etait vrai sur l'intention et faux sur le fait.
+    /// </para>
+    ///
+    /// <para>
+    /// Ici on agit sur l'appareil directement, sans passer par la note. La note garde son role, qui
+    /// est un role de sortie : dire ce qu'il faut rendre si la session meurt. Un mode natif est
+    /// temporaire et n'a pas a la reecrire — et s'il la laisse revendiquer un appareil deja rendu,
+    /// le pire qui arrive est un <c>--dev-unhide</c> sans effet a la fermeture.
+    /// </para>
+    /// </remarks>
+    public static void Uncloak(string identityId, DiagnosticLog log)
+    {
+        if (!Available || !AttachedControllers.DeviceByIdentity.TryGetValue(identityId, out var device))
+        {
+            log.Info(LogCategory.Session,
+                $"HidHide: aucun appareil connu pour {identityId}; la manette reste masquee.");
+            return;
+        }
+
+        try
+        {
+            // Note AVANT de demasquer. Le rebalayage tourne sur un autre fil et peut passer entre
+            // les deux : marque en premier, il ne trouve rien a reprendre ; marque en dernier, il
+            // remasque dans l'intervalle.
+            lock (OnLoan)
+            {
+                OnLoan.Add(device);
+            }
+
+            // Le cloaking global reste allume : les autres manettes, elles, doivent rester masquees.
+            new HidHideConfigurator().Unhide([device], turnCloakOff: false);
+            log.Info(LogCategory.Session, $"HidHide: {device} rendu au systeme (mode natif).");
+        }
+        catch (Exception exception)
+        {
+            log.Info(LogCategory.Session, $"HidHide: impossible de rendre {device}: {exception.Message}");
+        }
+    }
+
+    /// <summary>Whether this controller is currently lent to the system for a native mode.</summary>
+    /// <remarks>
+    /// Read by the frame loop so a native-family pad arriving mid-session in Xbox mode is uncloaked
+    /// once and not on every frame: <see cref="Uncloak"/> adds to <see cref="OnLoan"/>, and asking
+    /// HidHide again for a device already given back would be an empty command every eight
+    /// milliseconds.
+    /// </remarks>
+    public static bool IsOnLoan(string identityId)
+    {
+        if (!AttachedControllers.DeviceByIdentity.TryGetValue(identityId, out var device))
+        {
+            return false;
+        }
+
+        lock (OnLoan)
+        {
+            return OnLoan.Contains(device);
+        }
+    }
+
+    /// <inheritdoc cref="Uncloak"/>
+    public static void Recloak(string identityId, DiagnosticLog log)
+    {
+        if (!Available || !AttachedControllers.DeviceByIdentity.TryGetValue(identityId, out var device))
+        {
+            return;
+        }
+
+        try
+        {
+            var application = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(application))
+            {
+                return;
+            }
+
+            // Le pret prend fin d'abord : tant que l'appareil y figure, Apply refuse de le masquer,
+            // et le masquage ci-dessous serait defait au rebalayage suivant.
+            lock (OnLoan)
+            {
+                OnLoan.Remove(device);
+            }
+
+            new HidHideConfigurator().HideOnly(application, [device], turnCloakOn: true);
+            log.Info(LogCategory.Session, $"HidHide: {device} repris par SteamXBox.");
+        }
+        catch (Exception exception)
+        {
+            log.Info(LogCategory.Session, $"HidHide: impossible de reprendre {device}: {exception.Message}");
         }
     }
 

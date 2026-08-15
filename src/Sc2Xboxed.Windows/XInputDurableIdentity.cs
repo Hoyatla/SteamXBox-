@@ -109,6 +109,34 @@ public static class XInputDurableIdentity
         => DeviceForSlot(slot, log) is { } device ? DeviceTree.DurableKeyFor(device, log) : null;
 
     /// <summary>
+    /// Every connected slot with the vendor and product id it reports, for matching HID interfaces.
+    /// </summary>
+    /// <remarks>
+    /// The identity code matches a slot to a device by vendor and product, and gives up when several
+    /// pads share the pair. The HID correlator needs the same pair to know which HID interfaces are
+    /// candidates at all — a pad is identified by matching its input, never by name or order.
+    /// </remarks>
+    public static IReadOnlyList<(int Slot, ushort VendorId, ushort ProductId)> ConnectedPads(
+        Action<string>? log = null)
+    {
+        var pads = new List<(int, ushort, ushort)>();
+
+        foreach (var slot in XInputControllerSource.ConnectedSlots())
+        {
+            if (TryReadVendorAndProduct(slot, out var vendorId, out var productId, out _))
+            {
+                pads.Add((slot, vendorId, productId));
+            }
+            else
+            {
+                log?.Invoke($"XInput slot {slot}: no vendor and product id to match a HID interface against.");
+            }
+        }
+
+        return pads;
+    }
+
+    /// <summary>
     /// The interface path of the real pad on a slot, for hiding it from everything else.
     /// </summary>
     /// <remarks>

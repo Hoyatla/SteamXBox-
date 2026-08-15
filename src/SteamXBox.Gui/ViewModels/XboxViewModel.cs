@@ -9,6 +9,9 @@ using SteamXBox.Shell.Localization;
 
 namespace SteamXBox.Gui.ViewModels;
 
+/// <summary>One entry of the output dropdown: the stored Xbox 360 output and the name shown for the family.</summary>
+public record struct OutputOption(Xbox360Buttons Value, string Label);
+
 /// <summary>One remappable physical button, as one row of the Buttons panel.</summary>
 public partial class XboxButtonBinding : ObservableObject
 {
@@ -71,16 +74,31 @@ public partial class XboxViewModel : ObservableObject
     /// <summary>
     /// Every Xbox 360 output a physical button can produce, plus "none" to disable it.
     /// </summary>
-    public Xbox360Buttons[] OutputOptions { get; } =
-    [
-        Xbox360Buttons.None,
-        Xbox360Buttons.A, Xbox360Buttons.B, Xbox360Buttons.X, Xbox360Buttons.Y,
-        Xbox360Buttons.LeftShoulder, Xbox360Buttons.RightShoulder,
-        Xbox360Buttons.LeftThumb, Xbox360Buttons.RightThumb,
-        Xbox360Buttons.DPadUp, Xbox360Buttons.DPadDown,
-        Xbox360Buttons.DPadLeft, Xbox360Buttons.DPadRight,
-        Xbox360Buttons.Start, Xbox360Buttons.Back,
-    ];
+    /// <remarks>
+    /// The stored value never changes — the profile is always written as Xbox 360 buttons, whichever
+    /// pad family it describes. Only the shown name depends on the family: "B" under the Xbox tabs,
+    /// "Rond" under the PlayStation ones, because that is what the virtual pad delivers to the game.
+    /// </remarks>
+    public OutputOption[] OutputOptions { get; private set; } = [];
+
+    /// <summary>Card title, named after the virtual pad this family drives.</summary>
+    public string ModeTitle => ControllerStripViewModel.Shared.Family == Sc2Xboxed.Core.Input.ControllerKind.DualSense
+        ? Strings.Current["Mode DualShock 4"]
+        : Strings.Current["Mode Xbox360"];
+
+    /// <summary>
+    /// The family of the tab being edited, defaulting to Steam while none is shown. The reference
+    /// layout a new or reset map starts from depends on it: the Menu/View quirk is a measured Steam
+    /// Controller behaviour, and forcing it on a DualSense or an Xbox pad crosses their Options/Start.
+    /// </summary>
+    private static Sc2Xboxed.Core.Input.ControllerKind DefaultKind
+        => ControllerStripViewModel.Shared.Family ?? Sc2Xboxed.Core.Input.ControllerKind.SteamController;
+
+    /// <summary>Card description: which virtual pad this family drives.</summary>
+    public string ModeDescription =>
+        ControllerStripViewModel.Shared.Family == Sc2Xboxed.Core.Input.ControllerKind.DualSense
+            ? Strings.Current["Lorsque le mode Xbox est actif, la DualSense est transmise au jeu via un contrôleur virtuel DualShock 4 : elle garde sa disposition et ses noms PlayStation."]
+            : Strings.Current["Lorsque le mode Xbox est actif, le contrôleur Steam est transmis tel quel au jeu via le contrôleur virtuel Xbox 360."];
 
     /// <summary>The connected controllers, shared with the other tab.</summary>
     public ControllerStripViewModel Controllers => ControllerStripViewModel.Shared;
@@ -101,9 +119,45 @@ public partial class XboxViewModel : ObservableObject
         // The rows are named after the pad in the user's hands: "Rond (B)" under the PlayStation
         // tabs, "B" under the Xbox ones. Nothing about the mapping changes — only what the user is
         // told they are holding, so they are not translating every row in their head.
-        ControllerStripViewModel.Shared.FamilyChanged += RelabelBindings;
-        RelabelBindings(ControllerStripViewModel.Shared.Family);
+        ControllerStripViewModel.Shared.FamilyChanged += OnFamilyChanged;
+        OnFamilyChanged(ControllerStripViewModel.Shared.Family);
         OnEditChanged();
+    }
+
+    private void OnFamilyChanged(Sc2Xboxed.Core.Input.ControllerKind? family)
+    {
+        // Reconstruire avant de reetiqueter. Les lignes ne sont plus les memes d'une famille a
+        // l'autre — une manette Steam a quatre palettes arriere, une DualSense et une manette Xbox
+        // n'en ont aucune — donc changer d'onglet change la liste, pas seulement les etiquettes.
+        OnEditChanged();
+        RelabelBindings(family);
+        OutputOptions = OutputOptionsFor(family);
+        OnPropertyChanged(nameof(OutputOptions));
+        OnPropertyChanged(nameof(ModeTitle));
+        OnPropertyChanged(nameof(ModeDescription));
+    }
+
+    private static OutputOption[] OutputOptionsFor(Sc2Xboxed.Core.Input.ControllerKind? family)
+    {
+        var dualSense = family == Sc2Xboxed.Core.Input.ControllerKind.DualSense;
+        return
+        [
+            new(Xbox360Buttons.None, Strings.Current["Aucun"]),
+            new(Xbox360Buttons.A, dualSense ? "Croix" : "A"),
+            new(Xbox360Buttons.B, dualSense ? "Rond" : "B"),
+            new(Xbox360Buttons.X, dualSense ? "Carré" : "X"),
+            new(Xbox360Buttons.Y, dualSense ? "Triangle" : "Y"),
+            new(Xbox360Buttons.LeftShoulder, dualSense ? "L1" : "LB"),
+            new(Xbox360Buttons.RightShoulder, dualSense ? "R1" : "RB"),
+            new(Xbox360Buttons.LeftThumb, "L3"),
+            new(Xbox360Buttons.RightThumb, "R3"),
+            new(Xbox360Buttons.DPadUp, "D-Pad ↑"),
+            new(Xbox360Buttons.DPadDown, "D-Pad ↓"),
+            new(Xbox360Buttons.DPadLeft, "D-Pad ←"),
+            new(Xbox360Buttons.DPadRight, "D-Pad →"),
+            new(Xbox360Buttons.Start, dualSense ? "Options" : "Start"),
+            new(Xbox360Buttons.Back, dualSense ? "Partager" : "Back"),
+        ];
     }
 
     private void RelabelBindings(Sc2Xboxed.Core.Input.ControllerKind? family)
@@ -143,11 +197,15 @@ public partial class XboxViewModel : ObservableObject
             if (ActiveEdit is { } edit)
             {
                 var map = edit.XboxMap;
-                foreach (var button in XboxButtonMap.LeftSide)
+
+                // Les boutons de la famille affichee, pas ceux d'une manette Steam servis a tout le
+                // monde. Les onglets PS5 et Xbox montraient L4, L5, R4 et R5 — des palettes arriere
+                // que ces manettes n'ont pas — reglables et sans le moindre effet.
+                foreach (var button in XboxButtonMap.LeftSideFor(DefaultKind))
                 {
                     LeftBindings.Add(new XboxButtonBinding(button, LabelFor(button), map[button], OnBindingChanged));
                 }
-                foreach (var button in XboxButtonMap.RightSide)
+                foreach (var button in XboxButtonMap.RightSideFor(DefaultKind))
                 {
                     RightBindings.Add(new XboxButtonBinding(button, LabelFor(button), map[button], OnBindingChanged));
                 }
@@ -186,7 +244,7 @@ public partial class XboxViewModel : ObservableObject
 
     private XboxButtonMap CurrentMap()
     {
-        var map = XboxButtonMap.Default;
+        var map = XboxButtonMap.DefaultFor(DefaultKind);
         foreach (var binding in LeftBindings.Concat(RightBindings))
         {
             map[binding.Physical] = binding.Output;
@@ -211,10 +269,28 @@ public partial class XboxViewModel : ObservableObject
         return true;
     }
 
-    public int StickDeadZonePercent
+    /// <summary>
+    /// Dead zone of the left stick on the virtual pad.
+    /// </summary>
+    /// <remarks>
+    /// One slider moved both sticks at once, which is a setting nobody can use: the value that
+    /// silences a worn left stick is not the value that keeps a right stick precise, so the user had
+    /// to pick which of the two to spoil. Falls back to the single value profiles carried before the
+    /// split, so an existing profile shows exactly what it always showed.
+    /// </remarks>
+    public int LeftStickDeadZonePercent
     {
-        get => ActiveEdit is null ? 0 : (int)Math.Round(ActiveEdit.XboxStickDeadZone * 200);
-        set => Stage(p => p.XboxStickDeadZone = Math.Clamp(value, 0, 100) / 200.0);
+        get => ActiveEdit is null ? 0
+            : (int)Math.Round((ActiveEdit.XboxLeftStickDeadZone ?? ActiveEdit.XboxStickDeadZone) * 200);
+        set => Stage(p => p.XboxLeftStickDeadZone = Math.Clamp(value, 0, 100) / 200.0);
+    }
+
+    /// <summary>Dead zone of the right stick on the virtual pad.</summary>
+    public int RightStickDeadZonePercent
+    {
+        get => ActiveEdit is null ? 0
+            : (int)Math.Round((ActiveEdit.XboxRightStickDeadZone ?? ActiveEdit.XboxStickDeadZone) * 200);
+        set => Stage(p => p.XboxRightStickDeadZone = Math.Clamp(value, 0, 100) / 200.0);
     }
 
     /// <summary>50 % est linéaire ; en dessous la visée fine gagne, au-dessus la pleine amplitude arrive plus tôt.</summary>
@@ -283,7 +359,7 @@ public partial class XboxViewModel : ObservableObject
 
     private static readonly string[] TuningProperties =
     [
-        nameof(StickDeadZonePercent), nameof(StickCurvePercent), nameof(StickSensitivityPercent),
+        nameof(LeftStickDeadZonePercent), nameof(RightStickDeadZonePercent), nameof(StickCurvePercent), nameof(StickSensitivityPercent),
         nameof(TriggerThresholdPercent), nameof(TriggerFullPointPercent),
         nameof(VibrationEnabled), nameof(VibrationIntensityPercent), nameof(HapticForwarding),
         nameof(TriggerHapticsEnabled), nameof(TriggerHapticStrengthPercent), nameof(TriggerActuatorIndex),
@@ -298,8 +374,9 @@ public partial class XboxViewModel : ObservableObject
             return;
         }
 
-        ActiveEdit.ApplyXboxMap(XboxButtonMap.Default);
-        ActiveEdit.XboxStickDeadZone = 0.018;
+        ActiveEdit.ApplyXboxMap(XboxButtonMap.DefaultFor(DefaultKind));
+        ActiveEdit.XboxLeftStickDeadZone = 0.018;
+        ActiveEdit.XboxRightStickDeadZone = 0.018;
         ActiveEdit.XboxStickCurve = 1.0;
         ActiveEdit.XboxStickSensitivity = 1.0;
         ActiveEdit.XboxTriggerThreshold = 0.0;

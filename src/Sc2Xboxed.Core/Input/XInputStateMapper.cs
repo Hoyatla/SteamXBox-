@@ -106,6 +106,11 @@ public static class XInputStateMapper
 
         // The Xbox button becomes Steam, the flag a Steam Controller's Steam button produces, so it
         // reaches the launcher already wired to it instead of through a second path.
+        //
+        // It is NOT the mode-switch button, and turning it into one is a regression this line has
+        // already seen once, on 14 August. Launching Steam is what this button is for on this family;
+        // taking it for the switch takes the launcher away to solve a problem that belongs to
+        // InputModeHandler, where the L3+R3 hold lives.
         if ((buttons & Guide) != 0) result |= SteamControllerButtons.Steam;
 
         if ((buttons & DPadUp) != 0) result |= SteamControllerButtons.DPadUp;

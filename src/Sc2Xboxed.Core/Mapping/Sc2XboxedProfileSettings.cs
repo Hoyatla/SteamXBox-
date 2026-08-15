@@ -2,11 +2,28 @@ namespace Sc2Xboxed.Core.Mapping;
 
 public sealed record Sc2XboxedProfileSettings
 {
-    // Values arrived at by tuning against the hardware; the profile editor's "Default" mirrors them.
-    public static Sc2XboxedProfileSettings Default { get; } = new()
+    /// <summary>
+    /// Les valeurs reglees contre le materiel, sans opinion de famille.
+    /// </summary>
+    /// <remarks>
+    /// Le point de depart des trois fichiers de famille, et le seul endroit ou ces nombres sont
+    /// ecrits. Ce qu'il ne dit pas : si la manette a des trackpads, et ce que font ses sticks. Ces
+    /// trois-la definissent une famille et chaque famille les ecrit elle-meme.
+    ///
+    /// <para>
+    /// A dire honnetement : les initialiseurs bruts de cet enregistrement portent encore des valeurs
+    /// de forme "manette Steam" — <c>HasTrackpads</c> a vrai, le stick gauche sur les fleches. C'est
+    /// exactement pourquoi chaque famille reecrit ces champs-la au lieu de les heriter. Un champ
+    /// ajoute ici sans etre repris dans les trois fichiers repartira en valeur manette Steam pour
+    /// tout le monde.
+    /// </para>
+    /// </remarks>
+    public static Sc2XboxedProfileSettings Bare { get; } = new()
     {
-        StickDeadZone = 0.06,
-        GamepadStickDeadZone = 0.018,
+        LeftStickDeadZone = 0.06,
+        RightStickDeadZone = 0.06,
+        GamepadLeftStickDeadZone = 0.018,
+        GamepadRightStickDeadZone = 0.018,
         RightPadTrackball = RightTouchpadTrackballSettings.Default with
         {
             InvertY = true,
@@ -32,9 +49,73 @@ public sealed record Sc2XboxedProfileSettings
         },
     };
 
-    public double StickDeadZone { get; init; } = 0.06;
+    /// <summary>
+    /// The settings a controller of this family starts with when it has no profile of its own.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Default"/> describes a Steam Controller: its trackpads drive the pointer, so its
+    /// sticks are free for the arrow keys. A DualSense or an Xbox pad has no trackpads, and applying
+    /// that same profile to one wires its left stick to the arrows — a stick resting a few percent
+    /// off centre then holds a direction down for as long as the controller is switched on, and the
+    /// user's keyboard is unusable while nothing appears to be touching it.
+    ///
+    /// <para>
+    /// So those two families arrive with their sticks quiet. The pointer stays on the right stick,
+    /// which is the one thing a pad with no trackpad can reasonably do on a desktop; the left stick
+    /// does nothing until its owner asks it to. Reported 14 August: "clavier et souris physique
+    /// cassé", after the PS5 and Steam profiles were deleted and both pads fell back on this.
+    /// </para>
+    ///
+    /// <para>
+    /// A fallback, never an override. A family with a profile of its own is read from that profile
+    /// and never comes here.
+    /// </para>
+    /// </remarks>
+    /// <para>
+    /// Un aiguillage et rien d'autre. Chaque famille tient ses valeurs dans son propre fichier, une
+    /// branche par famille, jamais deux familles sur une branche. La branche
+    /// <c>DualSense or XInput</c> qui se trouvait ici servait deux materiels differents avec une
+    /// seule expression : regler l'un reglait l'autre, et il n'y avait aucun endroit ou ecrire ce
+    /// qui n'est vrai que d'une DualSense.
+    /// </para>
+    public static Sc2XboxedProfileSettings DefaultFor(Input.ControllerKind kind) => kind switch
+    {
+        Ps5ControllerDefaults.Kind => Ps5ControllerDefaults.Settings,
+        XboxControllerDefaults.Kind => XboxControllerDefaults.Settings,
+        _ => SteamControllerDefaults.Settings,
+    };
 
-    public double GamepadStickDeadZone { get; init; } = 0.018;
+    /// <summary>
+    /// Les reglages d'une manette Steam.
+    /// </summary>
+    /// <remarks>
+    /// Conserve sous ce nom parce que beaucoup d'appelants le lisent, mais ce n'est plus une base
+    /// commune : c'est une famille parmi trois, et elle vit dans <see cref="SteamControllerDefaults"/>.
+    /// Les familles PS5 et Xbox partaient d'ici et retiraient ce qui ne leur allait pas — une famille
+    /// construite en soustrayant d'une autre n'est pas une famille separee.
+    /// </remarks>
+    public static Sc2XboxedProfileSettings Default => SteamControllerDefaults.Settings;
+
+    /// <summary>
+    /// Dead zone of the left stick in Profile mode, as a fraction of its travel.
+    /// </summary>
+    /// <remarks>
+    /// One setting used to govern both sticks, and a single number cannot describe two pieces of
+    /// hardware. The two sticks of one controller do not wear at the same rate, are not held the
+    /// same way, and rarely do the same job — one walks, the other aims. A dead zone wide enough to
+    /// silence a drifting left stick then blunts a right stick that was fine, and the user is left
+    /// choosing which of the two to spoil.
+    /// </remarks>
+    public double LeftStickDeadZone { get; init; } = 0.06;
+
+    /// <summary>Dead zone of the right stick in Profile mode. See <see cref="LeftStickDeadZone"/>.</summary>
+    public double RightStickDeadZone { get; init; } = 0.06;
+
+    /// <summary>Dead zone of the left stick in Xbox mode, as a fraction of its travel.</summary>
+    public double GamepadLeftStickDeadZone { get; init; } = 0.018;
+
+    /// <summary>Dead zone of the right stick in Xbox mode.</summary>
+    public double GamepadRightStickDeadZone { get; init; } = 0.018;
 
     /// <summary>
     /// Whether this controller has trackpads at all.

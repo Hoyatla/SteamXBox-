@@ -6,7 +6,7 @@ using Sc2Xboxed.Core.Input;
 namespace SteamXBox.Gui.Services;
 
 /// <summary>
-/// Where the controller-to-profile assignments live.
+/// Where the family-to-profile assignments live.
 /// </summary>
 /// <remarks>
 /// A file of its own rather than a field in the settings. The settings file is rewritten in full
@@ -15,9 +15,9 @@ namespace SteamXBox.Gui.Services;
 /// "start with Windows" tick.
 ///
 /// Which assignments are worth saving is not decided here. <see cref="ControllerProfileBook"/> owns
-/// that rule, because it is the part that can go wrong quietly: an XInput slot names the order
-/// somebody switched their controllers on in, and restoring one tomorrow puts a player's settings
-/// on somebody else's pad.
+/// that rule: only family keys survive, so a file left by an older build — one profile per
+/// controller, filed under a Bluetooth address that the same pad does not connect with again — is
+/// dropped on the way in rather than trusted.
 /// </remarks>
 public sealed class ControllerProfileStore
 {
@@ -71,7 +71,12 @@ public sealed class ControllerProfileStore
     private string NamesPath => System.IO.Path.Combine(
         System.IO.Path.GetDirectoryName(_path)!, "controller-names.json");
 
-    /// <summary>Reads the saved controller names.</summary>
+    /// <summary>Reads the saved controller names, keeping only the family-keyed ones.</summary>
+    /// <remarks>
+    /// Names are filed under the same family keys as the profiles. A file left by an older build keyed
+    /// the names by controller identity — a Bluetooth address the same pad does not connect with again —
+    /// so those entries are dropped here, on the way in, just as the profile book drops them.
+    /// </remarks>
     public Dictionary<string, string> LoadNames()
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -85,7 +90,7 @@ public sealed class ControllerProfileStore
                 {
                     foreach (var (id, name) in saved)
                     {
-                        if (!string.IsNullOrWhiteSpace(name))
+                        if (!string.IsNullOrWhiteSpace(name) && id.StartsWith("fam:", StringComparison.Ordinal))
                         {
                             names[id] = name;
                         }
@@ -111,59 +116,6 @@ public sealed class ControllerProfileStore
         catch (Exception ex)
         {
             UiLog.Failure($"writing {NamesPath}", ex);
-        }
-    }
-
-    /// <summary>Where the remembered controller numbers live.</summary>
-    private string SlotsPath => System.IO.Path.Combine(
-        System.IO.Path.GetDirectoryName(_path)!, "controller-slots.json");
-
-    /// <summary>Reads the remembered numbers and forgets the ones nobody has used for months.</summary>
-    /// <remarks>
-    /// The cleanup happens on the way in rather than on a schedule: this is read once per session,
-    /// which is exactly the cadence the pruning wants, and a background job for a file of five lines
-    /// would be more machinery than the problem deserves.
-    ///
-    /// Ninety days is chosen to be far longer than any holiday: a controller nobody has touched for
-    /// a season is a guest's, and holding its number pushes the household's numbering upwards for
-    /// ever.
-    /// </remarks>
-    public ControllerSlotBook LoadSlots(DateTimeOffset now)
-    {
-        var book = new ControllerSlotBook();
-
-        try
-        {
-            if (File.Exists(SlotsPath))
-            {
-                book.Load(JsonSerializer.Deserialize<Dictionary<string, ControllerSlot>>(
-                    File.ReadAllText(SlotsPath)));
-
-                var dropped = book.DropUnseenSince(now.AddDays(-90));
-                if (dropped > 0)
-                {
-                    UiLog.Info($"{dropped} controller slot(s) forgotten after 90 days unseen");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            UiLog.Failure($"reading {SlotsPath}", ex);
-        }
-
-        return book;
-    }
-
-    public void SaveSlots(ControllerSlotBook book)
-    {
-        try
-        {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SlotsPath)!);
-            File.WriteAllText(SlotsPath, JsonSerializer.Serialize(book.Persistable(), Json));
-        }
-        catch (Exception ex)
-        {
-            UiLog.Failure($"writing {SlotsPath}", ex);
         }
     }
 

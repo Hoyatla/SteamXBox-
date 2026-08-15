@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L'incrustation de la famille Steam.
+
+    Trois projets, un par famille, parce que Steam commande Steam, PS5 commande PS5 et Xbox commande
+    Xbox. Avant, un seul binaire etait copie a la main sous deux noms et devinait la famille qu'il
+    servait en lisant son propre nom de fichier : PS5 et Xbox partageaient la meme copie, et rien
+    dans la compilation ne produisait ces noms - une compilation sans la copie manuelle laissait des
+    executables perimes que personne ne voyait.
+
+    La source reste commune et liee, pas dupliquee : deux copies d'un clavier divergent en une
+    semaine. Ce qui distingue les trois est une constante posee ici, a la compilation.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Sc2XboxedSteam.Osk</AssemblyName>
+    <RootNamespace>Sc2Xboxed.Osk</RootNamespace>
+    <DefineConstants>$(DefineConstants);OSK_STEAM</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ApplicationIcon>..\Sc2Xboxed.Osk\OverlayKeyboard.ico</ApplicationIcon>
+    <ApplicationManifest Condition="'$(SteamXBoxSignThumbprint)' != '' or '$(SteamXBoxSignCertificate)' != ''">..\Sc2Xboxed.Osk\app.uiaccess.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(ApplicationManifest)' == ''">..\Sc2Xboxed.Osk\app.manifest</ApplicationManifest>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Sc2Xboxed.Osk\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sc2Xboxed.Core\Sc2Xboxed.Core.csproj" />
+    <ProjectReference Include="..\Sc2Xboxed.Hid\Sc2Xboxed.Hid.csproj" />
+  </ItemGroup>
+
+</Project>

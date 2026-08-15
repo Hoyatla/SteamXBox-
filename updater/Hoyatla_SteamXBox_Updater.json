@@ -21,8 +21,9 @@
         "SteamXBox.exe",
         "SteamXBox.Core.exe",
         "SteamXBox.Desktop.exe",
-        "Sc2XboxedPads.Osk.exe",
-        "Sc2XboxedSticks.Osk.exe"
+        "Sc2XboxedSteam.Osk.exe",
+        "Sc2XboxedPS5.Osk.exe",
+        "Sc2XboxedXbox.Osk.exe"
       ],
       "pollIntervalSeconds": 60,
       "maxWaitMinutes": 120

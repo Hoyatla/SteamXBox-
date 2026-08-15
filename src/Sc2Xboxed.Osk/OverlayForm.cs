@@ -302,6 +302,29 @@ public sealed class OverlayForm : Form
     }
 
 
+    /// <summary>
+    /// Puts the keyboard back above everything, now rather than at the next tick.
+    /// </summary>
+    /// <remarks>
+    /// The 120 ms timer that normally holds the topmost flag is gated on <c>Visible</c>, and a
+    /// pre-warmed overlay spends its whole life hidden — so nothing asserts the flag while it waits,
+    /// and nothing asserts it in the instant it appears either. Measured 14 August: the window that
+    /// was actually shown never received the flag at all, while the other resident instances had it;
+    /// it opened for 219 ms and sat under the window the user was typing into.
+    ///
+    /// <para>
+    /// Called straight after Show, where BringToFront already is. Waiting for the timer is waiting
+    /// a tenth of a second on a window that is often up for two.
+    /// </para>
+    /// </remarks>
+    public void AssertTopmost()
+    {
+        if (IsHandleCreated)
+        {
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 

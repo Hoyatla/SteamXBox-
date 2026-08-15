@@ -157,6 +157,9 @@ public static class Translations
 
         // ---- Xbox tab ----
         ["Mode Xbox360"] = "Xbox360 mode",
+        ["Mode DualShock 4"] = "DualShock 4 mode",
+        ["Lorsque le mode Xbox est actif, la DualSense est transmise au jeu via un contrôleur virtuel DualShock 4 : elle garde sa disposition et ses noms PlayStation."]
+            = "While Xbox mode is active, the DualSense is passed to the game as a virtual DualShock 4, keeping its layout and its PlayStation names.",
         ["Pass-through"] = "Pass-through",
         ["Lorsque le mode Xbox est actif, le contrôleur Steam est transmis tel quel au jeu via le contrôleur virtuel Xbox 360."]
             = "While Xbox mode is active, the Steam Controller is passed through to the game as a virtual Xbox 360 controller.",

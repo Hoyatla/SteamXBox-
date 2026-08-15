@@ -35,4 +35,21 @@ public readonly record struct ControllerState(
             RightPad = RightPad.Clamp()
         };
     }
+
+    /// <summary>Whether anything on the pad is pressed or pushed enough to count as input.</summary>
+    /// <remarks>
+    /// Shared by the identity correlators, which only need to know <i>that</i> a pad spoke, not what
+    /// it said. Small enough to ignore the resting jitter of an analog stick, large enough to catch a
+    /// finger resting on a trigger.
+    /// </remarks>
+    public bool HasInput(double epsilon = 0.05)
+    {
+        return Buttons != SteamControllerButtons.None
+            || Math.Abs(LeftStick.X) > epsilon
+            || Math.Abs(LeftStick.Y) > epsilon
+            || Math.Abs(RightStick.X) > epsilon
+            || Math.Abs(RightStick.Y) > epsilon
+            || LeftTrigger > epsilon
+            || RightTrigger > epsilon;
+    }
 }

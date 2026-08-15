@@ -3,7 +3,29 @@ using Sc2Xboxed.Core.Output;
 
 namespace Sc2Xboxed.Core.Mapping;
 
-public sealed class DefaultSteamControllerMapper
+/// <summary>
+/// Transforme l'etat d'UNE manette en sa trame de sortie : le rapport Xbox 360 qui part vers son pad
+/// virtuel, et ce que ses pads font au bureau.
+/// </summary>
+/// <remarks>
+/// Cette classe ne connait aucune famille. Elle recoit des reglages, une correspondance de boutons
+/// et un reglage natif, et elle applique ce qu'on lui donne. Ce qui differe d'une famille a l'autre
+/// est decide ailleurs, dans <see cref="SteamControllerDefaults"/>, <see cref="Ps5ControllerDefaults"/>
+/// et <see cref="XboxControllerDefaults"/>, et lui arrive par le constructeur.
+///
+/// <para>
+/// Elle s'appelait <c>DefaultSteamControllerMapper</c> alors qu'elle est aussi le mapper d'une
+/// manette Xbox. Un nom qui nomme une famille sur du code qui en sert plusieurs est une invitation
+/// permanente a y remettre une regle de famille — c'est par la que l'inversion Menu/View mesuree sur
+/// une manette Steam avait fini par croiser Options et Start sur les deux autres.
+/// </para>
+///
+/// <para>
+/// Une instance par manette. Partagee, elle partagerait aussi l'etat que gardent ses mappers de pads
+/// d'une trame a l'autre.
+/// </para>
+/// </remarks>
+public sealed class ControllerOutputMapper
 {
     private readonly Sc2XboxedProfileSettings _settings;
     private readonly LeftTouchpadScrollMapper _leftPad;
@@ -11,18 +33,31 @@ public sealed class DefaultSteamControllerMapper
     private readonly TouchpadTapDetector _leftTap;
     private readonly TouchpadTapDetector _rightTap;
 
-    public DefaultSteamControllerMapper()
+    public ControllerOutputMapper()
         : this(Sc2XboxedProfileSettings.Default)
     {
     }
 
-    public DefaultSteamControllerMapper(Sc2XboxedProfileSettings settings)
+    public ControllerOutputMapper(Sc2XboxedProfileSettings settings)
     {
         _settings = settings;
         _leftPad = new LeftTouchpadScrollMapper(settings.LeftPadScroll);
         _rightPad = new RightTouchpadTrackballMapper(settings.RightPadTrackball);
         _leftTap = new TouchpadTapDetector(settings.TouchpadTap);
         _rightTap = new TouchpadTapDetector(settings.TouchpadTap);
+
+        // From the settings handed in, not from the process-wide default.
+        //
+        // This constructor takes a controller's own profile and wired every part of it except this
+        // one: Tuning kept its initialiser, which is the static DefaultTuning, written once from
+        // whichever profile the bridge was launched with. So a mapper built from a DualSense profile
+        // ran that profile's pads and that profile's buttons — and the launch profile's stick dead
+        // zones, curve, sensitivity, trigger points and vibration.
+        //
+        // Every controller on the machine therefore shared one set of Xbox-mode tuning values, and
+        // editing them in any profile appeared to change all of them at once. The same fault was
+        // found and fixed for ButtonMap; the line below it was left behind.
+        Tuning = settings.XboxTuning;
     }
 
     public ControllerOutputFrame Map(ControllerState state)
@@ -35,7 +70,7 @@ public sealed class DefaultSteamControllerMapper
         var right = Tuning.ApplyStick(state.RightStick.X, state.RightStick.Y);
 
         var report = new Xbox360Report(
-            MapButtons(state.Buttons),
+            ButtonMap.Apply(state.Buttons),
             ToByteTrigger(Tuning.ApplyTrigger(state.LeftTrigger)),
             ToByteTrigger(Tuning.ApplyTrigger(state.RightTrigger)),
             ToThumbAxis(left.X),
@@ -98,7 +133,7 @@ public sealed class DefaultSteamControllerMapper
 
     private double ApplyDeadZone(double value)
     {
-        return Math.Abs(value) < _settings.GamepadStickDeadZone ? 0.0 : value;
+        return Math.Abs(value) < _settings.GamepadLeftStickDeadZone ? 0.0 : value;
     }
 
     private static byte ToByteTrigger(double normalized)

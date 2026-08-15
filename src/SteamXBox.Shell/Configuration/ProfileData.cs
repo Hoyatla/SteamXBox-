@@ -107,8 +107,59 @@ public sealed class ProfileData
     [JsonPropertyName("leftPadHorizontalScroll")]
     public bool LeftPadHorizontalScroll { get; set; }
 
+    /// <summary>
+    /// The single stick dead zone profiles carried before the two sticks were separated.
+    /// </summary>
+    /// <remarks>
+    /// Kept for reading only. A profile written before the split has this and neither of the two
+    /// below, and <see cref="SeparateTheSticks"/> copies it into both so the file behaves exactly as
+    /// it did. Never written back: once a profile is saved it carries the two, and this one stays
+    /// behind as the value it started from.
+    /// </remarks>
     [JsonPropertyName("stickDeadZone")]
     public double StickDeadZone { get; set; } = 0.06;
+
+    /// <summary>Dead zone of the left stick in Profile mode, as a fraction of its travel.</summary>
+    /// <remarks>
+    /// Null until the profile has been through <see cref="SeparateTheSticks"/>, which is how a file
+    /// written before the split is told apart from one where the user deliberately set this side.
+    /// </remarks>
+    [JsonPropertyName("leftStickDeadZone")]
+    public double? LeftStickDeadZone { get; set; }
+
+    /// <summary>Dead zone of the right stick in Profile mode.</summary>
+    [JsonPropertyName("rightStickDeadZone")]
+    public double? RightStickDeadZone { get; set; }
+
+    /// <summary>Dead zone of the left stick in Xbox mode.</summary>
+    [JsonPropertyName("xboxLeftStickDeadZone")]
+    public double? XboxLeftStickDeadZone { get; set; }
+
+    /// <summary>Dead zone of the right stick in Xbox mode.</summary>
+    [JsonPropertyName("xboxRightStickDeadZone")]
+    public double? XboxRightStickDeadZone { get; set; }
+
+    /// <summary>
+    /// Gives each stick its own dead zone, starting both from whatever the profile used to share.
+    /// </summary>
+    /// <remarks>
+    /// Called after loading. One number governing both sticks could not be set: widening it to
+    /// silence a drifting left stick blunted a right stick that was fine, so the user had to choose
+    /// which of the two to spoil.
+    ///
+    /// <para>
+    /// Seeded rather than defaulted, and that is the whole point of the nullable properties above. A
+    /// profile where the user had tuned the shared value to 0.06 must keep 0.06 on both sticks, not
+    /// fall back to whatever the product ships with.
+    /// </para>
+    /// </remarks>
+    public void SeparateTheSticks()
+    {
+        LeftStickDeadZone ??= StickDeadZone;
+        RightStickDeadZone ??= StickDeadZone;
+        XboxLeftStickDeadZone ??= XboxStickDeadZone;
+        XboxRightStickDeadZone ??= XboxStickDeadZone;
+    }
 
     /// <summary>
     /// Whether this controller's on-screen keyboard follows the text, or stays pinned at the bottom
@@ -215,6 +266,13 @@ public sealed class ProfileData
         var json = File.ReadAllText(path);
         var data = System.Text.Json.JsonSerializer.Deserialize<ProfileData>(json) ?? new ProfileData();
         MigrateLegacyXboxSection(data, json);
+
+        // Before anything reads the two sticks apart. A profile written before the split carries one
+        // shared dead zone, and both sides have to start from it rather than from the product's
+        // default — otherwise a user who had tuned the shared value finds both sticks moved the
+        // moment they open the editor.
+        data.SeparateTheSticks();
+
         return data;
     }
 

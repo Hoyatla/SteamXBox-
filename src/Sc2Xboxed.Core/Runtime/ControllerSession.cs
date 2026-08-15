@@ -43,15 +43,17 @@ public sealed class ControllerSession
     public ControllerSession(
         ProfileMapper profileMapper,
         InputModeHandler modeSwitcher,
-        DefaultSteamControllerMapper? xboxMapper = null)
+        ControllerOutputMapper? xboxMapper = null,
+        DualSenseGamepadMapper? dualSenseMapper = null)
     {
         ProfileMapper = profileMapper;
         ModeSwitcher = modeSwitcher;
-        XboxMapper = xboxMapper ?? new DefaultSteamControllerMapper();
+        XboxMapper = xboxMapper ?? new ControllerOutputMapper();
+        DualSenseMapper = dualSenseMapper ?? new DualSenseGamepadMapper();
     }
 
     /// <summary>
-    /// What this controller sends a game in Xbox mode.
+    /// What this controller sends a game in Xbox mode, when it is an Xbox-family pad.
     /// </summary>
     /// <remarks>
     /// Per controller for two reasons at once. It carries the button layout and tuning, which are
@@ -60,7 +62,13 @@ public sealed class ControllerSession
     /// stateful across frames like everything else here, so sharing it would blur two players'
     /// inputs into one even with identical layouts.
     /// </remarks>
-    public DefaultSteamControllerMapper XboxMapper { get; }
+    public ControllerOutputMapper XboxMapper { get; }
+
+    /// <summary>
+    /// What a DualSense sends a game in Xbox mode: the same profile values, emitted as a DualShock 4
+    /// report so the game sees the PlayStation pad its labels promise.
+    /// </summary>
+    public DualSenseGamepadMapper DualSenseMapper { get; }
 
     /// <summary>Desktop mapping, and the button edges it detects.</summary>
     public ProfileMapper ProfileMapper { get; }
@@ -95,6 +103,20 @@ public sealed class ControllerSession
 
     /// <summary>Sub-pixel remainder of this controller's stick motion.</summary>
     public StickPointerCarry Carry;
+
+    /// <summary>
+    /// Cursor travel accumulated by this controller's motion since the last haptic tick.
+    /// </summary>
+    /// <remarks>
+    /// Per controller: the quantisation is a gesture's own travelled distance, and pooled across pads
+    /// one controller's motion would trip the other's tick — the pointer on the first pad buzzing in
+    /// time with a second pad's stick.
+    /// </remarks>
+    public double HapticTravel { get; set; }
+
+    /// <summary>When this controller's scroll detent haptics last ticked.</summary>
+    /// <remarks>Per controller for the same reason <see cref="HapticTravel"/> is.</remarks>
+    public DateTimeOffset LastScrollTick { get; set; } = DateTimeOffset.MinValue;
 
     /// <summary>
     /// How this controller's sticks drive the pointer: dead zone, speed, curve.
@@ -141,30 +163,46 @@ public sealed class ControllerSession
 /// </remarks>
 public sealed class ControllerSessionSet
 {
+    private readonly object _gate = new();
     private readonly Dictionary<string, ControllerSession> _sessions = new(StringComparer.Ordinal);
     private readonly Func<string, ControllerSession> _factory;
 
     public ControllerSessionSet(Func<string, ControllerSession> factory) => _factory = factory;
 
     /// <summary>How many controllers have been seen.</summary>
-    public int Count => _sessions.Count;
+    public int Count
+    {
+        get { lock (_gate) return _sessions.Count; }
+    }
 
     /// <summary>Every session, for the transitions that must reach all controllers at once.</summary>
-    public IReadOnlyCollection<ControllerSession> All => _sessions.Values;
+    public IReadOnlyCollection<ControllerSession> All
+    {
+        get { lock (_gate) return _sessions.Values.ToArray(); }
+    }
 
     public ControllerSession For(string controllerId)
     {
-        if (!_sessions.TryGetValue(controllerId, out var session))
+        lock (_gate)
         {
-            session = _factory(controllerId);
-            _sessions[controllerId] = session;
-        }
+            if (!_sessions.TryGetValue(controllerId, out var session))
+            {
+                session = _factory(controllerId);
+                _sessions[controllerId] = session;
+            }
 
-        return session;
+            return session;
+        }
     }
 
     /// <summary>Forgets a controller that has gone away, so it comes back with a clean memory.</summary>
-    public void Forget(string controllerId) => _sessions.Remove(controllerId);
+    public void Forget(string controllerId)
+    {
+        lock (_gate)
+        {
+            _sessions.Remove(controllerId);
+        }
+    }
 
     /// <summary>Rebuilds every session, for when the profiles on disk have changed.</summary>
     public void Reload() => Reload(_ => true);
@@ -178,22 +216,46 @@ public sealed class ControllerSessionSet
     /// controller because one profile was edited means a hand holding a two-second chord on one pad
     /// loses it whenever someone touches a slider for another — and a chord that never completes is
     /// indistinguishable from a button that does not work.
+    ///
+    /// <para>
+    /// The overlay state is not thrown away with the rest. A rebuild that closed the keyboard would
+    /// make assigning a profile look like a crash, so <see cref="ProfileMapper.OskActive"/> and
+    /// <see cref="ProfileMapper.DaisywheelActive"/> are carried from the old mapper onto the new one,
+    /// each session for itself — never read from a neighbour's, which is what a process-wide capture
+    /// did before.
+    /// </para>
+    ///
+    /// <para>
+    /// The whole set is guarded by one lock, not per session. Rumble handlers run on background
+    /// threads and call <see cref="For"/> while the main loop builds sessions, forgets departed pads
+    /// and reloads profiles; a dictionary written and read concurrently is exactly the corruption a
+    /// single gate rules out, and the handover of a completed rebuild is atomic with its publication.
+    /// </para>
     /// </remarks>
     public int Reload(Func<string, bool> shouldReload)
     {
-        var reloaded = 0;
-
-        foreach (var id in _sessions.Keys.ToList())
+        lock (_gate)
         {
-            if (!shouldReload(id))
+            var reloaded = 0;
+
+            foreach (var id in _sessions.Keys.ToList())
             {
-                continue;
+                if (!shouldReload(id))
+                {
+                    continue;
+                }
+
+                var wasOskActive = _sessions[id].ProfileMapper.OskActive;
+                var wasDaisywheel = _sessions[id].ProfileMapper.DaisywheelActive;
+
+                var rebuilt = _factory(id);
+                rebuilt.ProfileMapper.OskActive = wasOskActive;
+                rebuilt.ProfileMapper.DaisywheelActive = wasDaisywheel;
+                _sessions[id] = rebuilt;
+                reloaded++;
             }
 
-            _sessions[id] = _factory(id);
-            reloaded++;
+            return reloaded;
         }
-
-        return reloaded;
     }
 }

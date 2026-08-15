@@ -18,9 +18,9 @@
     
             <Border Style="{StaticResource CardBorder}" Margin="0,0,0,16">
                 <StackPanel>
-                    <TextBlock Text="{loc:T Text='Mode Xbox360'}" FontSize="16" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding ModeTitle}" FontSize="16" FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
-                    <TextBlock Text="{loc:T Text='Lorsque le mode Xbox est actif, le contrôleur Steam est transmis tel quel au jeu via le contrôleur virtuel Xbox 360.'}"
+                    <TextBlock Text="{Binding ModeDescription}"
                                FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                     <TextBlock Text="{loc:T Text='Les paramètres ci-dessous contrôlent le comportement de la manette dans ce mode.'}"
                                FontSize="12" Foreground="{StaticResource TextDimBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
@@ -102,12 +102,19 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
     
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Dead zone sticks'}" VerticalAlignment="Center"
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:T Text='Dead zone stick gauche'}" VerticalAlignment="Center"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                         <Slider Grid.Row="0" Grid.Column="1" Style="{StaticResource SliderCompact}"
-                                Value="{Binding StickDeadZonePercent}"/>
+                                Value="{Binding LeftStickDeadZonePercent}"/>
                         <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource SliderValueText}"
-                                   Text="{Binding StickDeadZonePercent, StringFormat={}{0}%}"/>
+                                   Text="{Binding LeftStickDeadZonePercent, StringFormat={}{0}%}"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:T Text='Dead zone stick droit'}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Slider Grid.Row="1" Grid.Column="1" Style="{StaticResource SliderCompact}"
+                                Value="{Binding RightStickDeadZonePercent}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource SliderValueText}"
+                                   Text="{Binding RightStickDeadZonePercent, StringFormat={}{0}%}"/>
     
                         <TextBlock Grid.Row="0" Grid.Column="4" Text="{loc:T Text='Sensibilité sticks'}" VerticalAlignment="Center"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>

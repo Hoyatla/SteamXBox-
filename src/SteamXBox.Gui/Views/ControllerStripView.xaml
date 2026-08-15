@@ -66,16 +66,6 @@
                                                     Value="{StaticResource AccentBrush}"/>
                                         </DataTrigger>
                                         <!--
-                                            An Xbox pad is identified by its slot and nothing else,
-                                            so its profile cannot survive a reconnection. Marked on
-                                            the chip: a setting that silently fails to stick is
-                                            worse than one that says it will not.
-                                        -->
-                                        <DataTrigger Binding="{Binding IsDurable}" Value="False">
-                                            <Setter TargetName="Chip" Property="BorderBrush"
-                                                    Value="{StaticResource AccentOrangeBrush}"/>
-                                        </DataTrigger>
-                                        <!--
                                             Belongs to another family than the tab being looked at:
                                             dimmed, never hidden. A pad that disappears when the tab
                                             changes reads as a pad that disconnected.

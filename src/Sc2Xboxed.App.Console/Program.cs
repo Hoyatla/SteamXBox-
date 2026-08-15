@@ -94,7 +94,7 @@ static void LogHidEnumeration(Action<string> dlog)
 
 static void RunMappingSanityCheck()
 {
-    var mapper = new DefaultSteamControllerMapper();
+    var mapper = new ControllerOutputMapper();
 
     var frame = ControllerState.Empty(TimeSpan.Zero) with
     {
@@ -300,8 +300,9 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
 
     StopOskOverlay(oskInstances, log);
 
-    // Unplug every virtual pad. Leaving one plugged in makes Steam enumerate a phantom Xbox 360
-    // controller alongside the real one, and games launched from Steam may bind to the phantom.
+    // Unplug every virtual pad. Leaving one plugged in makes Steam enumerate a phantom controller
+    // (an Xbox 360 pad or, for a DualSense, a DualShock 4) alongside the real one, and games
+    // launched from Steam may bind to the phantom.
     await virtualPads.DisposeAsync();
     log($"Virtual pad(s) unplugged ({virtualPads.Count} still connected).");
 
@@ -436,12 +437,57 @@ static string ControllerProfilesPath() => Path.Combine(
 /// configuration window writes the file in one go, so there is no partial state to catch, and a
 /// check once a second is invisible next to a change made by hand.
 /// </remarks>
+/// <summary>
+/// The moment anything the profiles depend on last changed: the assignments, or any profile itself.
+/// </summary>
+/// <remarks>
+/// This used to watch the assignment file alone. Assigning a family to another profile therefore
+/// reloaded, and <b>editing a profile did not</b> — its own file was rewritten while
+/// controller-profiles.json sat untouched, so the comparison below found nothing new and the bridge
+/// kept the mappers it had built at startup. The setting was correct on disk and had no effect until
+/// the next launch.
+///
+/// <para>
+/// Reported 14 August: a wheel chosen for a stick, saved, and never applied. The editor wrote it and
+/// the loader would have read it — nothing was listening for the file to change.
+/// </para>
+///
+/// <para>
+/// The most recent write across the folder, not a per-file watch: the reload rebuilds every session
+/// anyway, so knowing <i>which</i> profile changed buys nothing, and one timestamp keeps the
+/// comparison at the call site exactly as it was.
+/// </para>
+/// </remarks>
 static DateTime ControllerProfilesTimestamp()
 {
     try
     {
-        var path = ControllerProfilesPath();
-        return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : default;
+        var newest = default(DateTime);
+
+        var assignments = ControllerProfilesPath();
+        if (File.Exists(assignments))
+        {
+            newest = File.GetLastWriteTimeUtc(assignments);
+        }
+
+        var profiles = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SteamXBox", "profiles");
+
+        if (Directory.Exists(profiles))
+        {
+            foreach (var file in Directory.EnumerateFiles(profiles, "*.json"))
+            {
+                var written = File.GetLastWriteTimeUtc(file);
+
+                if (written > newest)
+                {
+                    newest = written;
+                }
+            }
+        }
+
+        return newest;
     }
     catch
     {
@@ -451,45 +497,92 @@ static DateTime ControllerProfilesTimestamp()
 }
 
 /// <summary>
-/// Builds one controller's Xbox mapper from its own layout.
-/// </summary>
-/// <remarks>
-/// Since the merge, the Xbox layout travels inside the desktop profile, so a controller with a
-/// profile of its own maps from that profile's section; controllers without one keep the layout the
+/// Builds one controller's gamepad mappers from its family's layout: the Xbox report mapper and the
+/// DualShock 4 report mapper a DualSense uses. Both read the same profile section, so a family with
+/// a profile of its own maps from that profile's layout; families without one keep the layout the
 /// bridge was launched with (the statics). One file carries the whole pad, and one reload covers
 /// both mappers.
+/// </summary>
+/// <summary>
+/// Si, pour cette famille, "natif" veut dire rendre la manette physique plutot que l'emuler.
+/// </summary>
+/// <remarks>
+/// Vrai pour la PS5 et pour la Xbox : Windows sait les lire toutes les deux, donc la meilleure
+/// imitation que SteamXBox puisse produire est moins bonne que l'original. Une DualSense emulee sort
+/// en DualShock 4, avec d'autres boutons et d'autres reperes a l'ecran.
+///
+/// <para>
+/// Faux pour la manette Steam, et ce n'est pas un oubli : Windows ne la gere pas. La demasquer
+/// donnerait une manette que rien ne lit. Son mode natif reste un pad Xbox 360 virtuel, qui est
+/// exactement ce qui la rend utilisable.
+/// </para>
 /// </remarks>
-static DefaultSteamControllerMapper BuildXboxMapperFor(
+static bool NativeMeansUncloaked(ControllerKind kind)
+    => kind is ControllerKind.DualSense or ControllerKind.XInput;
+
+static (ControllerOutputMapper Xbox, DualSenseGamepadMapper DualSense) BuildGamepadMappersFor(
     string controllerId,
+    string familyId,
+    ControllerKind kind,
     ControllerProfileBook book,
     DiagnosticLog log)
 {
-    var mapper = new DefaultSteamControllerMapper();
+    var xboxMapper = new ControllerOutputMapper();
+    var dualSenseMapper = new DualSenseGamepadMapper();
 
-    if (!book.HasOwnProfile(controllerId))
+    if (!book.HasOwnProfile(familyId))
     {
-        return mapper;
+        // No profile of its own: the controller still gets its family's button layout. A DualSense
+        // is not a Steam Controller, and the Menu/View quirk was measured on a Steam Controller.
+        //
+        // Une instance de correspondance PAR mapper. Les deux recevaient la meme, et XboxButtonMap
+        // est modifiable : deux mappers tenant le meme objet sont deux mappers dont l'un rebranche
+        // les boutons de l'autre. Les valeurs viennent du fichier de la famille — PS5 et Xbox ont
+        // chacune le sien — et jamais des statiques du processus, qui portent le profil de lancement
+        // et sont la facon dont le reglage d'une manette atteignait toutes les autres.
+        xboxMapper.ButtonMap = XboxButtonMap.DefaultFor(kind);
+        dualSenseMapper.ButtonMap = XboxButtonMap.DefaultFor(kind);
+
+        var familyTuning = Sc2XboxedProfileSettings.DefaultFor(kind).XboxTuning;
+        xboxMapper.Tuning = familyTuning;
+        dualSenseMapper.Tuning = familyTuning;
+
+        return (xboxMapper, dualSenseMapper);
     }
 
-    var name = book.ProfileFor(controllerId);
+    var name = book.ProfileFor(familyId);
 
     try
     {
         var settings = ProfileMapper.LoadDetailed(name).Settings;
-        mapper.ButtonMap = XboxButtonMap.FromDictionary(settings.XboxButtons);
-        mapper.Tuning = settings.XboxTuning;
+
+        // Une instance par mapper, lue deux fois depuis le meme profil. Partager l'objet laissait
+        // les deux mappers d'une meme manette s'ecrire dessus.
+        xboxMapper.ButtonMap = XboxButtonMap.FromDictionary(settings.XboxButtons, kind);
+        xboxMapper.Tuning = settings.XboxTuning;
+        dualSenseMapper.ButtonMap = XboxButtonMap.FromDictionary(settings.XboxButtons, kind);
+        dualSenseMapper.Tuning = settings.XboxTuning;
 
         log.Info(LogCategory.Session, $"Controller {controllerId} uses Xbox layout from profile '{name}'.");
     }
     catch (Exception ex)
     {
-        // Falling back to the launch layout rather than refusing: a controller whose profile
-        // was deleted must still work in a game, and the line below says which one and why.
+        // Falling back to the family's own layout and tuning rather than refusing: a controller
+        // whose profile was deleted must still work in a game. To the family's, never to the
+        // process-wide statics — those hold the launch profile's values, and inheriting them here
+        // is how one controller's tuning reached every other one.
+        var familyTuning = Sc2XboxedProfileSettings.DefaultFor(kind).XboxTuning;
+
+        xboxMapper.ButtonMap = XboxButtonMap.DefaultFor(kind);
+        xboxMapper.Tuning = familyTuning;
+        dualSenseMapper.ButtonMap = XboxButtonMap.DefaultFor(kind);
+        dualSenseMapper.Tuning = familyTuning;
+
         log.Warn(LogCategory.Session,
-            $"Controller {controllerId}: profile '{name}' unusable ({ex.GetType().Name}); using the default.");
+            $"Controller {controllerId}: profile '{name}' unusable ({ex.GetType().Name}); using the {kind} defaults.");
     }
 
-    return mapper;
+    return (xboxMapper, dualSenseMapper);
 }
 
 static ControllerProfileBook LoadControllerProfiles(string fallbackProfile, DiagnosticLog log)
@@ -507,11 +600,11 @@ static ControllerProfileBook LoadControllerProfiles(string fallbackProfile, Diag
             book.Load(System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
                 File.ReadAllText(path)));
 
-            log.Info(LogCategory.Session, $"Per-controller profiles: {book.Count} assignment(s) from {path}.");
+            log.Info(LogCategory.Session, $"Profiles by family: {book.Count} assignment(s) from {path}.");
         }
         else
         {
-            log.Info(LogCategory.Session, $"No per-controller profiles; all controllers use '{fallbackProfile}'.");
+            log.Info(LogCategory.Session, $"No family assignments; every controller uses '{fallbackProfile}'.");
         }
     }
     catch (Exception ex)
@@ -540,19 +633,43 @@ static ControllerProfileBook LoadControllerProfiles(string fallbackProfile, Diag
 /// </remarks>
 static StickPointerSettings StickPointerFor(ProfileMapper mapper)
     => new(
-        DeadZone: mapper.Settings.StickDeadZone,
+        DeadZone: mapper.Settings.RightStickDeadZone,
         PixelsPerSecond: mapper.Settings.StickPointerSpeed,
         Curve: mapper.Settings.StickPointerCurve);
 
+/// <summary>
+/// Whether this controller's keyboard should float, for a keyboard being started at launch.
+/// </summary>
+/// <remarks>
+/// Read the same way a cold start reads it — the controller's own profile, the fallback otherwise —
+/// so the resident overlay is pinned or floating exactly as the one a toggle would start would be.
+/// A failure to read the profile defaults to floating, which is also the profile default.
+/// </remarks>
+static bool OskFloatingFor(string familyId, ControllerProfileBook book, DiagnosticLog log)
+{
+    try
+    {
+        return ProfileMapper.LoadDetailed(book.ProfileFor(familyId)).Settings.OskFloating;
+    }
+    catch (Exception ex)
+    {
+        log.Warn(LogCategory.Session,
+            $"Family {familyId}: could not read OskFloating ({ex.GetType().Name}); defaulting to floating.");
+        return true;
+    }
+}
+
 static ProfileMapper BuildMapperFor(
     string controllerId,
+    string familyId,
     ControllerProfileBook book,
     Sc2XboxedProfileSettings? fallback,
+    ControllerKind kind,
     DiagnosticLog log)
 {
-    var name = book.ProfileFor(controllerId);
+    var name = book.ProfileFor(familyId);
 
-    if (book.HasOwnProfile(controllerId))
+    if (book.HasOwnProfile(familyId))
     {
         try
         {
@@ -562,25 +679,55 @@ static ProfileMapper BuildMapperFor(
         }
         catch (Exception ex)
         {
-            // Falling back rather than refusing: a controller whose profile was deleted must still
+            // Falling back rather than refusing: a family whose profile was deleted must still
             // work, and the line below says which one and why.
             log.Warn(LogCategory.Session,
                 $"Controller {controllerId}: profile '{name}' unusable ({ex.GetType().Name}); using the default.");
         }
     }
 
-    // Said out loud. A controller with no profile of its own runs on the settings of whichever
-    // profile the bridge was launched with — which is another controller's, of another family: an
-    // Xbox pad silently inheriting a Steam Controller's trackpad tuning. It happened without a
-    // single line in the log, so from the outside it looked like the pad had its own settings and
-    // they were wrong.
-    log.Info(LogCategory.Session, fallback is not null
-        ? $"Controller {controllerId} has no profile of its own; using the launch profile's settings."
-        : $"Controller {controllerId} has no profile of its own; using the built-in defaults.");
+    // Said out loud. A family with no profile of its own runs on the settings of whichever
+    // profile the bridge was launched with — which is another family's: an Xbox pad silently
+    // inheriting a Steam Controller's trackpad tuning. It happened without a single line in the
+    // log, so from the outside it looked like the pad had its own settings and they were wrong.
+    // The family's own defaults, not the launch profile's. The launch profile belongs to whichever
+    // controller happened to be first, and it is almost always a Steam Controller one: pads driving
+    // the pointer, sticks free for the arrow keys. Handed to a DualSense or an Xbox pad, which have
+    // no pads at all, that wires the left stick to the arrows — and a stick resting a few percent
+    // off centre then holds a direction down for the whole session.
+    //
+    // Reported 14 August as "clavier et souris physique cassé", after the PS5 and Steam profiles
+    // were deleted and both pads fell back on this line.
+    var familyDefaults = Sc2XboxedProfileSettings.DefaultFor(kind);
 
-    return fallback is not null ? new ProfileMapper(fallback) : new ProfileMapper();
+    log.Info(LogCategory.Session,
+        $"Controller {controllerId} has no profile of its own; using the {kind} defaults "
+        + $"(left stick: {familyDefaults.LeftStickMode}, right stick: {familyDefaults.RightStickMode}).");
+
+    return new ProfileMapper(familyDefaults);
 }
 
+
+/// <summary>
+/// The keyboard executable of a controller family.
+/// </summary>
+/// <remarks>
+/// One per family, each produced by its own project. There used to be two names for a single binary
+/// copied by hand — PS5 and Xbox shared the same copy, and the program read its own file name back
+/// to work out which family it was serving. Nothing in the build made those names, so a build
+/// without the copy left stale executables running beside fresh ones.
+///
+/// <para>
+/// The old names are still tried, so a folder that has not been rebuilt keeps working rather than
+/// opening no keyboard at all.
+/// </para>
+/// </remarks>
+static string OverlayExecutableFor(ControllerKind kind) => kind switch
+{
+    ControllerKind.SteamController => "Sc2XboxedSteam.Osk.exe",
+    ControllerKind.DualSense => "Sc2XboxedPS5.Osk.exe",
+    _ => "Sc2XboxedXbox.Osk.exe",
+};
 
 /// <summary>Short readable form of a controller id, for the one-line counters.</summary>
 /// <remarks>
@@ -649,33 +796,6 @@ static string ReadForcedSource(string[] args)
     }
 
     return "";
-}
-static void ShowDesktop(DiagnosticLog log)
-{
-    try
-    {
-        if (Process.GetProcessesByName("SteamXBox.Desktop").Length > 0)
-        {
-            File.WriteAllText(
-                Path.Combine(AppContext.BaseDirectory, "desktop-show.signal"),
-                DateTime.UtcNow.Ticks.ToString());
-            return;
-        }
-
-        var executable = Path.Combine(AppContext.BaseDirectory, "SteamXBox.Desktop.exe");
-        if (!File.Exists(executable))
-        {
-            log.Warn(LogCategory.Session, $"SteamXBox.Desktop not found next to the core: {executable}");
-            return;
-        }
-
-        Process.Start(new ProcessStartInfo(executable) { UseShellExecute = false });
-    }
-    catch (Exception exception)
-    {
-        log.Warn(LogCategory.Session,
-            $"SteamXBox.Desktop failed to open: {exception.GetType().Name}: {exception.Message}");
-    }
 }
 
 /// <summary>Asks every open overlay keyboard to close, if any are running.</summary>
@@ -823,8 +943,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     }
 
     var effectiveSettings = loadedSettings ?? Sc2XboxedProfileSettings.Default;
-    DefaultSteamControllerMapper.DefaultButtonMap = XboxButtonMap.FromDictionary(effectiveSettings.XboxButtons);
-    DefaultSteamControllerMapper.DefaultTuning = effectiveSettings.XboxTuning;
+    ControllerOutputMapper.DefaultButtonMap = XboxButtonMap.FromDictionary(effectiveSettings.XboxButtons);
+    ControllerOutputMapper.DefaultTuning = effectiveSettings.XboxTuning;
     TritonHapticReportBuilder.TriggerActuatorIndex = effectiveSettings.XboxTuning.TriggerActuatorIndex;
     log.Info(LogCategory.Session, $"Xbox layout: from '{profileName ?? CoreCommandLine.DefaultProfile}'");
 
@@ -834,23 +954,44 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     // One session per controller: mapper, mode chord, sub-pixel carry and frame gap. Everything
     // that compares a frame to the previous one belongs here, because sharing any of it between two
     // pads compares them against each other rather than each against itself.
-    // Which profile belongs to which controller, as the configuration window recorded it. Read once
+    // Which profile belongs to which family, as the configuration window recorded it. Read once
     // here rather than per session: the file is the same for everybody, only the lookup differs.
     var profileBook = LoadControllerProfiles(profileName ?? CoreCommandLine.DefaultProfile, log);
 
-    // Watched by timestamp. Assigning a controller to a profile in
+    // The family each attached controller belongs to, by its session key. Filled at attach time and
+    // again on every frame, so a session built later still knows which family it is. Settings are
+    // filed by family, not by controller — the same pad connects under a different Bluetooth address
+    // from one day to the next, and the family is the one thing that never changes.
+    var kindByIdentity = new Dictionary<string, ControllerKind>(StringComparer.Ordinal);
+
+    /// <summary>The profile key a controller's settings are filed under, or "" while its kind is unknown.</summary>
+    string FamilyIdFor(string controllerId)
+        => kindByIdentity.TryGetValue(controllerId, out var kind)
+            ? ControllerIdentityFactory.FamilyKey(kind)
+            : "";
+
+    /// <summary>The controller kind behind a session key, or Steam as the unknown's default.</summary>
+    ControllerKind KindFor(string controllerId)
+        => kindByIdentity.TryGetValue(controllerId, out var kind) ? kind : ControllerKind.SteamController;
+
+    // Watched by timestamp. Assigning a family to a profile in
     // the configuration window otherwise took effect only after restarting the bridge — which, from
     // the user's side, is a setting that silently does nothing until they think to relaunch.
     var profileBookStamp = ControllerProfilesTimestamp();
 
     var sessions = new ControllerSessionSet(id =>
     {
-        var mapper = BuildMapperFor(id, profileBook, loadedSettings, log);
+        // Mappers come from the controller's family profile: the same pad under a new Bluetooth
+        // address still finds its family's settings, which is the whole point of filing by family.
+        var familyId = FamilyIdFor(id);
+        var mapper = BuildMapperFor(id, familyId, profileBook, loadedSettings, KindFor(id), log);
+        var gamepadMappers = BuildGamepadMappersFor(id, familyId, KindFor(id), profileBook, log);
 
         return new ControllerSession(
             mapper,
             new InputModeHandler(initialMode, switchButtons, TimeSpan.FromMilliseconds(350)),
-            BuildXboxMapperFor(id, profileBook, log))
+            gamepadMappers.Xbox,
+            gamepadMappers.DualSense)
         {
             Id = id,
             StickPointer = StickPointerFor(mapper),
@@ -905,6 +1046,58 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             }
         });
 
+    /// <summary>Pre-warms the overlay keyboard for one controller, so its first toggle pays a file
+    /// rather than the four seconds a .NET single-file host needs before its first line runs.</summary>
+    /// <remarks>
+    /// Called for every controller that is here at launch and again for each one that arrives
+    /// mid-session, on its first frame. <see cref="Sc2Xboxed.App.Console.OskPrewarmSet.Start"/>
+    /// answers "already resident" for a keyboard that is already waiting, so a controller seen twice
+    /// is pre-warmed once.
+    /// </remarks>
+    void PrewarmOsk(string controllerId, ControllerKind kind)
+    {
+        if (controllerId == "hid:pending")
+        {
+            return;
+        }
+
+        try
+        {
+            // A keyboard built for this family, exactly as a toggle would choose it: a Steam
+            // Controller types on its trackpads and a PS5 or Xbox pad on its sticks.
+            var overlayName = OverlayExecutableFor(kind);
+
+            var overlayPath = Path.Combine(AppContext.BaseDirectory, overlayName);
+
+            // The generic build is the fallback, so a machine that has not been given the
+            // specialised pair still opens a keyboard.
+            if (!File.Exists(overlayPath))
+            {
+                overlayPath = Path.Combine(AppContext.BaseDirectory, "Sc2Xboxed.Osk.exe");
+            }
+
+            if (!File.Exists(overlayPath))
+            {
+                DLog($"OSK prewarm: no overlay executable found; {controllerId} will cold-start its keyboard.");
+                return;
+            }
+
+            // Opening the instance makes its pipe listen before the overlay starts, which is
+            // the order the overlay requires. The prewarm then costs nothing to find again.
+            var instance = oskInstances.Open(controllerId);
+
+            Sc2Xboxed.App.Console.OskPrewarmSet.Start(
+                overlayPath,
+                instance.Naming,
+                OskFloatingFor(FamilyIdFor(controllerId), profileBook, log),
+                message => log.Info(LogCategory.Osk, message));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            DLog($"OSK prewarm for {controllerId}: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
     padSender.Start();
     log.Info(LogCategory.Pipe, "PadData pipe server started (SteamXBox_OskPad).");
     var seconds = ReadSecondsOption(args);
@@ -928,15 +1121,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     DLog($"Switch buttons: {switchButtons}");
     DLog($"Mode switch enabled: {enableModeSwitch}");
 
-    var mapper = loadedSettings is not null ? new DefaultSteamControllerMapper(loadedSettings) : new DefaultSteamControllerMapper();
+    var mapper = loadedSettings is not null ? new ControllerOutputMapper(loadedSettings) : new ControllerOutputMapper();
 
-    // Translates a game's rumble into the Steam haptics report. Declared before ReloadProfile,
-    // which retunes it when the profile changes; a local function cannot capture a local declared
-    // after it.
-    var rumbleMapper = new XboxRumbleToSteamHapticsMapper { Tuning = effectiveSettings.XboxTuning };
-
-    // Rebuilds both mappers from disk, carrying over the overlay state so a reload cannot strand the
-    // keyboard open with nothing driving it.
     /// <summary>
     /// Rebuilds the controllers whose own profile was just saved, and nobody else's.
     /// </summary>
@@ -945,18 +1131,20 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     /// the Steam Controller's profile threw away the DualSense's chord timers, trackball inertia and
     /// sub-pixel carry, while saving the DualSense's own profile did nothing at all — the watcher
     /// only looked at the file the bridge was launched with.
+    ///
+    /// <para>
+    /// The overlay state survives the rebuild per session, inside
+    /// <see cref="ControllerSessionSet.Reload"/> — each rebuilt controller keeps its own keyboard
+    /// state. What this method does not do any more is capture it from the last frame's controller
+    /// and pour it onto the bootstrap session, which crossed the controllers and ghosted keystrokes.
+    /// </para>
     /// </remarks>
     void ReloadProfile(IReadOnlyCollection<string> changedProfiles)
     {
-        var wasOskActive = profileMapper.OskActive;
-        var wasDaisywheel = profileMapper.DaisywheelActive;
-
         var touched = sessions.Reload(
-            id => changedProfiles.Contains(profileBook.ProfileFor(id), StringComparer.OrdinalIgnoreCase));
-
-        profileMapper = sessions.For("bootstrap").ProfileMapper;
-        profileMapper.OskActive = wasOskActive;
-        profileMapper.DaisywheelActive = wasDaisywheel;
+            id => changedProfiles.Contains(
+                profileBook.ProfileFor(FamilyIdFor(id)),
+                StringComparer.OrdinalIgnoreCase));
 
         log.Info(LogCategory.Session,
             $"Profiles changed [{string.Join(", ", changedProfiles)}]: {touched} controller(s) rebuilt.");
@@ -970,12 +1158,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         }
 
         var reloaded = ProfileMapper.LoadDetailed(profileName);
-        mapper = new DefaultSteamControllerMapper(reloaded.Settings);
+        mapper = new ControllerOutputMapper(reloaded.Settings);
 
-        DefaultSteamControllerMapper.DefaultButtonMap = XboxButtonMap.FromDictionary(reloaded.Settings.XboxButtons);
-        DefaultSteamControllerMapper.DefaultTuning = reloaded.Settings.XboxTuning;
+        ControllerOutputMapper.DefaultButtonMap = XboxButtonMap.FromDictionary(reloaded.Settings.XboxButtons);
+        ControllerOutputMapper.DefaultTuning = reloaded.Settings.XboxTuning;
         TritonHapticReportBuilder.TriggerActuatorIndex = reloaded.Settings.XboxTuning.TriggerActuatorIndex;
-        rumbleMapper.Tuning = reloaded.Settings.XboxTuning;
 
         log.Info(LogCategory.Session, $"*** PROFILE RELOADED from {reloaded.FilePath} ***");
         log.WriteBlock(LogLevel.Info, LogCategory.Session, "effective settings (reloaded)",
@@ -999,11 +1186,27 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     // attached" case still connects nothing, because the pads are created only for controllers the
     // enumeration actually found.
 
+    // Rumble reaches the physical controller that owns each virtual pad. The mapping from a game's
+    // Xbox 360 feedback is per family (its own tuning), and the target is per controller: a Steam
+    // Controller through the shared haptics sink, an Xbox pad on its own XInput slot, a DualSense
+    // on its own HID stream. The DualSense writer lives here because the Core is deliberately free
+    // of Windows; this process is where the platform meets the pads.
+    await using var dualSenseRumbler = new DualSenseRumbler(DLog);
+
+    /// <summary>The tuning in force for a controller's family, read at the moment it is needed.</summary>
+    /// <remarks>
+    /// Read from the live session rather than cached: ReloadProfile swaps sessions when a profile
+    /// changes, and a rumble arriving in the same second should already feel the new tuning. Safe
+    /// from the rumble threads because <see cref="ControllerSessionSet"/> guards its dictionary.
+    /// </remarks>
+    XboxTuning TuningFor(string controllerId) => sessions.For(controllerId).XboxMapper.Tuning;
+
     // Rumble is wired per pad rather than once on a single whole-bridge pad. Games address
     // feedback to the pad of the player being hit, and each pad is its own ViGEm device, so the
-    // translation has to exist on every one of them.
+    // translation has to exist on every one of them. The factory receives the owning controller's
+    // identity — the only thing that says which physical device a game's rumble belongs to.
     await using var virtualPads = new VirtualPadSet(
-        () =>
+        identity =>
         {
             var sink = new ViGEmXbox360Sink();
             sink.RumbleReceived += (_, rumble) =>
@@ -1012,12 +1215,55 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 {
                     try
                     {
-                        await haptics.SubmitAsync(rumbleMapper.Map(rumble), CancellationToken.None)
+                        // The Steam Controller is the one Xbox-family pad with no XInput slot of its
+                        // own, so it vibrates through the haptics report; every other Xbox-family pad
+                        // goes straight to its slot. Both retune from the session at the moment of
+                        // the rumble, so a profile change reaches the very next one.
+                        if (identity.Kind == ControllerKind.SteamController)
+                        {
+                            var hapticMapper = new XboxRumbleToSteamHapticsMapper
+                            {
+                                Tuning = TuningFor(identity.Id),
+                            };
+                            await haptics.SubmitAsync(hapticMapper.Map(rumble), CancellationToken.None)
+                                .ConfigureAwait(false);
+                            return;
+                        }
+
+                        var tuning = TuningFor(identity.Id);
+                        Sc2Xboxed.Windows.XInputRumble.SetVibration(
+                            identity.Slot,
+                            tuning.ApplyVibration(rumble.LeftMotor),
+                            tuning.ApplyVibration(rumble.RightMotor));
+                    }
+                    catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
+                    {
+                        DLog($"Rumble disabled after error: {exception.Message}");
+                    }
+                });
+            };
+            return sink;
+        },
+        identity =>
+        {
+            var sink = new ViGEmDS4Sink();
+            sink.RumbleReceived += (_, rumble) =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var tuning = TuningFor(identity.Id);
+                        await dualSenseRumbler.RumbleAsync(
+                                identity.Id,
+                                tuning.ApplyVibration(rumble.LeftMotor),
+                                tuning.ApplyVibration(rumble.RightMotor),
+                                CancellationToken.None)
                             .ConfigureAwait(false);
                     }
                     catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
                     {
-                        DLog($"Rumble haptics disabled after error: {exception.Message}");
+                        DLog($"DualSense rumble disabled after error: {exception.Message}");
                     }
                 });
             };
@@ -1049,10 +1295,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     Console.WriteLine("Press Ctrl+C to stop.");
 
     var lastStatus = DateTimeOffset.UtcNow;
-    var lastScrollTick = DateTimeOffset.MinValue;
-
-    /// <summary>Cursor travel accumulated since the last motion tick, in pixels.</summary>
-    var cursorTravel = 0.0;
 
     // Menu + View held together for two seconds powers the controller off. Both are low-traffic
     // buttons, and the detector requires them down simultaneously and rearms only on a full release,
@@ -1079,9 +1321,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
     // Start the overlay resident and hidden now, while nobody is waiting on it, rather than paying
     // its four-second cold start on the first toggle.
-    // No pre-warm. It started the generic overlay on the default channels, where it competed
-    // with the per-controller windows for their frames. A keyboard now starts when a controller
-    // asks for one, and serves only that controller.
+    // See the preheat loop below, where the controllers that are here each get their own keyboard.
 
     // Ownership arbitration: Steam and SteamXBox cannot drive the controller at the same time.
     var steamWatcher = new SteamPresenceWatcher();
@@ -1095,9 +1335,32 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
         : null;
     DLog($"Automatic foreground mode switching: {autoModeSwitch}");
 
+    // Standing down for Steam concerns the Steam Controller and nothing else.
+    //
+    // Steam owns that pad natively: it drives it without us, so competing over it gives the user two
+    // programs fighting for one device. It has no such claim on a DualSense or an Xbox pad — those
+    // keep their profile and their native switch whether Steam is running or not, and handing them
+    // over meant that launching Steam killed every controller on the machine.
+    //
+    // Asked of the hardware rather than remembered: the answer has to hold before any device is
+    // opened, which is where this decision sits.
+    bool SteamControllerPresent()
+    {
+        try
+        {
+            return new Sc2Xboxed.Hid.SteamHidDiscovery().ListValveDevices().Count > 0;
+        }
+        catch (Exception failure)
+        {
+            // Unable to tell: keep the old behaviour rather than seize a pad Steam may be driving.
+            DLog($"looking for a Steam Controller: {failure.GetType().Name}: {failure.Message}");
+            return true;
+        }
+    }
+
     // If Steam is already up when we start, stand down before touching the device at all.
     steamWatcher.Poll(DateTimeOffset.UtcNow);
-    if (steamWatcher.Owner == ControllerOwner.Steam)
+    if (steamWatcher.Owner == ControllerOwner.Steam && SteamControllerPresent())
     {
         DLog("Steam already running at startup; standing down.");
         Console.WriteLine("Steam is running: SteamXBox is standing by.");
@@ -1108,7 +1371,10 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
     {
         // While Steam owns the controller SteamXBox holds nothing open: no HID stream, no virtual
         // pad, no haptics. Wait here until Steam goes away.
-        if (steamWatcher.Owner == ControllerOwner.Steam)
+        //
+        // Only when there is a Steam Controller to hand over. A session of DualSense and Xbox pads
+        // has nothing Steam owns, and waiting here would idle them for as long as Steam ran.
+        if (steamWatcher.Owner == ControllerOwner.Steam && SteamControllerPresent())
         {
             profileMapper.OskActive = false;
             profileMapper.DaisywheelActive = false;
@@ -1173,13 +1439,62 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
             // "the controller stopped responding". The pad now exists before the game starts and is
             // simply fed neutral reports in Profile mode. In Xbox mode it is fed the mapped gamepad.
             //
+            // Families first, before anything below can cause a session to be built. A mapper is
+            // built from its family's profile, and a family that is not yet known resolves to the
+            // empty string — which matches no assignment, so the controller silently inherits
+            // whichever profile the bridge was launched with. That is one family's tuning applied to
+            // a pad whose own profile exists and was never opened.
+            //
+            // Found 14 August: controller-profiles.json held fam:ps5 and fam:xbox, and the log still
+            // said "has no profile of its own" for both pads at startup. The registration further
+            // down came before the pre-warm but after this, and this is where the first sessions
+            // appear. Recording a kind twice costs nothing; recording it late costs the user their
+            // settings.
+            foreach (var controller in attached)
+            {
+                kindByIdentity[controller.Identity.Id] = controller.Identity.Kind;
+            }
+
             // Before the pending fallback below: the "waiting for a controller" placeholder must not
             // claim a slot, and the fallback list is exactly the case where nothing real is attached.
             foreach (var controller in attached)
             {
+                // Rien pour une manette qui demarre au bureau. Un pad se cree au moment ou sa
+                // manette passe en mode natif, pas au branchement : sinon toute manette allumee est
+                // un joueur connecte pour le jeu, meme celle dont le proprietaire est en train de
+                // se servir comme d'une souris. Le jeu compte les manettes connectees, pas celles
+                // qui envoient quelque chose.
+                //
+                // La branche mode Xbox demande son pad a chaque trame et le cree s'il manque, donc
+                // rien a rebrancher a la main.
+                if (initialMode != ControllerOutputMode.Xbox360)
+                {
+                    continue;
+                }
+
+                // Une PS5 ou une Xbox demarree en mode natif n'emule rien : son natif est la manette
+                // elle-meme. La creerait-on que le pad virtuel resterait muet — la sortie native le
+                // saute, voir "cette famille s'emule" plus bas — pendant que la vraie manette
+                // resterait masquee : le jeu verrait un pad mort et ne verrait pas la manette. Meme
+                // regle qu'a la bascule, au demarrage.
+                if (NativeMeansUncloaked(controller.Identity.Kind))
+                {
+                    Sc2Xboxed.App.Console.ControllerCloak.Uncloak(controller.Identity.Id, log);
+                    continue;
+                }
+
                 try
                 {
-                    await virtualPads.ForAsync(controller.Identity.Id, cancellation.Token);
+                    // Each family gets the pad that looks like it: a DualSense becomes a virtual
+                    // DualShock 4, everything else a virtual Xbox 360.
+                    if (controller.Identity.Kind == ControllerKind.DualSense)
+                    {
+                        await virtualPads.ForDS4Async(controller.Identity, cancellation.Token);
+                    }
+                    else
+                    {
+                        await virtualPads.ForAsync(controller.Identity, cancellation.Token);
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -1206,6 +1521,24 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 log.Info(LogCategory.Session, "No controller found; waiting for a Steam Controller.");
             }
 
+            // The overlay keyboards for the controllers that are here, started resident and hidden
+            // now rather than cold on the first toggle — the four seconds the .NET host needs before
+            // the first line of that program runs are exactly what the first press used to pay.
+            // One keyboard per controller, each on its own channels: the instance opened below binds
+            // the pipe the overlay connects to, and the overlay is then asked to wait. Nothing for
+            // the "waiting for a controller" placeholder, which has no pad to type on.
+            // Each controller's family is recorded before the pre-warm below, so the keyboard's
+            // floating choice already sees the family's own profile.
+            foreach (var identity in attached.Select(controller => controller.Identity))
+            {
+                kindByIdentity[identity.Id] = identity.Kind;
+            }
+
+            foreach (var controller in attached)
+            {
+                PrewarmOsk(controller.Identity.Id, controller.Identity.Kind);
+            }
+
             // The rescan closure re-enumerates exactly as the first call did, so a pad switched on
             // later is opened the same way as one present at launch. The XInput snapshot stays the
             // one taken before any virtual pad existed: a slot that fills afterwards is ours.
@@ -1220,6 +1553,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 onLeft: identity =>
                 {
                     _ = virtualPads.ForgetAsync(identity.Id);
+
+                    // The session and the keyboard are that controller's memory: its chords, its
+                    // haptics, its pipes. Released here, at the moment it goes away, so a pad that
+                    // returns starts clean and the sets do not grow for the whole session.
+                    sessions.Forget(identity.Id);
+                    _ = oskInstances.CloseAsync(identity.Id);
 
                     // And its device goes back to everyone else at the same moment. The reason it
                     // was hidden — that its buttons would reach the foreground as well as us — ends
@@ -1255,6 +1594,11 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 var state = frame.State;
                 var frameSource = frame.Source.Id;
 
+                // The family, remembered before the session below is built so its profile lookup
+                // finds it. A controller that arrived mid-session (found by a rescan) is not known
+                // at attach time, so this is recorded again on every frame rather than once.
+                kindByIdentity[frameSource] = frame.Source.Kind;
+
                 // Before anything reads it. Everything below this line works on the session of the
                 // controller that sent this frame, never on another player's memory — of what was
                 // pressed, of where the chord was, or of when its last frame arrived.
@@ -1262,20 +1606,52 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 profileMapper = session.ProfileMapper;
                 modeSwitcher = session.ModeSwitcher;
 
-                // The controllers present when the source was opened got their pads above. This
-                // catches one that arrived mid-session (the rescan found it, this is its first
-                // frame): its pad connects the moment it speaks, whatever mode we are in, so a game
-                // started afterwards finds it already there.
-                if (!virtualPads.Has(frameSource))
+                // Une manette arrivee en cours de session, a sa premiere trame. Comme au demarrage,
+                // elle n'obtient un pad que si elle est en mode natif : "quel que soit le mode" est
+                // ce qui faisait de chaque manette allumee un joueur connecte.
+                //
+                // Et jamais pour une famille dont le natif est la manette elle-meme. Sans ce test,
+                // ce bloc reconstruisait le pad que la bascule venait de debrancher : mesure a
+                // 00:18:11, "rendue au systeme" a .167 et "virtual pad 1 connected" a .204, trente-
+                // sept millisecondes plus tard. La bascule etait annulee par la trame suivante.
+                if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360
+                    && !NativeMeansUncloaked(frame.Source.Kind)
+                    && !virtualPads.Has(frameSource))
                 {
                     try
                     {
-                        await virtualPads.ForAsync(frameSource, cancellation.Token);
+                        // Same rule as at attach: a DualSense gets its DualShock 4 pad, other
+                        // families their Xbox 360 one.
+                        if (frame.Source.Kind == ControllerKind.DualSense)
+                        {
+                            await virtualPads.ForDS4Async(frame.Source, cancellation.Token);
+                        }
+                        else
+                        {
+                            await virtualPads.ForAsync(frame.Source, cancellation.Token);
+                        }
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
                         DLog($"connecting a virtual pad for {frameSource}: {exception.GetType().Name}: {exception.Message}");
                     }
+
+                    // A controller that arrived mid-session is treated like one present at launch:
+                    // its keyboard is pre-warmed the moment its first frame is read, so the first
+                    // toggle pays a file rather than the four seconds of a cold start.
+                    PrewarmOsk(frameSource, frame.Source.Kind);
+                }
+                else if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360
+                         && NativeMeansUncloaked(frame.Source.Kind)
+                         && !Sc2Xboxed.App.Console.ControllerCloak.IsOnLoan(frameSource))
+                {
+                    // Une PS5 ou une Xbox branchee en cours de session pendant que le mode natif est
+                    // actif. Le rebalayage vient de la masquer comme toutes les autres ; sans ce
+                    // bloc, elle resterait invisible pour le jeu jusqu'a la prochaine bascule — le
+                    // natif est la manette elle-meme, et le pad virtuel ne la remplacera jamais.
+                    // IsOnLoan garde ceci a UN appel : apres le premier, la manette est pretee et le
+                    // rebalayage suivant ne la reprendra pas.
+                    Sc2Xboxed.App.Console.ControllerCloak.Uncloak(frameSource, log);
                 }
 
                 // The keyboard's claim on this pad, weighed against whether the keyboard is actually
@@ -1355,19 +1731,35 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 // Masking the chord only once both buttons were down was too late — two fingers never
                 // land on the same frame, so the first button had already fired its own action.
                 var frameTime = DateTimeOffset.UtcNow;
-                var chordComplete = session.PowerOffChordDetector.Update(state.Buttons, frameTime);
-                var chordEngaged = chordComplete || (state.Buttons & PowerOffChord) == PowerOffChord;
 
-                state = state with { Buttons = session.PowerOffChordGate.Filter(state.Buttons, frameTime, chordEngaged) };
+                // Menu + View held for two seconds is the power-off (and for a DualSense over
+                // Bluetooth, the link drop that resets it). It is a Profile-mode tool: in Xbox mode
+                // — which for a PS5 or an Xbox is the native mode — Menu and View are the game's
+                // own buttons, so the chord must not fire and the gate must not withhold them. The
+                // native pad owns them there; SteamXBox only comes back to them on the return to
+                // Profile.
+                bool powerOffRequestedHere = false;
+                if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile)
+                {
+                    var chordComplete = session.PowerOffChordDetector.Update(state.Buttons, frameTime);
+                    var chordEngaged = chordComplete || (state.Buttons & PowerOffChord) == PowerOffChord;
 
-                if (chordComplete)
+                    state = state with { Buttons = session.PowerOffChordGate.Filter(state.Buttons, frameTime, chordEngaged) };
+                    powerOffRequestedHere = chordComplete;
+                }
+                else
+                {
+                    session.PowerOffChordDetector.Reset();
+                    session.PowerOffChordGate.Reset();
+                }
+
+                if (powerOffRequestedHere)
                 {
                     DumpFrameContext("power-off chord held");
                     log.Info(LogCategory.Session, "*** Power-off chord (Menu + View, 2s) ***");
 
                     // The chord and power-off request belong to this physical controller only.
-                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
-                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    await virtualPads.NeutralizeForAsync(frameSource, cancellation.Token);
 
                     bool poweredOff;
                     try
@@ -1431,20 +1823,83 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                     // Modes are per controller. Neutralising every pad here interrupts players that
                     // are still in Xbox mode.
-                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
-                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    await virtualPads.NeutralizeForAsync(frameSource, cancellation.Token);
+
+                    // Puis debrancher, si cette manette repasse au bureau. Neutraliser ne suffit
+                    // pas : un pad neutre reste un pad CONNECTE, et un jeu compte les manettes
+                    // connectees, pas celles qui bougent. Trois manettes branchees dont deux sur le
+                    // bureau donnaient trois joueurs, et celle qu'on tient pilote le joueur 2 ou 3.
+                    // C'est le "toutes les manettes se melangent" du 15 aout.
+                    //
+                    // Le rebranchement est automatique : la branche mode Xbox demande son pad a
+                    // chaque trame et le cree s'il manque. Une manette qui revient au jeu le
+                    // retrouve a la trame suivante.
+                    if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile)
+                    {
+                        await virtualPads.ForgetAsync(frameSource);
+                    }
+
+                    // Pour une PS5 ou une Xbox, le natif n'est pas une imitation : c'est la manette
+                    // elle-meme. On la rend au systeme en la retirant du masquage HidHide, et le jeu
+                    // la voit avec son vrai identifiant — une DualSense reste une DualSense.
+                    //
+                    // Au retour au profil, Apply la remasque : elle redevient la manette de
+                    // SteamXBox et personne d'autre ne la lit.
+                    //
+                    // Le pad virtuel a deja ete debranche juste au-dessus dans un sens, et n'est
+                    // jamais cree dans l'autre, donc a aucun moment le jeu ne voit les deux.
+                    if (NativeMeansUncloaked(frame.Source.Kind))
+                    {
+                        if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360)
+                        {
+                            await virtualPads.ForgetAsync(frameSource);
+                            Sc2Xboxed.App.Console.ControllerCloak.Uncloak(frameSource, log);
+                            log.Info(LogCategory.Mode,
+                                $"{Shorten(frameSource)} rendue au systeme : manette native, sans profil.");
+                        }
+                        else
+                        {
+                            Sc2Xboxed.App.Console.ControllerCloak.Recloak(frameSource, log);
+                            log.Info(LogCategory.Mode,
+                                $"{Shorten(frameSource)} reprise par SteamXBox : profil reapplique.");
+                        }
+                    }
+
                     Console.WriteLine($"Mode switched to {modeSwitcher.CurrentMode}.");
                 }
 
                 if (modeSwitcher.SteamLaunchRequested)
                 {
                     DLog("*** Steam launch requested ***");
-                    // Hand over before Steam is observable: the process takes seconds to appear and
-                    // SteamXBox must not still be writing to the device meanwhile.
-                    steamWatcher.HandOverToSteam(DateTimeOffset.UtcNow);
                     InputHelper.LaunchSteam();
-                    Console.WriteLine("Launching Steam, controller handed over.");
-                    break;
+
+                    // Le retrait devant Steam n'appartient qu'a la manette Steam. Elle seule a une
+                    // couche firmware que Steam reprend, donc elle seule doit cesser d'ecrire.
+                    //
+                    // Le "break" ci-dessous casse la boucle de TOUTES les manettes : la source HID
+                    // est fermee, rouverte, chaque manette part et revient, et chaque session est
+                    // reconstruite avec le mode de depart. Autrement dit un appui sur le bouton PS
+                    // ou Xbox d'une seule manette remettait toutes les autres en mode profil, sans
+                    // qu'aucune bascule n'apparaisse dans le journal.
+                    //
+                    // Mesure le 15 aout a 00:30:10 : bouton Xbox presse, "Steam launch requested" a
+                    // .986, "Main loop ended" a 00:30:11.093, les deux manettes parties et revenues
+                    // a .100, profils recharges a .287. La manette passee en natif 18 secondes plus
+                    // tot etait revenue en profil sans que rien ne le dise, et l'appui suivant
+                    // produisait un deuxieme "MODE SWITCH -> Xbox360" pour la meme manette.
+                    //
+                    // Demande le 13 aout : les manettes PS5 et Xbox "gardent leur switch profil a
+                    // natif et ignore steam software". Lancer Steam, oui. Se retirer, non.
+                    if (!NativeMeansUncloaked(frame.Source.Kind))
+                    {
+                        // Hand over before Steam is observable: the process takes seconds to appear
+                        // and SteamXBox must not still be writing to the device meanwhile.
+                        steamWatcher.HandOverToSteam(DateTimeOffset.UtcNow);
+                        Console.WriteLine("Launching Steam, controller handed over.");
+                        break;
+                    }
+
+                    Console.WriteLine("Launching Steam.");
                 }
 
                 if (modeSwitcher.SteamKillRequested)
@@ -1483,21 +1938,20 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     profileMapper.Reset();
 
                     // The foreground decision changes this controller's session, not every pad.
-                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
-                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    await virtualPads.NeutralizeForAsync(frameSource, cancellation.Token);
+
+                    // Et debrancher au retour au bureau, comme pour la bascule manuelle : un pad
+                    // neutre reste un pad connecte, donc un joueur de plus pour le jeu.
+                    if (suggestedMode == ControllerOutputMode.Profile)
+                    {
+                        await virtualPads.ForgetAsync(frameSource);
+                    }
+
                     Console.WriteLine($"Mode switched to {suggestedMode} ({foregroundArbiter.LastForegroundProcess}).");
                 }
 
                 if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile)
                 {
-                    // The tools are reachable from the pad only here. In Xbox mode the request is
-                    // never raised, so switching to Xbox unbinds them without anything to undo.
-                    if (modeSwitcher.DesktopRequested)
-                    {
-                        log.Info(LogCategory.Session, "*** Steam + X: SteamXBox Desktop ***");
-                        ShowDesktop(log);
-                    }
-
                     var mappedState = modeSwitcher.ConsumeButton(state);
                     // While this controller owns the keyboard, its sticks belong to the keyboard and
                     // to nothing else. One input cannot serve two purposes: the profile here binds
@@ -1573,7 +2027,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             //
                             // The two modes are what make the comboboxes real: the right stick only
                             // drives the pointer while the profile says "Souris", and the left stick
-                            // only scrolls while the profile has not switched it to "Aucun". Before
+                            // only scrolls while the profile says "Molette" — never both. Before
                             // this the stick roles were hardcoded here and the dropdowns in the
                             // Mouvements card changed nothing.
                             var stickOutput = StickPointerMapper.Map(
@@ -1581,7 +2035,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                 elapsed,
                                 session.StickPointer,
                                 rightStickPointer: profileMapper.Settings.RightStickMode == StickMotionMode.Pointer,
-                                leftStickWheel: profileMapper.Settings.LeftStickMode != StickMotionMode.None,
+                                leftStickWheel: profileMapper.Settings.LeftStickMode == StickMotionMode.Wheel,
                                 ref session.Carry);
 
                             // Applied straight away, by this controller, for this frame. No shared
@@ -1669,8 +2123,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
                     // A Profile frame must keep only its own virtual pad neutral. Sending neutral to
                     // every pad here cuts input from controllers currently in Xbox mode.
-                    var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
-                    await pad.SubmitAsync(Xbox360Report.Neutral, cancellation.Token);
+                    await virtualPads.NeutralizeForAsync(frameSource, cancellation.Token);
 
                     if (profileMapper.OskToggleRequested)
                     {
@@ -1698,9 +2151,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                 // trackpads and a PS5 or Xbox pad on its sticks; the specialised builds
                                 // keep one input path each instead of holding both live, where a
                                 // resting thumb on one fights the other hand.
-                                var overlayName = frame.Source.Kind == ControllerKind.SteamController
-                                    ? "Sc2XboxedPads.Osk.exe"
-                                    : "Sc2XboxedSticks.Osk.exe";
+                                var overlayName = OverlayExecutableFor(frame.Source.Kind);
 
                                 var overlayPath = Path.Combine(oskDir, overlayName);
 
@@ -1788,6 +2239,16 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                                 Sc2Xboxed.Windows.ChildProcesses.Adopt(proc, DLog);
                                                 Sc2Xboxed.App.Console.OskPrewarmSet.Remember(
                                                     instance.Naming, proc, DLog);
+
+                                                // Started resident, so it needs the show signal the
+                                                // resident path would have written — this press
+                                                // opened the keyboard, and it has to appear now.
+                                                // Missing this left a resident overlay with
+                                                // OskActive=true and nothing on screen: the pad was
+                                                // handed over, and the core then gave it back when
+                                                // the beat never came.
+                                                Sc2Xboxed.App.Console.OskPrewarmSet.SignalShow(
+                                                    instance.Naming, DLog);
                                             }
                                         }
 
@@ -1868,10 +2329,10 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // per N pixels of travel gives a texture that scales with the gesture instead.
                     if (rightHaptics.Enabled)
                     {
-                        cursorTravel += Math.Abs(profileMapper.EmittedPixelsX) + Math.Abs(profileMapper.EmittedPixelsY);
-                        if (cursorTravel >= rightHaptics.TravelPerTickPixels)
+                        session.HapticTravel += Math.Abs(profileMapper.EmittedPixelsX) + Math.Abs(profileMapper.EmittedPixelsY);
+                        if (session.HapticTravel >= rightHaptics.TravelPerTickPixels)
                         {
-                            cursorTravel %= rightHaptics.TravelPerTickPixels;
+                            session.HapticTravel %= rightHaptics.TravelPerTickPixels;
                             cmds.Add(new HapticCommand(
                                 HapticActuator.RightTrackpad, HapticType.Tick, 0,
                                 PulseWidthUs: rightHaptics.PulseWidthUs));
@@ -1889,7 +2350,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // a fast flick distinguishable from a single notch.
                     if (leftHaptics.Enabled &&
                         profileMapper.WheelNotches > 0 &&
-                        (hapticNow - lastScrollTick).TotalMilliseconds >= leftHaptics.DetentIntervalMs)
+                        (hapticNow - session.LastScrollTick).TotalMilliseconds >= leftHaptics.DetentIntervalMs)
                     {
                         var width = (ushort)Math.Clamp(
                             leftHaptics.PulseWidthUs + profileMapper.WheelNotches * 20,
@@ -1897,7 +2358,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             leftHaptics.PulseWidthUs * 2);
                         cmds.Add(new HapticCommand(
                             HapticActuator.LeftTrackpad, HapticType.Tick, 0, PulseWidthUs: width));
-                        lastScrollTick = hapticNow;
+                        session.LastScrollTick = hapticNow;
                     }
 
                     if (cmds.Count > 0)
@@ -1926,49 +2387,119 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 else
                 {
                     var mappedState = enableModeSwitch ? modeSwitcher.ConsumeButton(state) : state;
-                    var output = mapper.Map(mappedState);
                     if (source is INativeLayerControl nativeLayer)
                         await nativeLayer.SetNativeLayerEnabledAsync(false);
+
+                    // Une manette PS5 ou Xbox en mode natif : SteamXBox s'efface.
+                    //
+                    // Sa manette physique a ete demasquee a la bascule, donc le jeu la voit
+                    // directement, avec son vrai identifiant. Emettre un pad virtuel en plus
+                    // donnerait deux manettes pour un joueur — chaque appui compte double — et
+                    // remplacerait une DualSense par une DualShock 4, qui n'a ni les memes boutons ni
+                    // les memes reperes a l'ecran.
+                    //
+                    // Le flux continue d'etre lu, et c'est tout ce qui reste : sans lui, la tenue
+                    // L3+R3 qui ramene au profil n'arriverait jamais.
+                    //
+                    // La manette Steam ne passe pas par ici. Windows ne la gere pas nativement : la
+                    // demasquer donnerait une manette morte, donc elle garde son pad Xbox 360
+                    // virtuel, qui est ce qui la rend utilisable.
+                    //
+                    // Un "if" et non un "continue" : la ligne de compteurs par seconde est plus bas
+                    // dans la boucle, et sauter la trame la sauterait aussi. Sur une machine dont la
+                    // seule manette est en natif, le journal deviendrait entierement muet — l'etat
+                    // exact que ces compteurs ont ete ecrits pour supprimer.
+                    if (!NativeMeansUncloaked(frame.Source.Kind))
+                    {
 
                     // Xbox mode used to report nothing at all: the per-second line showed frames and
                     // a mode, and stayed silent on whether the virtual pad was being fed. "It does
                     // not work" was then impossible to place — mapper producing nothing, or submit
                     // failing? These three numbers separate the two.
-                    var report = output.Gamepad;
-                    if (report.Buttons != Xbox360Buttons.None)
+                    //
+                    // The counters are family-agnostic: a DualSense is counted through its DualShock
+                    // 4 report, translated back to the Xbox button names the status line has always
+                    // used, so one line serves both families.
+                    if (frame.Source.Kind == ControllerKind.DualSense)
                     {
-                        xboxButtonFrames++;
-                        xboxButtons |= report.Buttons;
+                        var ds4Report = session.DualSenseMapper.Map(mappedState);
+                        var ds4Buttons = DualSenseGamepadMapper.ToXbox360(ds4Report);
+                        if (ds4Buttons != Xbox360Buttons.None)
+                        {
+                            xboxButtonFrames++;
+                            xboxButtons |= ds4Buttons;
+                        }
+
+                        if (ds4Report.LeftThumbX != 128 || ds4Report.LeftThumbY != 128 ||
+                            ds4Report.RightThumbX != 128 || ds4Report.RightThumbY != 128)
+                        {
+                            xboxStickFrames++;
+                        }
+
+                        if (ds4Report.LeftTrigger != 0 || ds4Report.RightTrigger != 0)
+                        {
+                            xboxTriggerFrames++;
+                        }
+
+                        try
+                        {
+                            // This DualSense's own virtual DualShock 4 pad. Routing every controller
+                            // to one pad is what made split-screen impossible: the game would see a
+                            // single player receiving two people's inputs interleaved, which is not
+                            // two players — it is one player being fought over.
+                            var pad = await virtualPads.ForDS4Async(frame.Source, cancellation.Token);
+                            await pad.SubmitAsync(ds4Report, cancellation.Token);
+                        }
+                        catch (Exception exception)
+                        {
+                            // Previously this propagated and killed the loop. A driver that rejects
+                            // one report should cost one frame, and should say so.
+                            xboxSubmitFailures++;
+                            log.Warn(LogCategory.Mapping,
+                                $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
+                        }
+                    }
+                    else
+                    {
+                        var output = mapper.Map(mappedState);
+                        var report = output.Gamepad;
+                        if (report.Buttons != Xbox360Buttons.None)
+                        {
+                            xboxButtonFrames++;
+                            xboxButtons |= report.Buttons;
+                        }
+
+                        if (report.LeftThumbX != 0 || report.LeftThumbY != 0 ||
+                            report.RightThumbX != 0 || report.RightThumbY != 0)
+                        {
+                            xboxStickFrames++;
+                        }
+
+                        if (report.LeftTrigger != 0 || report.RightTrigger != 0)
+                        {
+                            xboxTriggerFrames++;
+                        }
+
+                        try
+                        {
+                            // To this controller's own virtual pad. Routing every controller to one
+                            // pad is what made split-screen impossible: the game would see a single
+                            // player receiving two people's inputs interleaved, which is not two
+                            // players — it is one player being fought over.
+                            var pad = await virtualPads.ForAsync(frame.Source, cancellation.Token);
+                            await pad.SubmitAsync(report, cancellation.Token);
+                        }
+                        catch (Exception exception)
+                        {
+                            // Previously this propagated and killed the loop. A driver that rejects
+                            // one report should cost one frame, and should say so.
+                            xboxSubmitFailures++;
+                            log.Warn(LogCategory.Mapping,
+                                $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
+                        }
                     }
 
-                    if (report.LeftThumbX != 0 || report.LeftThumbY != 0 ||
-                        report.RightThumbX != 0 || report.RightThumbY != 0)
-                    {
-                        xboxStickFrames++;
-                    }
-
-                    if (report.LeftTrigger != 0 || report.RightTrigger != 0)
-                    {
-                        xboxTriggerFrames++;
-                    }
-
-                    try
-                    {
-                        // To this controller's own virtual pad. Routing every controller to one pad
-                        // is what made split-screen impossible: the game would see a single player
-                        // receiving two people's inputs interleaved, which is not two players — it
-                        // is one player being fought over.
-                        var pad = await virtualPads.ForAsync(frameSource, cancellation.Token);
-                        await pad.SubmitAsync(report, cancellation.Token);
-                    }
-                    catch (Exception exception)
-                    {
-                        // Previously this propagated and killed the loop. A driver that rejects one
-                        // report should cost one frame, and should say so.
-                        xboxSubmitFailures++;
-                        log.Warn(LogCategory.Mapping,
-                            $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
-                    }
+                    } // fin de "cette famille s'emule" — voir NativeMeansUncloaked plus haut
                 }
 
                 var now = DateTimeOffset.UtcNow;
@@ -2036,7 +2567,8 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // Once a second, alongside the counters. Rebuilding every session rather than
                     // only the ones whose assignment changed: a session is cheap, and working out
                     // which controllers a rewritten file affects is more code than simply starting
-                    // them all again from what it now says.
+                    // them all again from what it now says. The overlay state survives per session,
+                    // inside ControllerSessionSet.Reload, so an open keyboard stays open.
                     var bookStamp = ControllerProfilesTimestamp();
                     if (bookStamp != profileBookStamp)
                     {
@@ -2049,14 +2581,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                         profileMapper = session.ProfileMapper;
                         modeSwitcher = session.ModeSwitcher;
                         mapper = session.XboxMapper;
-
-                        // Restored across the rebuild: the overlay is a window that is still open,
-                        // and a reload that closed it would make assigning a profile look like a
-                        // crash.
-                        foreach (var rebuilt in sessions.All)
-                        {
-                            // Nothing to restore: the typing state belongs to each session's own mapper.
-                        }
 
                         log.Info(LogCategory.Session, "Per-controller profiles reloaded.");
                     }
@@ -2227,6 +2751,7 @@ static ControllerOutputMode ReadInitialOutputMode(string[] args)
         "xbox" => ControllerOutputMode.Xbox360,
         "xbox360" => ControllerOutputMode.Xbox360,
         "gamepad" => ControllerOutputMode.Xbox360,
+        "native" => ControllerOutputMode.Xbox360,
         "profile" => ControllerOutputMode.Profile,
         _ => ControllerOutputMode.Profile
     };
@@ -2592,6 +3117,9 @@ static void RunDiagnosticReport(string[] args)
     {
         "SteamXBox.exe",
         "SteamXBox.Core.exe",
+        "Sc2XboxedSteam.Osk.exe",
+        "Sc2XboxedPS5.Osk.exe",
+        "Sc2XboxedXbox.Osk.exe",
         "Sc2XboxedPads.Osk.exe",
         "Sc2XboxedSticks.Osk.exe",
         "Sc2Xboxed.Osk.exe",
@@ -2668,7 +3196,18 @@ static void RunDiagnosticReport(string[] args)
     }
 
     Section("log files");
-    foreach (var name in new[] { "steamxbox-debug.log", "steamxbox-debug.log.1", "steamxbox-osk-debug.log" })
+    var logNames = new[]
+        {
+            "steamxbox-debug.log",
+            "steamxbox-debug.log.1",
+            "steamxbox-osk-debug.log",
+        }
+            .Concat(Directory.Exists(AppContext.BaseDirectory)
+                ? Directory.EnumerateFiles(AppContext.BaseDirectory, "steamxbox-*Osk*-debug.log")
+                    .Select(path => Path.GetFileName(path) ?? path)
+                : []);
+
+    foreach (var name in logNames.Distinct(StringComparer.OrdinalIgnoreCase))
     {
         var path = Path.Combine(AppContext.BaseDirectory, name);
         lines.Add(File.Exists(path)

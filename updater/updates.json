@@ -18,14 +18,28 @@
         "SteamXBox.exe",
         "SteamXBox.Core.exe",
         "SteamXBox.Desktop.exe",
-        "Sc2XboxedPads.Osk.exe",
-        "Sc2XboxedSticks.Osk.exe"
+        "Sc2XboxedSteam.Osk.exe",
+        "Sc2XboxedPS5.Osk.exe",
+        "Sc2XboxedXbox.Osk.exe"
       ],
       "pollIntervalSeconds": 60,
       "maxWaitMinutes": 120
     }
   },
   "releases": [
+    {
+      "name": "SteamXBox 4.8.2",
+      "version": "4.8.2.0",
+      "publishedAt": "2026-08-15T00:00:00Z",
+      "summary": "# SteamXBox 4.8.2\n\n## Le bouton PS, le signal d'arrêt et le mode natif\n\nTrois régressions corrigées après la 4.7 :\n\n- **Le bouton PS ouvre Steam dans les deux modes.** Lancer Steam n'est pas rendre la manette au système : le retrait devant Steam reste réservé à la manette Steam (seule à avoir une couche firmware que Steam reprend).\n- **Le signal d'arrêt de la manette Steam est de retour : PS+Y** tue le processus Steam et reconnecte la manette, dans les deux modes. Une manette coincée en mode Xbox360 doit pouvoir arrêter Steam sans le clavier. PS+X n'ouvre pas l'environnement : un appui PS reste un appui PS.\n- **Le mode natif démarre enfin en natif.** `--start-mode native` est pris en charge : la PS5 démarre en mode Xbox360 natif au lieu de retomber silencieusement sur le profil, et Windows la voit réellement avec son vrai identifiant.\n\n## Manette par famille\n\nTrois claviers à l'écran distincts, un par famille (Steam, PS5, Xbox), chacun produit par son propre projet — fini le binaire copié à la main sous deux noms.",
+      "downloadUrl": "https://github.com/Hoyatla/SteamXBox-/releases/download/v4.8.2/SteamXBox_Full_Setup_4.8.2_win-x64.exe",
+      "downloadSize": 312419410,
+      "launchArguments": "/SILENT /NORESTART",
+      "exitCode": {
+        "skipCheck": false,
+        "successCodes": [0, 3010, 1641]
+      }
+    },
     {
       "name": "SteamXBox 4.7",
       "version": "4.7.0.0",

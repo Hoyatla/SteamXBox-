@@ -151,8 +151,9 @@ including when the user closes Steam from Steam's own UI. Two grace periods guar
 Mode switching:
 
 - default start mode is `Xbox360`;
-- a short press on the Steam/Guide button launches Steam and hands the controller over;
-- Steam + Y kills Steam and takes the controller back immediately;
+- the Steam/Guide button launches Steam software in both modes; Steam pressed while Y is held
+  kills the Steam process and reconnects the controller (the Steam Controller's own kill chord);
+  PS+X does nothing beyond a PS press — no environment chord;
 - the configured switch button (`--switch-button`, default Quick Access) toggles `Xbox360`/`Profile`;
 - the Steam/Guide button is consumed by the mode switch and is not sent as Xbox Guide while switching is enabled.
 

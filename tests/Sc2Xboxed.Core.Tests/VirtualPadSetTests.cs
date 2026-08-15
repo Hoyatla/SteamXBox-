@@ -1,3 +1,4 @@
+using Sc2Xboxed.Core.Input;
 using Sc2Xboxed.Core.Output;
 using Sc2Xboxed.Core.Runtime;
 using Xunit;
@@ -5,7 +6,7 @@ using Xunit;
 namespace Sc2Xboxed.Core.Tests;
 
 /// <summary>
-/// One virtual Xbox pad per physical controller.
+/// One virtual pad per physical controller, shaped for the controller's family.
 /// </summary>
 /// <remarks>
 /// Reading several controllers at once is only half of split-screen. If they all feed one virtual
@@ -24,6 +25,8 @@ public class VirtualPadSetTests
         public List<Xbox360Report> Submitted { get; } = [];
 
         public bool Disposed { get; private set; }
+
+        public ControllerIdentity Identity { get; set; }
 
         public ValueTask ConnectAsync(CancellationToken cancellationToken)
         {
@@ -44,27 +47,66 @@ public class VirtualPadSetTests
         }
     }
 
-    private const string PadA = "hid:pad-a";
-    private const string PadB = "xinput-slot:1";
-
-    private static (VirtualPadSet Set, List<FakePad> Made) Build()
+    private sealed class FakeDS4Pad : IVirtualDS4Sink
     {
-        var made = new List<FakePad>();
-        var set = new VirtualPadSet(() =>
-        {
-            var pad = new FakePad();
-            made.Add(pad);
-            return pad;
-        });
+        public int Connects { get; private set; }
 
-        return (set, made);
+        public List<DS4Report> Submitted { get; } = [];
+
+        public bool Disposed { get; private set; }
+
+        public ControllerIdentity Identity { get; set; }
+
+        public ValueTask ConnectAsync(CancellationToken cancellationToken)
+        {
+            Connects++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SubmitAsync(DS4Report report, CancellationToken cancellationToken)
+        {
+            Submitted.Add(report);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private static readonly ControllerIdentity PadA = new(
+        ControllerKind.XInput, "hid:pad-a", "Pad A", Slot: 0);
+    private static readonly ControllerIdentity PadB = new(
+        ControllerKind.XInput, "xinput-slot:1", "Pad B", Slot: 1);
+
+    private static (VirtualPadSet Set, List<FakePad> XboxMade, List<FakeDS4Pad> DS4Made) Build()
+    {
+        var xboxMade = new List<FakePad>();
+        var ds4Made = new List<FakeDS4Pad>();
+        var set = new VirtualPadSet(
+            identity =>
+            {
+                var pad = new FakePad { Identity = identity };
+                xboxMade.Add(pad);
+                return pad;
+            },
+            identity =>
+            {
+                var pad = new FakeDS4Pad { Identity = identity };
+                ds4Made.Add(pad);
+                return pad;
+            });
+
+        return (set, xboxMade, ds4Made);
     }
 
     // The whole point: two controllers, two distinct virtual pads.
     [Fact]
     public async Task EachControllerGetsItsOwnPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         var first = await set.ForAsync(PadA, default);
         var second = await set.ForAsync(PadB, default);
@@ -74,10 +116,26 @@ public class VirtualPadSetTests
         Assert.Equal(2, set.Count);
     }
 
+    // The pad's rumble has to reach the physical controller that owns it, so the factory receives
+    // the whole identity — the XInput slot and the kind — not just the dictionary key.
+    [Fact]
+    public async Task ThePadFactorySeesTheOwningControllersIdentity()
+    {
+        var (set, made, ds4Made) = Build();
+
+        await set.ForAsync(PadA, default);
+        await set.ForDS4Async(PadB, default);
+
+        Assert.Equal(PadA, made[0].Identity);
+        Assert.Equal(PadB, ds4Made[0].Identity);
+        Assert.Equal(0, made[0].Identity.Slot);
+        Assert.Equal(ControllerKind.XInput, made[0].Identity.Kind);
+    }
+
     [Fact]
     public async Task TheSameControllerAlwaysGetsTheSamePad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         var first = await set.ForAsync(PadA, default);
         var again = await set.ForAsync(PadA, default);
@@ -89,7 +147,7 @@ public class VirtualPadSetTests
     [Fact]
     public async Task APadIsConnectedExactlyOnce()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
         await set.ForAsync(PadA, default);
@@ -102,10 +160,11 @@ public class VirtualPadSetTests
     [Fact]
     public async Task NoPadExistsUntilAControllerSendsSomething()
     {
-        var (set, made) = Build();
+        var (set, made, ds4Made) = Build();
 
         Assert.Equal(0, set.Count);
         Assert.Empty(made);
+        Assert.Empty(ds4Made);
 
         await set.ForAsync(PadA, default);
 
@@ -115,7 +174,7 @@ public class VirtualPadSetTests
     [Fact]
     public async Task OneControllersInputGoesOnlyToItsOwnPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         var a = await set.ForAsync(PadA, default);
         await set.ForAsync(PadB, default);
@@ -129,12 +188,12 @@ public class VirtualPadSetTests
     [Fact]
     public async Task TargetedNeutralisationDoesNotReachAnotherPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
         await set.ForAsync(PadB, default);
 
-        await set.SubmitForAsync(PadA, Xbox360Report.Neutral, default);
+        await set.NeutralizeForAsync(PadA.Id, default);
 
         Assert.Single(made[0].Submitted);
         Assert.Empty(made[1].Submitted);
@@ -145,12 +204,12 @@ public class VirtualPadSetTests
     [Fact]
     public async Task ATransitionReachesEveryPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
         await set.ForAsync(PadB, default);
 
-        await set.SubmitAllAsync(Xbox360Report.Neutral, default);
+        await set.NeutralizeAllAsync(default);
 
         Assert.All(made, pad => Assert.Single(pad.Submitted));
     }
@@ -158,9 +217,9 @@ public class VirtualPadSetTests
     [Fact]
     public async Task SubmittingToNoPadsIsHarmless()
     {
-        var (set, _) = Build();
+        var (set, _, _) = Build();
 
-        await set.SubmitAllAsync(Xbox360Report.Neutral, default);
+        await set.NeutralizeAllAsync(default);
 
         Assert.Equal(0, set.Count);
     }
@@ -170,10 +229,10 @@ public class VirtualPadSetTests
     [Fact]
     public async Task AControllerThatLeavesReleasesItsPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
-        await set.ForgetAsync(PadA);
+        await set.ForgetAsync(PadA.Id);
 
         Assert.Equal(0, set.Count);
         Assert.True(made[0].Disposed);
@@ -183,10 +242,10 @@ public class VirtualPadSetTests
     [Fact]
     public async Task AReleasedPadIsNeutralisedFirst()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
-        await set.ForgetAsync(PadA);
+        await set.ForgetAsync(PadA.Id);
 
         Assert.Equal(Xbox360Report.Neutral, made[0].Submitted[^1]);
     }
@@ -194,7 +253,7 @@ public class VirtualPadSetTests
     [Fact]
     public async Task ForgettingAnUnknownControllerIsHarmless()
     {
-        var (set, _) = Build();
+        var (set, _, _) = Build();
 
         await set.ForgetAsync("never-seen");
 
@@ -204,10 +263,10 @@ public class VirtualPadSetTests
     [Fact]
     public async Task AControllerThatComesBackGetsAFreshPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
-        await set.ForgetAsync(PadA);
+        await set.ForgetAsync(PadA.Id);
         await set.ForAsync(PadA, default);
 
         Assert.Equal(2, made.Count);
@@ -217,7 +276,7 @@ public class VirtualPadSetTests
     [Fact]
     public async Task DisposingReleasesEveryPad()
     {
-        var (set, made) = Build();
+        var (set, made, _) = Build();
 
         await set.ForAsync(PadA, default);
         await set.ForAsync(PadB, default);
@@ -226,4 +285,74 @@ public class VirtualPadSetTests
         Assert.Equal(0, set.Count);
         Assert.All(made, pad => Assert.True(pad.Disposed));
     }
+
+    // A DualSense gets a DualShock 4 pad, on a separate dictionary from the Xbox ones: the same
+    // controller id must never own two pads, one per family.
+    [Fact]
+    public async Task ADualSenseControllerGetsADualShock4Pad()
+    {
+        var (set, xboxMade, ds4Made) = Build();
+
+        var pad = await set.ForDS4Async(PadA, default);
+
+        Assert.IsType<FakeDS4Pad>(pad);
+        Assert.Empty(xboxMade);
+        Assert.Single(ds4Made);
+        Assert.Equal(1, set.Count);
+    }
+
+    [Fact]
+    public async Task TheSameControllerCanOnlyHaveOnePadOfEachFamily()
+    {
+        var (set, xboxMade, ds4Made) = Build();
+
+        var ds4 = await set.ForDS4Async(PadA, default);
+        var again = await set.ForDS4Async(PadA, default);
+
+        Assert.Same(ds4, again);
+        Assert.Single(ds4Made);
+        Assert.Empty(xboxMade);
+    }
+
+    [Fact]
+    public async Task HasIsTrueForEitherFamily()
+    {
+        var (set, _, _) = Build();
+
+        await set.ForDS4Async(PadA, default);
+
+        Assert.True(set.Has(PadA.Id));
+    }
+
+    // The neutral report a family's pad receives is its own: an Xbox neutral to a DualShock 4 pad
+    // would be a report it cannot mean.
+    [Fact]
+    public async Task TargetedNeutralisationSpeaksEachFamilysReport()
+    {
+        var (set, xboxMade, ds4Made) = Build();
+
+        await set.ForAsync(PadA, default);
+        await set.ForDS4Async(PadB, default);
+
+        await set.NeutralizeForAsync(PadA.Id, default);
+        await set.NeutralizeForAsync(PadB.Id, default);
+
+        Assert.Equal(Xbox360Report.Neutral, xboxMade[0].Submitted[^1]);
+        Assert.Equal(DS4Report.Neutral, ds4Made[0].Submitted[^1]);
+    }
+
+    [Fact]
+    public async Task ForgettingReleasesEitherFamily()
+    {
+        var (set, xboxMade, ds4Made) = Build();
+
+        await set.ForAsync(PadA, default);
+        await set.ForDS4Async(PadB, default);
+        await set.ForgetAsync(PadB.Id);
+
+        Assert.Equal(1, set.Count);
+        Assert.False(xboxMade[0].Disposed);
+        Assert.True(ds4Made[0].Disposed);
+    }
 }
+

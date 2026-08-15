@@ -1,100 +1,94 @@
-namespace Sc2Xboxed.Core.Input;
+﻿namespace Sc2Xboxed.Core.Input;
 
 /// <summary>
-/// Which profile belongs to which controller.
+/// Which profile belongs to which family of controllers.
 /// </summary>
 /// <remarks>
-/// Every controller is an input, so each carries its own settings. Two players sharing one machine
-/// want different sensitivities and different bindings, and until now there was one profile for
-/// whatever pad happened to be read.
+/// Steam, PlayStation and Xbox each have their own settings, because the three have genuinely
+/// different capabilities — a profile written for trackpads means nothing on a pad that has none.
+/// Every connected controller looks its family up here; a family with no assignment runs the launch
+/// profile.
 ///
 /// <para>
-/// The hard part is not the mapping, it is that a wrong answer is silent. A controller filed under
-/// the wrong key does not fail — it quietly applies the other player's settings, and the only
-/// symptom is that the pad "feels off" in a way nobody can pin down. That is why
-/// <see cref="ControllerIdentityFactory.IsStable"/> exists and why it is consulted here rather than
-/// assumed: a HID path identifies a device across reboots, an XInput slot identifies only the order
-/// somebody switched their controllers on in.
-/// </para>
-///
-/// <para>
-/// Assignments to unstable keys are kept, because within one session they are exactly right and
-/// refusing them would mean an Xbox pad could never have a profile at all. They are simply not
-/// written to disk: an entry filed under <c>xinput-slot:0</c> would be restored tomorrow onto
-/// whichever pad connected first, which is the silent swap this class exists to prevent.
+/// It used to be one profile per controller, filed under a key built from the device. Then one
+/// DualSense turned up under two different Bluetooth addresses on the author's machine, the profile
+/// was filed under the address it happened to connect with, and the next connection with the other
+/// address ran on the defaults with nothing saying so. The family is the one thing that never
+/// changes under a controller, so the family is what is filed under — see
+/// <see cref="ControllerIdentityFactory.IsStable"/>.
 /// </para>
 /// </remarks>
 public sealed class ControllerProfileBook
 {
-    private readonly Dictionary<string, string> _byController = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _byKey = new(StringComparer.Ordinal);
 
-    /// <param name="defaultProfile">Used by any controller with no assignment of its own.</param>
+    /// <param name="defaultProfile">Used by any family with no assignment of its own.</param>
     public ControllerProfileBook(string defaultProfile = "default")
     {
         DefaultProfile = string.IsNullOrWhiteSpace(defaultProfile) ? "default" : defaultProfile;
     }
 
-    /// <summary>The profile a controller falls back to when it has none of its own.</summary>
+    /// <summary>The profile a family falls back to when it has none of its own.</summary>
     public string DefaultProfile { get; }
 
-    /// <summary>How many controllers have an assignment.</summary>
-    public int Count => _byController.Count;
+    /// <summary>How many families have an assignment.</summary>
+    public int Count => _byKey.Count;
 
     /// <summary>
-    /// The profile this controller should use.
+    /// The profile this family should use.
     /// </summary>
     /// <remarks>
-    /// Never null and never throws. A controller nobody has configured is the normal case — a guest
-    /// plugging in a second pad — and it must simply work on the defaults rather than be refused.
+    /// Never null and never throws. A family nobody has configured is the normal case — a guest
+    /// plugging in a pad — and it must simply work on the defaults rather than be refused.
     /// </remarks>
-    public string ProfileFor(string controllerId)
-        => _byController.TryGetValue(controllerId, out var profile) ? profile : DefaultProfile;
+    public string ProfileFor(string key)
+        => _byKey.TryGetValue(key, out var profile) ? profile : DefaultProfile;
 
-    /// <summary>Whether this controller has an assignment of its own.</summary>
-    public bool HasOwnProfile(string controllerId) => _byController.ContainsKey(controllerId);
+    /// <summary>Whether this family has an assignment of its own.</summary>
+    public bool HasOwnProfile(string key) => _byKey.ContainsKey(key);
 
-    /// <summary>Assigns a profile to a controller.</summary>
+    /// <summary>Assigns a profile to a family.</summary>
     /// <remarks>
-    /// An empty profile name clears the assignment rather than filing the controller under a blank
+    /// An empty profile name clears the assignment rather than filing the family under a blank
     /// profile that no longer exists — which is what happens when the user deletes the profile a
-    /// controller was using.
+    /// family was using.
     /// </remarks>
-    public void Assign(string controllerId, string? profileName)
+    public void Assign(string key, string? profileName)
     {
-        if (string.IsNullOrWhiteSpace(controllerId))
+        if (string.IsNullOrWhiteSpace(key))
         {
             return;
         }
 
         if (string.IsNullOrWhiteSpace(profileName))
         {
-            _byController.Remove(controllerId);
+            _byKey.Remove(key);
             return;
         }
 
-        _byController[controllerId] = profileName;
+        _byKey[key] = profileName;
     }
 
-    /// <summary>Drops a controller's assignment.</summary>
-    public void Clear(string controllerId) => _byController.Remove(controllerId);
+    /// <summary>Drops a family's assignment.</summary>
+    public void Clear(string key) => _byKey.Remove(key);
 
     /// <summary>
     /// Drops every assignment naming a profile that no longer exists.
     /// </summary>
     /// <remarks>
-    /// Deleting a profile in the interface would otherwise leave controllers pointing at it, and
-    /// they would silently fall back to the defaults with nothing saying why their settings changed.
+    /// Deleting a profile in the interface would otherwise leave families pointing at it, and they
+    /// would silently fall back to the defaults with nothing saying why their settings changed.
     /// </remarks>
     public void DropMissingProfiles(IEnumerable<string> existingProfiles)
     {
         var known = existingProfiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var id in _byController
+        foreach (var key in _byKey
                      .Where(pair => !known.Contains(pair.Value))
                      .Select(pair => pair.Key)
                      .ToList())
         {
-            _byController.Remove(id);
+            _byKey.Remove(key);
         }
     }
 
@@ -102,18 +96,18 @@ public sealed class ControllerProfileBook
     /// The assignments worth writing to disk.
     /// </summary>
     /// <remarks>
-    /// Only the ones filed under a key that identifies the same physical device tomorrow. Persisting
-    /// an XInput slot would restore one player's settings onto whoever switched their controller on
-    /// first — a failure with no symptom other than a pad that feels wrong.
+    /// Only the family keys. A file written by an older build may still hold per-controller keys —
+    /// a Bluetooth address, a slot — and trusting those is the silent loss all over again: the same
+    /// pad connected under the other address tomorrow and the settings were never found.
     /// </remarks>
     public IReadOnlyDictionary<string, string> Persistable()
-        => _byController
+        => _byKey
             .Where(pair => ControllerIdentityFactory.IsStable(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
     /// <summary>Every assignment, including the ones that last only for this session.</summary>
     public IReadOnlyDictionary<string, string> All()
-        => new Dictionary<string, string>(_byController, StringComparer.Ordinal);
+        => new Dictionary<string, string>(_byKey, StringComparer.Ordinal);
 
     /// <summary>Restores saved assignments, ignoring any that are not durable.</summary>
     public void Load(IReadOnlyDictionary<string, string>? saved)
@@ -123,13 +117,13 @@ public sealed class ControllerProfileBook
             return;
         }
 
-        foreach (var (id, profile) in saved)
+        foreach (var (key, profile) in saved)
         {
             // Guarded on the way in as well as out: a file hand-edited or written by an older build
-            // may hold slot keys, and trusting them is the silent swap all over again.
-            if (ControllerIdentityFactory.IsStable(id) && !string.IsNullOrWhiteSpace(profile))
+            // may hold per-controller keys, and trusting them is the silent loss all over again.
+            if (ControllerIdentityFactory.IsStable(key) && !string.IsNullOrWhiteSpace(profile))
             {
-                _byController[id] = profile;
+                _byKey[key] = profile;
             }
         }
     }

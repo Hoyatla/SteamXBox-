@@ -2,7 +2,7 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.7"
+#define MyAppVersion "4.8.2"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
@@ -40,8 +40,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; SteamXBox executables (self-contained single-file)
 Source: "SteamXBox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Core.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Sc2XboxedPads.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Sc2XboxedSticks.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Une incrustation par famille, produite par son propre projet. Un seul binaire etait copie a la
+; main sous deux noms : PS5 et Xbox partageaient la meme copie, et rien dans la compilation ne
+; produisait ces noms, donc une compilation sans la copie livrait des executables perimes.
+Source: "Sc2XboxedSteam.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Sc2XboxedPS5.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Sc2XboxedXbox.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Indexer.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox-Moniteur.exe"; DestDir: "{app}"; Flags: ignoreversion

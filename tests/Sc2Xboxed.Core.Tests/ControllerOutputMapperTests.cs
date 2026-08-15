@@ -5,7 +5,7 @@ using Sc2Xboxed.Core.Output;
 
 namespace Sc2Xboxed.Core.Tests;
 
-public sealed class DefaultSteamControllerMapperTests
+public sealed class ControllerOutputMapperTests
 {
     [Fact]
     public void RearButtonsMapToRequestedXboxFaceButtons()
@@ -16,7 +16,7 @@ public sealed class DefaultSteamControllerMapperTests
             SteamControllerButtons.L5 |
             SteamControllerButtons.R5;
 
-        var mapped = DefaultSteamControllerMapper.MapButtons(buttons);
+        var mapped = ControllerOutputMapper.MapButtons(buttons);
 
         Assert.True(mapped.HasFlag(Xbox360Buttons.X));
         Assert.True(mapped.HasFlag(Xbox360Buttons.Y));
@@ -27,7 +27,7 @@ public sealed class DefaultSteamControllerMapperTests
     [Fact]
     public void LeftTouchpadConvertsVerticalMotionToMouseWheel()
     {
-        var mapper = new DefaultSteamControllerMapper(new Sc2XboxedProfileSettings
+        var mapper = new ControllerOutputMapper(new Sc2XboxedProfileSettings
         {
             LeftPadScroll = new LeftTouchpadScrollSettings
             {
@@ -53,7 +53,7 @@ public sealed class DefaultSteamControllerMapperTests
     [Fact]
     public void RightTouchpadMovesMouseWhileTouched()
     {
-        var mapper = new DefaultSteamControllerMapper(new Sc2XboxedProfileSettings
+        var mapper = new ControllerOutputMapper(new Sc2XboxedProfileSettings
         {
             RightPadTrackball = new RightTouchpadTrackballSettings
             {
@@ -80,7 +80,7 @@ public sealed class DefaultSteamControllerMapperTests
     [Fact]
     public void RightTouchpadKeepsTrackballInertiaAfterRelease()
     {
-        var mapper = new DefaultSteamControllerMapper(new Sc2XboxedProfileSettings
+        var mapper = new ControllerOutputMapper(new Sc2XboxedProfileSettings
         {
             RightPadTrackball = new RightTouchpadTrackballSettings
             {
@@ -119,7 +119,7 @@ public sealed class DefaultSteamControllerMapperTests
     [Fact]
     public void TouchpadShortTouchReleaseProducesTapEvent()
     {
-        var mapper = new DefaultSteamControllerMapper();
+        var mapper = new ControllerOutputMapper();
 
         mapper.Map(ControllerState.Empty(TimeSpan.Zero) with
         {
@@ -170,8 +170,8 @@ public sealed class DefaultSteamControllerMapperTests
     [Fact]
     public void MenuIsBackAndViewIsStart()
     {
-        var menu = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.Menu);
-        var view = DefaultSteamControllerMapper.MapButtons(SteamControllerButtons.View);
+        var menu = ControllerOutputMapper.MapButtons(SteamControllerButtons.Menu);
+        var view = ControllerOutputMapper.MapButtons(SteamControllerButtons.View);
 
         Assert.True(menu.HasFlag(Xbox360Buttons.Back));
         Assert.False(menu.HasFlag(Xbox360Buttons.Start));

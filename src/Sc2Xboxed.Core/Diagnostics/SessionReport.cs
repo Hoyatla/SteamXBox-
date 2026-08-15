@@ -101,8 +101,10 @@ public static class SessionReport
         yield return $"  maxCoastNotches       : {scroll.MaxCoastNotches} (hard cap per throw)";
 
         yield return "sticks";
-        yield return $"  stickDeadZone         : {F(settings.StickDeadZone)} (arrow keys in Profile mode)";
-        yield return $"  gamepadStickDeadZone  : {F(settings.GamepadStickDeadZone)} (virtual Xbox pad)";
+        yield return $"  leftStickDeadZone     : {F(settings.LeftStickDeadZone)} (arrow keys in Profile mode)";
+        yield return $"  rightStickDeadZone    : {F(settings.RightStickDeadZone)} (pointer in Profile mode)";
+        yield return $"  xboxLeftStickDeadZone : {F(settings.GamepadLeftStickDeadZone)} (virtual Xbox pad)";
+        yield return $"  xboxRightStickDeadZone: {F(settings.GamepadRightStickDeadZone)} (virtual Xbox pad)";
     }
 
     public static IEnumerable<string> OverlayKeyboard(OskSettings osk)

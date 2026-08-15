@@ -35,14 +35,6 @@ public partial class ControllerSlotItem : ObservableObject
     /// it has none. Observable so a rename shows up on the chip the moment it is saved.
     /// </summary>
     [ObservableProperty] private string _displayName = "";
-
-    /// <summary>Whether this controller will still be recognised tomorrow.</summary>
-    /// <remarks>
-    /// Surfaced rather than hidden. An Xbox pad is identified by its slot and nothing else, so its
-    /// profile cannot survive a reconnection — and a setting that silently fails to stick is worse
-    /// than one that says it will not.
-    /// </remarks>
-    public bool IsDurable => ControllerIdentityFactory.IsStable(Identity.Id);
 }
 
 /// <summary>
@@ -57,15 +49,10 @@ public partial class ControllerStripViewModel : ObservableObject
     private readonly ControllerProfileStore _store;
     private ControllerProfileBook _book;
 
-    // Remembered numbers, so "Manette 1" is the same pad tomorrow rather than whichever one was
-    // switched on first.
-    private readonly ControllerSlotBook _slots;
-
     public ControllerStripViewModel(string defaultProfile)
     {
         _store = new ControllerProfileStore();
         _book = _store.Load(defaultProfile);
-        _slots = _store.LoadSlots(DateTimeOffset.Now);
         _names = _store.LoadNames();
         Refresh();
     }
@@ -110,9 +97,11 @@ public partial class ControllerStripViewModel : ObservableObject
 
     [ObservableProperty] private string _statusMessage = "";
 
-    // The names the user gave their controllers, keyed by identity. Cosmetic: a pad that asks to be
+    // The names the user gave their controllers, keyed by family. Cosmetic: a pad that asks to be
     // called "Papa" keeps answering to "Papa" in the strip, and the logs stay honest about which one
-    // is being described.
+    // is being described. Keyed by family for the same reason the profiles are: a pad reconnects
+    // under a different Bluetooth address from one day to the next, and the family is the one thing
+    // that never changes. Two pads of the same family share the name — they share their settings too.
     private readonly Dictionary<string, string> _names;
 
     /// <summary>Re-reads what is attached, keeping the current selection if it is still there.</summary>
@@ -159,24 +148,25 @@ public partial class ControllerStripViewModel : ObservableObject
         // my own addition and it was wrong: the user asked to see what is connected, and a pad that
         // vanishes when you change tab reads as a pad that disconnected. The family now only decides
         // which entries are emphasised, never which ones exist.
-        // The remembered number, not the position in the list. Numbering by position renumbers
-        // everybody the moment somebody switches a controller on in a different order: the profiles
-        // stay filed correctly, but the number on the chip the user clicks is now someone else's.
-        var now = DateTimeOffset.Now;
+        // The number is the position in the list. Settings are shared by the whole family, so the
+        // number only has to point at the pad while it is attached — it stops meaning anything the
+        // moment the pad is unplugged, which is exactly when a remembered number would be relied on.
+        // The profile name comes from the family, not the pad: two identical DualSenses — even one
+        // that connects under a different Bluetooth address tomorrow — read the same family's
+        // settings, which is the whole point of filing by family.
+        var number = 1;
 
         foreach (var identity in roster)
         {
             Controllers.Add(new ControllerSlotItem
             {
-                Number = _slots.SlotFor(identity.Id, now),
+                Number = number++,
                 Identity = identity,
-                DisplayName = _names.TryGetValue(identity.Id, out var name) ? name : identity.DisplayName,
-                ProfileName = _book.ProfileFor(identity.Id),
+                DisplayName = _names.TryGetValue(identity.FamilyId, out var name) ? name : identity.DisplayName,
+                ProfileName = _book.ProfileFor(identity.FamilyId),
                 IsCurrentFamily = Family is null || identity.Kind == Family,
             });
         }
-
-        _store.SaveSlots(_slots);
 
         Selected = Controllers.FirstOrDefault(c => c.Identity.Id == previous)
                    ?? Controllers.FirstOrDefault();
@@ -245,25 +235,33 @@ public partial class ControllerStripViewModel : ObservableObject
         UiLog.Action("select controller", $"{item.DisplayName} [{item.Identity.Id}]");
     }
 
-    /// <summary>Files the selected controller under a profile.</summary>
-    public void AssignToSelected(string? profileName)
+    /// <summary>Files the selected controller's family under a profile, true when it was assigned.</summary>
+    /// <remarks>
+    /// The assignment belongs to the family, not to the pad. Two identical pads — even one that
+    /// connects under a different Bluetooth address tomorrow — share their family's settings, so
+    /// assigning here covers them both, and nothing needs to be identified by pressing it.
+    /// </remarks>
+    public bool AssignToSelected(string? profileName)
     {
         if (Selected is null)
         {
-            return;
+            return false;
         }
 
-        _book.Assign(Selected.Identity.Id, profileName);
-        Selected.ProfileName = _book.ProfileFor(Selected.Identity.Id);
+        var familyId = Selected.Identity.FamilyId;
+        if (string.IsNullOrEmpty(familyId))
+        {
+            StatusMessage = "Cette manette n'a pas de famille de réglages.";
+            return false;
+        }
+
+        _book.Assign(familyId, profileName);
+        Selected.ProfileName = _book.ProfileFor(familyId);
         _store.Save(_book);
 
-        StatusMessage = Selected.IsDurable
-            ? $"{Selected.DisplayName} → {Selected.ProfileName}"
-            // Said plainly rather than discovered later: XInput offers a slot and nothing else, so
-            // this assignment cannot be restored onto the right pad tomorrow.
-            : $"{Selected.DisplayName} → {Selected.ProfileName} (cette session seulement)";
-
-        UiLog.Action("assign profile", StatusMessage);
+        StatusMessage = $"{Selected.DisplayName} → {Selected.ProfileName}";
+        UiLog.Action("assign profile", $"{familyId} → {Selected.ProfileName}");
+        return true;
     }
 
     /// <summary>Drops assignments naming profiles that no longer exist.</summary>
@@ -274,8 +272,8 @@ public partial class ControllerStripViewModel : ObservableObject
         Refresh();
     }
 
-    /// <summary>The profile a controller should run on.</summary>
-    public string ProfileFor(string controllerId) => _book.ProfileFor(controllerId);
+    /// <summary>The profile a controller family should run on.</summary>
+    public string ProfileFor(string familyId) => _book.ProfileFor(familyId);
 
     /// <summary>Asks the user what to call a controller, then remembers it.</summary>
     /// <remarks>
@@ -302,28 +300,35 @@ public partial class ControllerStripViewModel : ObservableObject
             return;
         }
 
-        _names[item.Identity.Id] = name;
+        _names[item.Identity.FamilyId] = name;
         _store.SaveNames(_names);
         item.DisplayName = name;
 
-        MigrateProfileForRename(item.Identity.Id, current, name);
+        MigrateProfileForRename(item.Identity.FamilyId, current, name);
 
         StatusMessage = $"Manette renommée : {name}";
         UiLog.Action("rename controller", $"{item.Identity.Id} → {name}");
     }
 
     /// <summary>
-    /// Renaming a chip must not strand its profile under the old name. Saving always writes the
-    /// profile file under the controller's display name, so without this a rename left the old file
-    /// behind and the next save created a second one — two profiles for one pad, the stale one still
-    /// launching under <c>lastActiveProfile</c> while the editor worked on the new. Renamed here so
-    /// the file, the assignment and the active profile all move together.
+    /// Renaming a chip must not strand its family's profile under the old name. Saving always writes
+    /// the profile file under the family's profile name, so without this a rename left the old file
+    /// behind and the next save created a second one — two profiles for one family, the stale one
+    /// still launching under <c>lastActiveProfile</c> while the editor worked on the new. Renamed
+    /// here so the file, the assignment and the active profile all move together.
     /// </summary>
-    private void MigrateProfileForRename(string controllerId, string oldName, string newName)
+    private void MigrateProfileForRename(string familyId, string oldName, string newName)
     {
         if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName) ||
             oldName.Equals(newName, StringComparison.OrdinalIgnoreCase) ||
             oldName.Equals("Default", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        // No assignment of its own: the family runs the launch profile, and renaming a chip must not
+        // rename another family's settings — or the shared fallback. Nothing to migrate.
+        if (!_book.HasOwnProfile(familyId))
         {
             return;
         }
@@ -334,7 +339,7 @@ public partial class ControllerStripViewModel : ObservableObject
             return;
         }
 
-        var assigned = _book.ProfileFor(controllerId);
+        var assigned = _book.ProfileFor(familyId);
         var target = service.Profiles.FirstOrDefault(p =>
             p.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase) ||
             (!assigned.Equals("Default", StringComparison.OrdinalIgnoreCase) &&
@@ -355,7 +360,7 @@ public partial class ControllerStripViewModel : ObservableObject
         // just moved — so the next save reuses the same file instead of creating a third one.
         if (migrated || assigned.Equals(oldName, StringComparison.OrdinalIgnoreCase))
         {
-            _book.Assign(controllerId, newName);
+            _book.Assign(familyId, newName);
             _store.Save(_book);
         }
 
@@ -380,7 +385,7 @@ public partial class ControllerStripViewModel : ObservableObject
     /// <summary>Forgets the name the user gave a controller, showing its real one again.</summary>
     public void ResetName(ControllerSlotItem item)
     {
-        if (_names.Remove(item.Identity.Id))
+        if (_names.Remove(item.Identity.FamilyId))
         {
             _store.SaveNames(_names);
         }

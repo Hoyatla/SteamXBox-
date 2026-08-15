@@ -18,34 +18,48 @@ namespace Sc2Xboxed.Core.Mapping;
 /// </remarks>
 public sealed class XboxButtonMap
 {
+    /// <summary>
+    /// Les boutons de gauche d'une famille, dans l'ordre ou l'interface les montre.
+    /// </summary>
+    /// <remarks>
+    /// Par famille, parce que les familles n'ont pas les memes boutons. Une seule liste servait tout
+    /// le monde et c'etait celle d'une manette Steam : les onglets PS5 et Xbox montraient quatre
+    /// lignes de palettes arriere que ces manettes n'ont pas, reglables et sans effet.
+    /// </remarks>
+    public static SteamControllerButtons[] LeftSideFor(ControllerKind kind) => kind switch
+    {
+        Ps5ControllerDefaults.Kind => Ps5ControllerDefaults.LeftSide,
+        XboxControllerDefaults.Kind => XboxControllerDefaults.LeftSide,
+        _ => SteamControllerDefaults.LeftSide,
+    };
+
+    /// <inheritdoc cref="LeftSideFor"/>
+    public static SteamControllerButtons[] RightSideFor(ControllerKind kind) => kind switch
+    {
+        Ps5ControllerDefaults.Kind => Ps5ControllerDefaults.RightSide,
+        XboxControllerDefaults.Kind => XboxControllerDefaults.RightSide,
+        _ => SteamControllerDefaults.RightSide,
+    };
+
+    /// <summary>Tout ce qu'une famille peut rebrancher.</summary>
+    public static IEnumerable<SteamControllerButtons> AllFor(ControllerKind kind)
+        => LeftSideFor(kind).Concat(RightSideFor(kind));
+
     /// <summary>Every physical button a profile may rebind, in the order the interface shows them.</summary>
-    public static readonly SteamControllerButtons[] LeftSide =
-    [
-        SteamControllerButtons.LeftBumper,
-        SteamControllerButtons.L4,
-        SteamControllerButtons.L5,
-        SteamControllerButtons.DPadUp,
-        SteamControllerButtons.DPadLeft,
-        SteamControllerButtons.DPadRight,
-        SteamControllerButtons.DPadDown,
-        SteamControllerButtons.LeftStick,
-        SteamControllerButtons.View,
-    ];
+    public static SteamControllerButtons[] LeftSide => SteamControllerDefaults.LeftSide;
 
-    public static readonly SteamControllerButtons[] RightSide =
-    [
-        SteamControllerButtons.RightBumper,
-        SteamControllerButtons.R4,
-        SteamControllerButtons.R5,
-        SteamControllerButtons.Y,
-        SteamControllerButtons.X,
-        SteamControllerButtons.B,
-        SteamControllerButtons.A,
-        SteamControllerButtons.RightStick,
-        SteamControllerButtons.Menu,
-    ];
+    public static SteamControllerButtons[] RightSide => SteamControllerDefaults.RightSide;
 
-    public static IEnumerable<SteamControllerButtons> All => LeftSide.Concat(RightSide);
+    /// <summary>
+    /// L'union de tous les boutons de toutes les familles, pour la lecture d'un fichier de profil.
+    /// </summary>
+    /// <remarks>
+    /// Une union, pas un defaut. Elle sert a relire un profil ecrit par une autre famille ou par une
+    /// version anterieure sans en perdre les entrees ; elle ne dit pas ce qu'une manette possede.
+    /// Pour ca, <see cref="AllFor"/>.
+    /// </remarks>
+    public static IEnumerable<SteamControllerButtons> All
+        => SteamControllerDefaults.LeftSide.Concat(SteamControllerDefaults.RightSide);
 
     private readonly Dictionary<SteamControllerButtons, Xbox360Buttons> _map = [];
 
@@ -67,54 +81,18 @@ public sealed class XboxButtonMap
     /// Controller unless it is one.
     /// </para>
     /// </remarks>
-    public static XboxButtonMap DefaultFor(ControllerKind kind)
+    /// <para>
+    /// Un aiguillage et rien d'autre. Chaque famille ecrit sa disposition en entier dans son propre
+    /// fichier. Ce qui se trouvait ici — un <c>Common</c> partage plus un <c>else</c> pour tout ce
+    /// qui n'est pas une manette Steam — servait la PS5 et la Xbox par la meme ligne, et faisait de
+    /// la disposition d'une manette Steam la base de celle des deux autres.
+    /// </para>
+    public static XboxButtonMap DefaultFor(ControllerKind kind) => kind switch
     {
-        var map = Common;
-
-        if (kind == ControllerKind.SteamController)
-        {
-            map[SteamControllerButtons.Menu] = Xbox360Buttons.Back;
-            map[SteamControllerButtons.View] = Xbox360Buttons.Start;
-        }
-        else
-        {
-            map[SteamControllerButtons.Menu] = Xbox360Buttons.Start;
-            map[SteamControllerButtons.View] = Xbox360Buttons.Back;
-        }
-
-        return map;
-    }
-
-    /// <summary>Everything that is the same whatever the controller is.</summary>
-    private static XboxButtonMap Common
-    {
-        get
-        {
-            var map = new XboxButtonMap();
-
-            map[SteamControllerButtons.A] = Xbox360Buttons.A;
-            map[SteamControllerButtons.B] = Xbox360Buttons.B;
-            map[SteamControllerButtons.X] = Xbox360Buttons.X;
-            map[SteamControllerButtons.Y] = Xbox360Buttons.Y;
-
-            map[SteamControllerButtons.LeftBumper] = Xbox360Buttons.LeftShoulder;
-            map[SteamControllerButtons.RightBumper] = Xbox360Buttons.RightShoulder;
-            map[SteamControllerButtons.LeftStick] = Xbox360Buttons.LeftThumb;
-            map[SteamControllerButtons.RightStick] = Xbox360Buttons.RightThumb;
-
-            map[SteamControllerButtons.DPadUp] = Xbox360Buttons.DPadUp;
-            map[SteamControllerButtons.DPadDown] = Xbox360Buttons.DPadDown;
-            map[SteamControllerButtons.DPadLeft] = Xbox360Buttons.DPadLeft;
-            map[SteamControllerButtons.DPadRight] = Xbox360Buttons.DPadRight;
-
-            map[SteamControllerButtons.L4] = Xbox360Buttons.X;
-            map[SteamControllerButtons.R4] = Xbox360Buttons.Y;
-            map[SteamControllerButtons.L5] = Xbox360Buttons.A;
-            map[SteamControllerButtons.R5] = Xbox360Buttons.B;
-
-            return map;
-        }
-    }
+        Ps5ControllerDefaults.Kind => Ps5ControllerDefaults.ButtonMap,
+        XboxControllerDefaults.Kind => XboxControllerDefaults.ButtonMap,
+        _ => SteamControllerDefaults.ButtonMap,
+    };
 
     public Xbox360Buttons this[SteamControllerButtons physical]
     {
@@ -147,6 +125,17 @@ public sealed class XboxButtonMap
     /// <summary>Serialisable form: physical button name to Xbox button name.</summary>
     public Dictionary<string, string> ToDictionary()
         => All.ToDictionary(b => b.ToString(), b => this[b].ToString());
+
+    /// <summary>
+    /// Forme enregistrable limitee aux boutons que cette famille possede.
+    /// </summary>
+    /// <remarks>
+    /// Un profil PS5 n'a rien a dire des palettes arriere d'une manette Steam. Les ecrire quand meme
+    /// mettait quatre entrees mortes dans chaque fichier de profil, que la prochaine relecture prend
+    /// pour des reglages.
+    /// </remarks>
+    public Dictionary<string, string> ToDictionary(ControllerKind kind)
+        => AllFor(kind).ToDictionary(b => b.ToString(), b => this[b].ToString());
 
     /// <summary>
     /// Rebuilds a map from stored names, falling back to the default for anything missing or

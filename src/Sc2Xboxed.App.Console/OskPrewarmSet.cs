@@ -132,10 +132,7 @@ internal static class OskPrewarmSet
                 }
             }
 
-            var signal = Path.Combine(AppContext.BaseDirectory, naming.ShowSignalFile);
-
-            File.WriteAllText(signal, "show");
-            log($"OSK prewarm: show signal written for '{naming.Suffix}'.");
+            WriteShowSignal(naming, log);
 
             return true;
         }
@@ -144,6 +141,36 @@ internal static class OskPrewarmSet
             log($"OSK prewarm: could not wake '{naming.Suffix}': {exception.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Shows an overlay that was just cold-started.
+    /// </summary>
+    /// <remarks>
+    /// A cold start launches with <c>--prewarm</c>, which keeps the window hidden until a show
+    /// signal arrives. Without this the first press of a session started a keyboard that then
+    /// waited forever: the pad was handed to it, the overlay was resident, and nothing was on
+    /// screen. Written here rather than in the caller so the signal name and the resident path
+    /// agree — they both go through this one file.
+    /// </remarks>
+    internal static void SignalShow(OskInstanceNaming naming, Action<string> log)
+    {
+        try
+        {
+            WriteShowSignal(naming, log);
+        }
+        catch (Exception exception)
+        {
+            log($"OSK prewarm: could not show cold-started '{naming.Suffix}': {exception.Message}");
+        }
+    }
+
+    private static void WriteShowSignal(OskInstanceNaming naming, Action<string> log)
+    {
+        var signal = Path.Combine(AppContext.BaseDirectory, naming.ShowSignalFile);
+
+        File.WriteAllText(signal, "show");
+        log($"OSK prewarm: show signal written for '{naming.Suffix}'.");
     }
 
     /// <summary>

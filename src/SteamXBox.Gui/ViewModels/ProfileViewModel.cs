@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Sc2Xboxed.Core.Input;
+using Sc2Xboxed.Core.Mapping;
 using Sc2Xboxed.Core.Osk;
 using SteamXBox.Gui.Services;
 
@@ -33,6 +34,91 @@ public partial class ProfileViewModel : ObservableObject
     {
         if (_syncingSelection || value is null) return;
         StartEditing(value);
+
+        // NE PAS assigner ici. Ajoute le 14 aout pour que choisir un profil le rende actif, retire
+        // le meme jour : SelectedProfileItem est aussi ecrit par le code — RebuildVisibleProfiles,
+        // StartEditing, la creation d'un profil — et chacune de ces ecritures reecrivait alors le
+        // fichier d'assignation. Le noyau surveille ce fichier et recharge, le GUI se rafraichit, et
+        // la selection change a nouveau.
+        //
+        // Resultat mesure : cinquante-six profils crees en deux minutes, et un fichier d'assignation
+        // reduit a la seule famille xbox — les familles ps5 et steam avaient perdu la leur, donc
+        // leurs manettes tournaient sans profil.
+        //
+        // Assigner reste le travail des boutons Sauvegarder et Appliquer, ou l'utilisateur le
+        // demande explicitement.
+    }
+
+    /// <summary>The name a family's profiles carry, before their number.</summary>
+    /// <remarks>
+    /// The label the user already sees on their controller, not the internal family key: the files
+    /// on disk read "Manette PS5 1" and "Manette Xbox 2", and a new one has to fall in the same
+    /// series rather than start a second naming scheme beside it.
+    /// </remarks>
+    private static string FamilyLabelOf(ControllerKind kind) => kind switch
+    {
+        ControllerKind.SteamController => "Steam Controller",
+        ControllerKind.DualSense => "PS5",
+        ControllerKind.XInput => "Xbox",
+        _ => "Profil",
+    };
+
+    /// <summary>
+    /// Creates the next profile of the selected controller's family, and selects it.
+    /// </summary>
+    /// <remarks>
+    /// Numbered by <see cref="ProfileNumbering"/>: the first is 1, and a number freed by a deletion
+    /// is refilled before any higher one is handed out, so the family's list stays something the
+    /// user can count through.
+    ///
+    /// <para>
+    /// Selected at the end rather than merely created, which assigns it — a new profile nobody is
+    /// using is the "Manette Xbox 1" already sitting on this machine, written once and never
+    /// reachable.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private void NewProfile()
+    {
+        // The tab decides the family, not the controller highlighted in the strip.
+        //
+        // Selecting a tab sets Controllers.Family, which filters the list — and leaves Selected
+        // alone. Selected defaults to the first controller attached, whatever it is. So creating a
+        // profile from the PS5 tab took the family of that first controller — an Xbox pad here —
+        // wrote family="XInput", and the PS5 list could not show it. The file was correct, in the
+        // wrong family, invisible where it was asked for.
+        //
+        // The controller is not consulted at all: preparing a PS5 profile must not require a PS5 pad
+        // to be plugged in.
+        if (Controllers.Family is not { } kind)
+        {
+            StatusMessage = Strings.Current["Ouvrez l'onglet de la famille pour laquelle créer un profil."];
+            return;
+        }
+
+        var label = FamilyLabelOf(kind);
+        var family = FamilyOf(kind);
+
+        var name = ProfileNumbering.NextName(
+            label,
+            _service.Profiles.Where(p => p.Family == family).Select(p => p.Name));
+
+        var created = (ActiveEdit ?? new ProfileData()).Clone();
+        created.Name = name;
+        created.Family = family;
+        created.XboxButtons = CorrectedLayoutFor(kind, created.XboxButtons);
+
+        _service.Save(created);
+
+        if (!_service.Profiles.Contains(created))
+        {
+            _service.Profiles.Add(created);
+        }
+
+        RebuildVisibleProfiles();
+        SelectedProfileItem = created;
+
+        StatusMessage = Strings.Current.Format("Profil « {0} » créé dans la famille {1}.", name, family);
     }
 
     public ObservableCollection<ProfileData> Profiles => _service.Profiles;
@@ -52,6 +138,90 @@ public partial class ProfileViewModel : ObservableObject
         ControllerKind.XInput => "XInput",
         _ => "",
     };
+
+    /// <summary>
+    /// A profile born from cloning the reference Default inherits the reference's Steam Controller
+    /// layout (Menu→Back, View→Start — the measured quirk). Saved onto a DualSense or an Xbox pad
+    /// unchanged, that inherited quirk crosses Options and Start. The reference Menu/View values
+    /// count as "unchanged"; anything else was deliberately chosen and is left alone.
+    /// </summary>
+    private static Dictionary<string, string> CorrectedLayoutFor(
+        ControllerKind kind, Dictionary<string, string> stored)
+    {
+        if (kind == ControllerKind.SteamController)
+        {
+            return stored;
+        }
+
+        var reference = XboxButtonMap.Default;
+        var inheritsReferenceQuirk =
+            stored.TryGetValue(nameof(SteamControllerButtons.Menu), out var menu)
+            && menu == reference[SteamControllerButtons.Menu].ToString()
+            && stored.TryGetValue(nameof(SteamControllerButtons.View), out var view)
+            && view == reference[SteamControllerButtons.View].ToString();
+
+        if (!inheritsReferenceQuirk)
+        {
+            return stored;
+        }
+
+        var corrected = new Dictionary<string, string>(stored);
+        corrected[nameof(SteamControllerButtons.Menu)] =
+            XboxButtonMap.DefaultFor(kind)[SteamControllerButtons.Menu].ToString();
+        corrected[nameof(SteamControllerButtons.View)] =
+            XboxButtonMap.DefaultFor(kind)[SteamControllerButtons.View].ToString();
+        return corrected;
+    }
+
+    private bool _reloading;
+
+    /// <summary>
+    /// Re-reads the profiles folder, then rebuilds the family's list.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ProfileService.LoadAll"/> clears the collection before refilling it, and the
+    /// collection's own change event rebuilds the visible list — so this would re-enter itself once
+    /// per profile without the guard. The guard is what makes calling it from a UI event safe.
+    /// </remarks>
+    public void ReloadFromDisk()
+    {
+        if (_reloading)
+        {
+            return;
+        }
+
+        _reloading = true;
+
+        try
+        {
+            var selected = SelectedProfileItem?.Name;
+
+            _service.LoadAll();
+            RebuildVisibleProfiles();
+
+            // The instance is new after a reload, so the selection has to be found again by name or
+            // the panel empties itself every time the list refreshes.
+            if (selected is { Length: > 0 })
+            {
+                var again = VisibleProfiles.FirstOrDefault(p => p.Name == selected);
+
+                if (again is not null)
+                {
+                    _syncingSelection = true;
+                    SelectedProfileItem = again;
+                    _syncingSelection = false;
+                }
+            }
+        }
+        catch (Exception failure)
+        {
+            Sc2Xboxed.Core.Diagnostics.UiLog.Failure("reloading the profiles folder", failure);
+        }
+        finally
+        {
+            _reloading = false;
+        }
+    }
 
     private void RebuildVisibleProfiles()
     {
@@ -80,10 +250,29 @@ public partial class ProfileViewModel : ObservableObject
         }
 
         TargetName = selected.DisplayName;
-        var hasProfile = _service.Profiles.Any(p => p.Name == selected.DisplayName && p.Name != "Default");
-        TargetContext = hasProfile
-            ? Strings.Current.Format("Profil « {0} » — il sera écrasé à la sauvegarde.", selected.DisplayName)
-            : Strings.Current["Aucun profil — il sera créé à la sauvegarde."];
+
+        // What saving would actually do, which is not what this said. It looked for a profile named
+        // after the controller — the naming the save no longer uses — so it announced "aucun profil"
+        // while the family had one, and "il sera écrasé" while naming a file that did not exist.
+        //
+        // Saving writes the profile being edited, under its own name, to its own family. The
+        // controller only decides which family receives it.
+        var controllerFamily = FamilyOf(selected.Identity.Kind);
+        var edited = ActiveEdit?.Name;
+
+        TargetContext = edited switch
+        {
+            null or "" or "Default" => Strings.Current.Format(
+                "Un nouveau profil {0} sera créé à la sauvegarde.", controllerFamily),
+
+            _ when !string.Equals(ActiveEdit?.Family, controllerFamily, StringComparison.Ordinal)
+                   && !string.IsNullOrWhiteSpace(ActiveEdit?.Family) => Strings.Current.Format(
+                "« {0} » est un profil {1} : il ne peut pas être enregistré sur cette manette {2}.",
+                edited, ActiveEdit!.Family, controllerFamily),
+
+            _ => Strings.Current.Format(
+                "Profil « {0} » — il sera écrasé à la sauvegarde et associé à {1}.", edited, controllerFamily),
+        };
     }
 
     /// <summary>The connected controllers, shared with the other tab.</summary>
@@ -139,8 +328,8 @@ public partial class ProfileViewModel : ObservableObject
         ActiveEdit.Buttons[key] = value;
         OnPropertyChanged(ButtonPropName(key));
 
-        // Same reason as the sliders: rebinding a button and walking away used to lose it.
-        RequestSave();
+        // Enregistrement automatique retire le 14 aout : il ecrivait a chaque cran de curseur.
+
     }
     private string GetMotion(string key) =>
         ActiveEdit?.Motions.GetValueOrDefault(key) ?? DefaultMotions.GetValueOrDefault(key) ?? "";
@@ -201,10 +390,12 @@ public partial class ProfileViewModel : ObservableObject
     [
         nameof(RightPadSensitivityPercent), nameof(RightPadSensitivityDisplay),
         nameof(LeftPadSensitivityPercent), nameof(LeftPadSensitivityDisplay),
-        nameof(StickDeadZonePercent), nameof(StickDeadZoneDisplay),
+        nameof(LeftStickDeadZonePercent), nameof(LeftStickDeadZoneDisplay),
+        nameof(RightStickDeadZonePercent), nameof(RightStickDeadZoneDisplay),
         nameof(StickPointerSpeedPercent), nameof(StickPointerSpeedDisplay),
         nameof(StickPointerCurvePercent), nameof(StickPointerCurveDisplay),
-        nameof(XboxStickDeadZonePercent), nameof(XboxStickDeadZoneDisplay),
+        nameof(XboxLeftStickDeadZonePercent), nameof(XboxLeftStickDeadZoneDisplay),
+        nameof(XboxRightStickDeadZonePercent), nameof(XboxRightStickDeadZoneDisplay),
         nameof(XboxStickCurvePercent), nameof(XboxStickCurveDisplay),
         nameof(XboxStickSensitivityPercent), nameof(XboxStickSensitivityDisplay),
         nameof(RightPadDeadZonePercent), nameof(RightPadDeadZoneDisplay),
@@ -345,7 +536,7 @@ public partial class ProfileViewModel : ObservableObject
         write(ActiveEdit, FromPercent(percent, min, max));
         OnPropertyChanged(percentName);
         OnPropertyChanged(displayName);
-        RequestSave();
+
     }
 
     /// <summary>
@@ -421,7 +612,13 @@ public partial class ProfileViewModel : ObservableObject
 
             try
             {
-                _service.Save(profile);
+                // Save mutates the bound Profiles collection and raises ProfileSaved, both of which
+                // belong to the UI thread. The throttled path reaches this from Task.Run, so the
+                // whole call is marshalled here rather than trusting each consumer to be thread-safe.
+                if (App.Current.Dispatcher.CheckAccess())
+                    _service.Save(profile);
+                else
+                    App.Current.Dispatcher.Invoke(() => _service.Save(profile));
             }
             catch (Exception failure)
             {
@@ -455,13 +652,30 @@ public partial class ProfileViewModel : ObservableObject
     }
     public string LeftPadSensitivityDisplay => $"{LeftPadSensitivityPercent:0} %";
 
-    public double StickDeadZonePercent
+    /// <summary>
+    /// Dead zone of the left stick in Profile mode.
+    /// </summary>
+    /// <remarks>
+    /// One slider used to move both sticks at once, which made the setting impossible to use: the
+    /// value that silences a worn left stick is not the value that keeps a right stick precise, and
+    /// a single number forced the user to pick which of the two to spoil.
+    /// </remarks>
+    public double LeftStickDeadZonePercent
     {
-        get => GetPercent(p => p.StickDeadZone, StickDeadZoneMin, StickDeadZoneMax);
-        set => SetPercent((p, v) => p.StickDeadZone = Math.Round(v, 3), value, StickDeadZoneMin, StickDeadZoneMax,
-            nameof(StickDeadZonePercent), nameof(StickDeadZoneDisplay));
+        get => GetPercent(p => p.LeftStickDeadZone ?? p.StickDeadZone, StickDeadZoneMin, StickDeadZoneMax);
+        set => SetPercent((p, v) => p.LeftStickDeadZone = Math.Round(v, 3), value, StickDeadZoneMin, StickDeadZoneMax,
+            nameof(LeftStickDeadZonePercent), nameof(LeftStickDeadZoneDisplay));
     }
-    public string StickDeadZoneDisplay => $"{StickDeadZonePercent:0} %";
+    public string LeftStickDeadZoneDisplay => $"{LeftStickDeadZonePercent:0} %";
+
+    /// <summary>Dead zone of the right stick in Profile mode. See <see cref="LeftStickDeadZonePercent"/>.</summary>
+    public double RightStickDeadZonePercent
+    {
+        get => GetPercent(p => p.RightStickDeadZone ?? p.StickDeadZone, StickDeadZoneMin, StickDeadZoneMax);
+        set => SetPercent((p, v) => p.RightStickDeadZone = Math.Round(v, 3), value, StickDeadZoneMin, StickDeadZoneMax,
+            nameof(RightStickDeadZonePercent), nameof(RightStickDeadZoneDisplay));
+    }
+    public string RightStickDeadZoneDisplay => $"{RightStickDeadZonePercent:0} %";
 
     // How the stick drives the desktop pointer, for the families that have no trackpad. Both were
     // constants in the runtime until now: every controller pointed at the same speed with the same
@@ -497,13 +711,23 @@ public partial class ProfileViewModel : ObservableObject
     private const double XboxStickCurveMin = 0.2, XboxStickCurveMax = 3.0;
     private const double XboxStickSensitivityMin = 0.25, XboxStickSensitivityMax = 3.0;
 
-    public double XboxStickDeadZonePercent
+    /// <summary>Dead zone of the left stick in Xbox mode. See <see cref="LeftStickDeadZonePercent"/>.</summary>
+    public double XboxLeftStickDeadZonePercent
     {
-        get => GetPercent(p => p.XboxStickDeadZone, XboxStickDeadZoneMin, XboxStickDeadZoneMax);
-        set => SetPercent((p, v) => p.XboxStickDeadZone = Math.Round(v, 3), value, XboxStickDeadZoneMin, XboxStickDeadZoneMax,
-            nameof(XboxStickDeadZonePercent), nameof(XboxStickDeadZoneDisplay));
+        get => GetPercent(p => p.XboxLeftStickDeadZone ?? p.XboxStickDeadZone, XboxStickDeadZoneMin, XboxStickDeadZoneMax);
+        set => SetPercent((p, v) => p.XboxLeftStickDeadZone = Math.Round(v, 3), value, XboxStickDeadZoneMin, XboxStickDeadZoneMax,
+            nameof(XboxLeftStickDeadZonePercent), nameof(XboxLeftStickDeadZoneDisplay));
     }
-    public string XboxStickDeadZoneDisplay => $"{XboxStickDeadZonePercent:0} %";
+    public string XboxLeftStickDeadZoneDisplay => $"{XboxLeftStickDeadZonePercent:0} %";
+
+    /// <summary>Dead zone of the right stick in Xbox mode.</summary>
+    public double XboxRightStickDeadZonePercent
+    {
+        get => GetPercent(p => p.XboxRightStickDeadZone ?? p.XboxStickDeadZone, XboxStickDeadZoneMin, XboxStickDeadZoneMax);
+        set => SetPercent((p, v) => p.XboxRightStickDeadZone = Math.Round(v, 3), value, XboxStickDeadZoneMin, XboxStickDeadZoneMax,
+            nameof(XboxRightStickDeadZonePercent), nameof(XboxRightStickDeadZoneDisplay));
+    }
+    public string XboxRightStickDeadZoneDisplay => $"{XboxRightStickDeadZonePercent:0} %";
 
     public double XboxStickCurvePercent
     {
@@ -654,7 +878,7 @@ public partial class ProfileViewModel : ObservableObject
     public string[] AvailableModes { get; } = ["Profile", "Xbox360"];
     public string[] RightPadOptions { get; } = ["Trackball", "Scroll", "None"];
     public string[] LeftPadOptions { get; } = ["Scroll", "Trackball", "None"];
-    public string[] LeftStickOptions { get; } = ["ArrowKeys", "None"];
+    public string[] LeftStickOptions { get; } = ["ArrowKeys", "Wheel", "None"];
     // The right stick drives the pointer on stick-only families (PS5/Xbox) which have no pads, so
     // only pointer-or-nothing is offered — never a pad role.
     public string[] RightStickOptions { get; } = ["Souris", "Aucun"];
@@ -686,7 +910,13 @@ public partial class ProfileViewModel : ObservableObject
         _service.Profiles.CollectionChanged += (_, _) => RebuildVisibleProfiles();
         Controllers.FamilyChanged += _ =>
         {
-            RebuildVisibleProfiles();
+            // From disk, not from memory. The collection is filled once at startup, so a profile
+            // written since — by the other tab, by a previous run, or by anything that touched the
+            // folder — simply was not in the list, and its family tab looked empty while the file
+            // sat on disk. Found 14 August: fifty-six profiles present in the folder, none of them
+            // in the panel of the family they belong to.
+            ReloadFromDisk();
+
             OnPropertyChanged(nameof(IsStickFamily));
             OnPropertyChanged(nameof(IsPadFamily));
         };
@@ -696,7 +926,7 @@ public partial class ProfileViewModel : ObservableObject
                 RefreshTarget();
         };
 
-        RebuildVisibleProfiles();
+        ReloadFromDisk();
         RefreshTarget();
     }
 
@@ -750,11 +980,59 @@ public partial class ProfileViewModel : ObservableObject
             return null;
         }
 
+        // The tab, not the controller in the strip. Selecting a tab filters the list and leaves the
+        // strip selection alone, so editing a PS5 profile with an Xbox pad first in the strip gave
+        // controllerFamily = XInput — the guard below then refused the save, and the setting the
+        // user had just chosen never reached the disk at all.
+        //
+        // Falls back to the controller only when no tab family is set.
+        var controllerFamily = Controllers.Family is { } tabKind
+            ? FamilyOf(tabKind)
+            : FamilyOf(selected.Identity.Kind);
+
         var profile = ActiveEdit.Clone();
-        profile.Name = selected.DisplayName;
-        profile.Family = FamilyOf(selected.Identity.Kind);
+
+        // The profile keeps its own name and its own family. Both used to be overwritten from the
+        // controller selected in the strip: editing "PS5 1" with an Xbox pad selected wrote the
+        // result under the Xbox pad's name, stamped family=XInput, and left the PS5 profile
+        // untouched. That is the whole of "les sauvegardes PS5 sont enregistrées comme du Xbox".
+        //
+        // A profile freshly cloned from the reference has no family yet, and only then does the
+        // selected controller decide it.
+        if (string.IsNullOrWhiteSpace(profile.Family))
+        {
+            profile.Family = controllerFamily;
+        }
+
+        // A profile belongs to one family and is assigned to one family. Saving a PS5 profile onto
+        // an Xbox pad would either re-stamp the profile or file it under the wrong family, and both
+        // are how one family's tuning ends up on another's hardware. Refused, and named.
+        if (!string.Equals(profile.Family, controllerFamily, StringComparison.Ordinal))
+        {
+            StatusMessage = Strings.Current.Format(
+                "« {0} » est un profil {1} ; il ne peut pas être enregistré sur {2}, qui est {3}.",
+                profile.Name, profile.Family, selected.DisplayName, controllerFamily);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.Name) || profile.Name == "Default")
+        {
+            // Editing the reference produces a new profile of the family rather than overwriting it.
+            profile.Name = ProfileNumbering.NextName(
+                FamilyLabelOf(Controllers.Family ?? selected.Identity.Kind),
+                _service.Profiles.Where(p => p.Family == controllerFamily).Select(p => p.Name));
+        }
+
+        profile.XboxButtons = CorrectedLayoutFor(Controllers.Family ?? selected.Identity.Kind, profile.XboxButtons);
         _service.Save(profile);
-        Controllers.AssignToSelected(profile.Name);
+
+        // A save without a controller to receive it is a failed save: the profile exists, but it was
+        // not assigned to any family, and must not read as if it was.
+        if (!Controllers.AssignToSelected(profile.Name))
+        {
+            return null;
+        }
+
         return profile;
     }
 
@@ -802,24 +1080,44 @@ public partial class ProfileViewModel : ObservableObject
             return;
         }
 
-        var profile = _service.Profiles.FirstOrDefault(p =>
-            p.Name == selected.DisplayName && p.Name != "Default");
+        // The profile shown in the list, which is the one the user is looking at when they press
+        // Delete. This used to hunt for a profile whose name equalled the controller's display name
+        // — so "Steam Controller perso", "Manette PS5 2" and everything else a user ever named or
+        // numbered was undeletable, and the button answered that the controller had no profile while
+        // its profile sat selected on screen.
+        var profile = SelectedProfileItem;
+
         if (profile is null)
         {
-            StatusMessage = Strings.Current.Format("La manette « {0} » n'a pas de profil.", selected.DisplayName);
+            StatusMessage = Strings.Current["Choisissez le profil à supprimer dans la liste."];
             return;
         }
+
+        // The reference profile is the one every new profile is cloned from; deleting it would leave
+        // the product with nothing to start from.
+        if (profile.Name == "Default")
+        {
+            StatusMessage = Strings.Current["« Default » est le profil de référence et ne peut pas être supprimé."];
+            return;
+        }
+
+        var removed = profile.Name;
 
         _service.Delete(profile);
         Controllers.ForgetMissingProfiles(_service.Profiles.Select(p => p.Name));
 
-        if (ActiveEdit?.Name == profile.Name)
+        if (ActiveEdit?.Name == removed)
         {
             ActiveEdit = null;
             IsEditing = false;
         }
 
-        StatusMessage = Strings.Current.Format(
-            "Profil de « {0} » supprimé. Elle revient aux réglages par défaut.", selected.DisplayName);
+        // The list is rebuilt and the selection dropped, or the deleted profile stays on screen as a
+        // row that opens nothing. Its number goes back into the family's pool: the next profile
+        // created takes it rather than counting past it.
+        SelectedProfileItem = null;
+        RebuildVisibleProfiles();
+
+        StatusMessage = Strings.Current.Format("Profil « {0} » supprimé.", removed);
     }
 }

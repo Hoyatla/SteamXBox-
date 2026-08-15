@@ -2,6 +2,180 @@ SteamXBox - Change log
 ======================
 
 
+4.8.2
+-----
+  Le bouton PS ouvre Steam, dans les deux modes, et le signal d'arret de la
+  manette Steam (PS+Y) est restaure. Le mode natif est reparé au demarrage.
+
+  * Le bouton PS/Steam ouvre Steam software dans les deux modes — profil et
+    natif. Lancer Steam n'est pas rendre la manette au systeme : le retrait
+    devant Steam reste reserve a la manette Steam (seule a avoir une couche
+    firmware que Steam reprend).
+
+  * Le signal d'arret est de retour : PS+Y tue le processus Steam et
+    reconnecte la manette, dans les deux modes (une manette coincee en mode
+    Xbox360 doit pouvoir arreter Steam sans le clavier). PS+X n'ouvre pas
+    l'environnement : un appui PS reste un appui PS.
+
+  * `--start-mode native` est pris en charge : la PS5 demarre desormais en
+    mode Xbox360 natif au lieu de retomber silencieusement sur le profil. La
+    manette est rendue au systeme avec son vrai identifiant et Windows la
+    voit reellement.
+
+  * L'accord d'extinction Menu + Vue (qui, sur une DualSense en Bluetooth,
+    coupe la liaison et remet la manette a zero) n'est valable qu'en mode
+    profil. En mode natif, Menu et Vue appartiennent au jeu : l'accord ne
+    tire plus, et la porte ne les retient plus.
+
+
+4.8.1
+-----
+  « Le clavier a l'ecran ne repond toujours pas » — mesure du 14 aout, session
+  10:01-10:21, deux defauts cumules, tous les deux corriges ici.
+
+  * Le clavier resident de la premiere manette tenait le journal partage
+    steamxbox-Sc2XboxedSticks.Osk-debug.log pendant toute la session, et chaque
+    clavier suivant mourrait sur la ligne qui l'ouvrait : IOException « deja
+    utilise par un autre processus » avant meme sa banniere ou sa fenetre. Sept
+    processions ont echoue ainsi dans la session (10:01, 10:15 x2, 10:16, 10:17,
+    10:19), chacune confirmee par l'Observateur d'evenements (Sc2Xboxed.Osk.Program.Main,
+    code 0xe0434352). La console ne voyait aucune fenetre, le Core disait
+    « le clavier a pris la manette et n'est pas a l'ecran ». Chaque instance a
+    desormais son propre journal (suffixe dans le nom de fichier), et un journal
+    qui ne peut pas s'ouvrir ne coute plus jamais le clavier : il part sans
+    journal plutot que de mourir.
+
+  * Un demarrage a froid lançait le clavier resident et cache (--prewarm) sans
+    jamais ecrire le signal show que le chemin resident ecrit : le pad etait
+    donne au clavier, le clavier restait cache, et le Core lui rendait le profil
+    quand le battement de visibilite ne venait jamais. Le demarrage a froid
+    ecrit desormais le meme signal, par le meme chemin que le reveil resident.
+
+  * Une PS5 ou une Xbox demarree en mode natif (--start-mode xbox360) recevait
+    encore son pad virtuel a l'attache, mais la sortie native ne le nourrit
+    jamais : le jeu voyait une manette morte pendant que la vraie restait
+    masquee par HidHide. Le demarrage suit desormais la meme regle que la
+    bascule L3+R3 : la manette native est rendue au systeme (demasquee), sans
+    pad virtuel, et retrouvee au retour au profil. Une PS5 ou une Xbox branchee
+    en cours de session pendant que le mode natif est actif recoit le meme
+    traitement a sa premiere trame.
+
+
+4.8
+---
+  Trois defauts signales apres la 4.7, tous les trois reproductibles chez l'auteur
+  du projet.
+
+  * « Identifier une manette ne finit jamais. » HidHide cache les interfaces HID des
+    pads physiques a tout processus sauf le Core, et le dialogue d'identification
+    demandait a Windows quels pads HID etaient presents : il ne voyait que les pads
+    virtuels ViGEm, tous ecartes comme tels, donc aucune coincidence n'arrivait
+    jamais et l'attente durait indefiniment. Le Core publie desormais sa correlation
+    slot -> identite durable dans %LOCALAPPDATA%\SteamXBox\live-xinput-slots.json,
+    et le dialogue la lit : la premiere manette qui s'identifie pendant la fenetre
+    de 45 secondes est assignee au chip clique. Efface au demarrage — jamais de
+    mapping herite d'une session precedente. Un appariement que l'arbre de
+    peripheriques sait deja nommer (identite durable resolue a l'ouverture) est
+    publie immediatement, sans aucune pression : le chip se resout tout seul, et
+    seule une manette reellement impossible a distinguer passe par la coincidence.
+
+  * « Le pointeur du DualSense sacade et la vitesse du profil ne semble pas
+    appliquee. » En Bluetooth mode compat 0x01, le pad n'emet qu'au changement
+    (8 a 541 images par seconde mesures), et le pointeur etant pilote en vitesse,
+    chaque silence arretait puis faisait sauter le curseur. Un premier correctif
+    relisait le pad a 8 ms pendant l'activite, 50 ms au repos : la lecture
+    Bluetooth ne tient pas une attente de 8 ms (timeouts intempestifs, etats
+    rejoues), la manette est devenue injouable, et il a ete retire — le pointeur
+    du DualSense garde pour l'instant le comportement de la 4.7. En cours de
+    validation : le « mouvement de souris quand rien ne commande » vient en fait
+    d'une manette Xbox dont le stick repose a ~0,10 hors deadzone, et non du
+    pointeur DualSense (la deadzone du profil est la reponse).
+
+  * « Le clavier a l'ecran met quatre secondes a apparaitre au premier clic. »
+    C'est l'hote .NET qui dechire le binaire mono-fichier avant la premiere ligne
+    du programme. Chaque manette attachee recoit desormais son clavier resident et
+    cache des son ouverture — celles presentes au lancement, et chacune qui arrive
+    en cours de session, sur sa premiere frame — sur ses propres canaux : le premier
+    clic coute un fichier de signal au lieu d'un demarrage a froid.
+
+  * « La manette PS5 est totalement cassee. » En Bluetooth compat 0x01, le rapport
+    78 octets du DualSense place un compteur d'images la ou le rapport USB a le
+    troisieme octet de boutons (PS, pavé tactile, muet). Lu comme l'octet systeme,
+    le bit 0x04 du compteur declenchait le bouton muet — c'est-a-dire Quick Access,
+    l'accord de changement de mode — a chaque deuxieme image environ : la manette
+    alternait toute seule entre mode pointeur et mode Xbox toutes les ~350 ms et
+    devenait injouable (193 changements de mode mesures en 68 secondes). Le pad ne
+    transmet ni PS ni muet dans cette forme de rapport, donc l'octet n'y est
+    simplement plus decode : le mode ne change plus que sur une vraie pression. Le
+    bouton muet reste le changement de mode sur USB, ou l'octet est authentique.
+
+  Profils par famille
+  -------------------
+  Les reglages etaient ranges par manette, sous une cle construite a partir de
+  l'adresse Bluetooth ou du numero de serie. Une seule DualSense s'est presentee
+  sous deux adresses Bluetooth sur la meme machine — une publique et une
+  tournante — et son profil, range sous l'adresse du jour, n'etait plus retrouve
+  le lendemain : la manette se reconnectait, rien ne le disait, et elle jouait
+  avec les reglages par defaut. Rien d'inscrit dans le peripherique n'etant
+  fiable d'une connexion a l'autre, les reglages sont desormais ranges par
+  famille — Steam, PS5, Xbox — et la manette, quelle que soit l'adresse sous
+  laquelle elle se presente, retrouve toujours ceux de sa famille.
+
+  * Toute la machinerie « par manette » est deconnectee : le livre de vie
+    controller-slots.json, le correlateur de slots et le dialogue « identifier
+    une manette par pression » n'existent plus. La cle par peripherique ne sert
+    plus qu'a la session en cours (dedoublonnement, roster) et n'est plus jamais
+    ecrite sur le disque.
+
+  * controller-profiles.json ne contient plus que des clefs fam:steam,
+    fam:ps5, fam:xbox. Une cle de la forme bt:, usb: ou xinput-slot: est
+    refusee a la lecture et oubliee a la sauvegarde ; le fichier de l'auteur
+    a ete migre vers les clefs de famille.
+
+  * Le renommage d'une manette ne peut plus toucher au profil d'une autre
+    famille : il ne renomme que le profil que la famille de la manette possede
+    reellement, jamais le profil de lancement partage.
+
+  * Correctifs de l'audit des branchements (14/08). Le mapping Xbox360 qu'une
+    manette envoie au jeu est celui de sa famille : la croix Menu/View, mesuree
+    sur un vrai Steam Controller, n'est appliquee qu'a lui — une DualSense ou
+    une manette Xbox la recevait croisee (Options et Start echanges), y compris
+    dans les profils deja enregistres, qui ont ete corriges. Recharger un profil
+    ou la liste des profils preserve l'etat du clavier a l'ecran par manette, et
+    jamais plus d'une capture globale qui croisait les manettes. Les haptiques du
+    pointeur et de la molette sont quantifiees par session, pas partagees entre
+    manettes. Quand une manette se debranche, sa session est oubliee et son
+    clavier ferme au lieu de s'accumuler jusqu'a la fermeture. Les noms donnes
+    aux manettes sont ranges par famille comme les profils (controller-names.json
+    refuse les anciennes clefs bt:). controller-slots.json et live-xinput-slots.json,
+    ecrits par un ancien build, sont supprimes.
+
+  Rumble sur la manette physique
+  ------------------------------
+  * Le retour de force qu'un jeu adresse au pad virtuel atteint desormais la
+    manette physique qui le possede. Avant, seuls les haptiques du Steam
+    Controller vibraient (par le rapport haptique Valve) ; une manette Xbox ne
+    vibrait jamais, et une DualSense non plus. Chaque famille a maintenant sa
+    route : le Steam Controller par le rapport haptique existant, une manette
+    Xbox par XInputSetState sur son propre slot, et une DualSense par son
+    rapport 0x02/0x31 (USB / Bluetooth, checksum compris) ecrit sur son propre
+    flux HID — chaque manette vibre la sienne, et deux joueurs ne font plus
+    vibrer la meme. Le reglage du profil (activation, intensite, canaux) de la
+    famille s'applique, et un changement de profil prend effet sur la vibration
+    suivante. Le pad virtuel DualShock 4 relaye le retour du jeu par son rapport
+    de sortie brut, la seule voie que la librairie ViGEm offre encore.
+
+  Stick gauche : fleches OU molette
+  ---------------------------------
+  * Le stick gauche d'un pad sans pave tactile (PS5, Xbox) pilotait les fleches
+    et la molette selon son reglage — la molette se declenchait pour tout
+    reglage sauf « Aucun », donc les deux actions en meme temps par defaut. Le
+    choix « Molette » existe desormais dans l'onglet Mouvements (et se lit
+    « wheel »/« molette » dans le JSON), et une seule action est active : les
+    fleches seules avec « Fleches » (defaut), la molette seule avec « Molette »,
+    ni l'une ni l'autre avec « Aucun ».
+
+
 4.7
 ---
   Ce que SteamXBox laissait derriere lui

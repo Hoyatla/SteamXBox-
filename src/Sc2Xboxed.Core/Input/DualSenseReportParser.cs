@@ -50,6 +50,21 @@ public static class DualSenseReportParser
     /// </remarks>
     private const int UsbReportLength = 32;
 
+    /// <summary>
+    /// The <c>0x01</c> report a DualSense sends over Bluetooth in compatibility mode.
+    /// </summary>
+    /// <remarks>
+    /// Axes and buttons sit in the USB places, then a per-frame counter stands where the USB report
+    /// has the system byte. 78 bytes — the same size as the full report, which is exactly what makes
+    /// the two hard to tell apart. Measured on a DualSense connected over Bluetooth, byte 7 ran
+    /// <c>0x24, 0x28, 0x2C, … 0x3C, 0x00, 0x04, …</c>: a six-bit counter stepping by four. Decoded as
+    /// the system byte, its bit <c>0x04</c> fired the mute button — Quick Access, the mode-switch
+    /// chord — on and off by itself, and the controller changed mode about twice a second with nobody
+    /// touching it. The pad in this mode reports no PS or mute state at all, so the byte is not a
+    /// button anywhere in this report.
+    /// </remarks>
+    private const int CompactBluetoothReportLength = 78;
+
     private static int MinimumLength(byte reportId) => reportId switch
     {
         UsbReportId => 10,
@@ -147,12 +162,23 @@ public static class DualSenseReportParser
         if ((shoulders & 0x80) != 0) buttons |= SteamControllerButtons.RightStick;
 
         // Third button byte: PS, touchpad click, mute. The three button bytes are consecutive in
-        // both layouts, so it is always one past the shoulders wherever those are.
+        // both layouts, so it is always one past the shoulders wherever those are. It exists only in
+        // the USB-shaped reports: the Bluetooth compatibility report carries a per-frame counter in
+        // that byte's place (see <see cref="CompactBluetoothReportLength"/>), and no PS or mute
+        // state at all. Read by shape, not by id — the id alone cannot tell the transports apart.
         //
         // The PS button becomes Steam, the same flag a Steam Controller's Steam button produces, so
-        // it reaches the launcher already wired to it rather than through a second path. Guarded on
-        // length: a truncated report must lose the button, not throw.
-        if (report.Length > layout.Buttons + 2)
+        // it reaches the launcher already wired to it rather than through a second path.
+        //
+        // It is NOT the mode-switch button, and turning it into one is a regression this line has
+        // already seen once, on 14 August. Launching Steam is what this button is for on this family;
+        // taking it for the switch takes the launcher away to solve a problem that belongs to
+        // InputModeHandler, where the L3+R3 hold lives.
+        //
+        // Guarded on length: a truncated report must lose the button, not throw.
+        var isBluetoothCompactReport =
+            report[0] == UsbReportId && report.Length >= CompactBluetoothReportLength;
+        if (!isBluetoothCompactReport && report.Length > layout.Buttons + 2)
         {
             var system = report[layout.Buttons + 2];
             if ((system & 0x01) != 0) buttons |= SteamControllerButtons.Steam;   // PS
@@ -167,7 +193,17 @@ public static class DualSenseReportParser
             // DualSense touchpad is a wide surface under the thumbs during play, and putting a mode
             // switch under it would change mode mid-game by accident. Mute is the pad's equivalent
             // spare button.
-            if ((system & 0x04) != 0) buttons |= SteamControllerButtons.QuickAccess;  // mute
+            // MUTE -> QuickAccess : retire le 14 aout, apres avoir ete ajoute le 12 sans preuve.
+            //
+            // L'intention etait bonne : la DualSense n'a aucun bouton produisant QuickAccess, donc
+            // aucun moyen de changer de mode. Mais cet octet ne porte pas que des boutons. Sur le
+            // rapport Bluetooth de compatibilite - celui qui arrive tant que le mode complet est
+            // eteint - ses bits hauts sont un compteur de sequence qui change a chaque trame. Lire
+            // un bouton dedans fait basculer le mode sans arret.
+            //
+            // A remettre uniquement apres avoir observe l'octet pendant qu'on presse mute, et rien
+            // d'autre. Une manette qui bascule toute seule est pire qu'une manette qui ne bascule
+            // pas : le bouton manquant se contourne, le mode qui saute rend le pad inutilisable.
         }
 
         return new ControllerState(

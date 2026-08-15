@@ -200,6 +200,37 @@ public class DualSenseReportParserTests
         Assert.True(DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value.Buttons.HasFlag(expected));
     }
 
+    // Le bouton PS lance Steam, comme le bouton Steam d'une manette Steam. Ce n'est PAS le bouton de
+    // changement de mode : le switch est la tenue L3+R3, dans InputModeHandler. Le mapper sur
+    // QuickAccess pour donner un bouton de switch a la manette a ete fait le 14 aout et annule le
+    // jour meme — cela retirait le lanceur pour resoudre un probleme qui n'est pas ici.
+    [Fact]
+    public void ThePsButtonLaunchesSteamAndIsNotTheSwitch()
+    {
+        var report = Bluetooth();
+        report[11] = 0x01;
+
+        var buttons = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value.Buttons;
+
+        Assert.True(buttons.HasFlag(SteamControllerButtons.Steam));
+        Assert.False(buttons.HasFlag(SteamControllerButtons.QuickAccess));
+    }
+
+    // Rien sur cette manette ne produit QuickAccess, et c'est voulu. Le mappage mute a ete retire le
+    // 14 aout : cet octet est un compteur dans le rapport Bluetooth de compatibilite, et le lire
+    // comme un bouton fait basculer le mode deux fois par seconde.
+    [Fact]
+    public void NoBitProducesQuickAccess()
+    {
+        var report = Bluetooth();
+        report[9] = 0xFF;
+        report[10] = 0xFF;
+        report[11] = 0xFF;
+
+        Assert.False(DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value
+            .Buttons.HasFlag(SteamControllerButtons.QuickAccess));
+    }
+
     // A DualSense also emits feature and audio reports on the same pipe. They are normal traffic.
     [Fact]
     public void AnUnknownReportIsIgnoredRatherThanThrown()
@@ -244,6 +275,55 @@ public class DualSenseReportParserTests
         report[4] = Centre;
         report[5] = 0x08;   // buttons here, not at byte 8
         return report;
+    }
+
+    // The real Bluetooth compatibility report is not the ten-byte fixture above but the full
+    // 78-byte frame. Bytes captured from a DualSense connected over Bluetooth, right stick mid-way:
+    //   [01 80 7E F6 7D 08 00 24 00 00 00 00]
+    // Byte 7 runs 0x24, 0x28, 0x2C, … 0x3C, 0x00, 0x04, … — a per-frame counter, not the PS/mute
+    // byte. Read as the system byte it held the mute button (Quick Access, the mode-switch chord)
+    // on and off by itself, and the controller switched mode roughly twice a second. This is the
+    // regression that test pins.
+    private static byte[] BluetoothCompactFull()
+    {
+        var report = new byte[78];
+        report[0] = 0x01;
+        report[1] = Centre;
+        report[2] = 0x7E;
+        report[3] = 0xF6;
+        report[4] = 0x7D;
+        report[5] = 0x08;
+        report[7] = 0x24;   // the counter, in the USB report's system-byte place
+        return report;
+    }
+
+    [Fact]
+    public void TheBluetoothCompatibilityCounterIsNeverAButton()
+    {
+        var state = DualSenseReportParser.Parse(BluetoothCompactFull(), TimeSpan.Zero)!.Value;
+
+        Assert.Equal(SteamControllerButtons.None, state.Buttons);
+        Assert.Equal(0, state.LeftStick.X);
+        Assert.True(state.RightStick.X > 0.8);
+    }
+
+    [Theory]
+    [InlineData(0x04)]   // the counter values whose bit 0x04 fired the mute button
+    [InlineData(0x0C)]
+    [InlineData(0x14)]
+    [InlineData(0x1C)]
+    [InlineData(0x24)]
+    [InlineData(0x2C)]
+    [InlineData(0x34)]
+    [InlineData(0x3C)]
+    public void NoCounterValueTurnsIntoQuickAccess(int counter)
+    {
+        var report = BluetoothCompactFull();
+        report[7] = (byte)counter;
+
+        var state = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value;
+
+        Assert.Equal(SteamControllerButtons.None, state.Buttons);
     }
 
     [Fact]

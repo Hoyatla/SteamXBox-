@@ -16,28 +16,44 @@ public sealed class InputModeHandler
 	private bool _wasSwitchPressed;
 	private bool _steamUsedAsModifier;
 	private bool _wasSteamPressed;
-	private bool _wasChordHeld;
 	private bool _chordConsumed;
+	private TimeSpan? _chordHeldSince;
 	private TimeSpan? _lastToggle;
 
+	/// <summary>How long both stick clicks must be held together before the mode changes.</summary>
+	/// <remarks>
+	/// Two seconds because L3 and R3 are game buttons. Anything shorter and an ordinary
+	/// sprint-and-crouch switches the controller mid-play; this is the constant that separates a
+	/// deliberate chord from a collision.
+	/// </remarks>
+	private static readonly TimeSpan ChordHold = TimeSpan.FromSeconds(2);
+
 	public ControllerOutputMode CurrentMode { get; private set; }
-	public bool SteamLaunchRequested { get; private set; }
-	public bool SteamKillRequested { get; private set; }
 
 	/// <summary>
-	/// The user asked for the SteamXBox environment: Steam pressed while X is held.
+	/// The user pressed the Steam (PS) button alone: launch Steam software.
 	/// </summary>
 	/// <remarks>
-	/// Steam is already the system modifier here — alone it launches Steam, with Y it kills it — so
-	/// the environment joins that vocabulary rather than inventing a second one. It cannot have the
-	/// Steam button to itself: that one is taken.
+	/// Steam alone is the launch, Steam + Y is the kill — a plain press never does two things, and
+	/// the environment chord (X) is gone: Steam + X is just a PS press on a pad that also has X down.
 	///
-	/// Only ever set in <see cref="ControllerOutputMode.Profile"/>. In Xbox mode the controller is a
-	/// gamepad and nothing else: a chord that opened a window mid-game would be a bug, not a
-	/// feature. That is what makes switching to Xbox "unbind the tools" without anything having to
-	/// be undone — the request is simply never raised.
+	/// <para>
+	/// It works in both modes. A PS5 or an Xbox pressed in native mode still opens Steam: launching
+	/// Steam software is not the same as taking the controller back, and the "hand over" that would
+	/// do that belongs only to the Steam Controller — see the Program loop.
+	/// </para>
 	/// </remarks>
-	public bool DesktopRequested { get; private set; }
+	public bool SteamLaunchRequested { get; private set; }
+
+	/// <summary>
+	/// The user asked to stop Steam: Steam pressed while Y is held.
+	/// </summary>
+	/// <remarks>
+	/// Lives in both modes on purpose. Y is the Steam Controller's own kill button and the chord is
+	/// the pad's only way to stop the Steam process; a pad stuck in Xbox mode would otherwise need
+	/// the keyboard to get out.
+	/// </remarks>
+	public bool SteamKillRequested { get; private set; }
 
 	public InputModeHandler(ControllerOutputMode initialMode, SteamControllerButtons switchButtons, TimeSpan debounce)
 	{
@@ -57,14 +73,15 @@ public sealed class InputModeHandler
 		_wasSteamPressed = steamPressed;
 
 		bool yPressed = state.Buttons.HasFlag(SteamControllerButtons.Y);
-		bool xPressed = state.Buttons.HasFlag(SteamControllerButtons.X);
 
 		SteamLaunchRequested = false;
 		SteamKillRequested = false;
-		DesktopRequested = false;
 
 		if (steamRising)
 		{
+			// Steam + Y stops the Steam process and reconnects the controller. First, before the
+			// launch: a kill is a deliberate command and the launch must not also fire when the
+			// modifier is released after the Steam button.
 			if (yPressed)
 			{
 				SteamKillRequested = true;
@@ -72,21 +89,12 @@ public sealed class InputModeHandler
 				return false;
 			}
 
-			// Profile mode only. In Xbox mode the pad is a gamepad and X is a game button: raising
-			// this there would open a window in the middle of play.
-			if (xPressed && CurrentMode == ControllerOutputMode.Profile)
-			{
-				DesktopRequested = true;
-				_steamUsedAsModifier = true;
-				return false;
-			}
-
-			// The flag keeps a chord from also launching Steam when the modifier is released after
-			// the Steam button.
+			// The flag keeps a kill chord from also launching Steam when the modifier is released
+			// after the Steam button.
 			if (!_steamUsedAsModifier)
 			{
 				SteamLaunchRequested = true;
-				return true;
+				return false;
 			}
 		}
 
@@ -97,15 +105,26 @@ public sealed class InputModeHandler
 
 		// Both stick clicks held together also switch mode. It works in either direction and in
 		// either mode, which is the point: a controller stuck in Xbox mode with no way back would
-		// need the keyboard to recover.
+		// need the keyboard to recover. On a pad with no quick-access button — a DualSense, an Xbox
+		// controller — it is the only way, so it has to be reliable in both directions.
 		//
-		// The cost is real and worth naming: L3 and R3 are game buttons, so a title that binds both
-		// — sprint and crouch, say — will switch mode when they are pressed at the same instant.
-		// Rare enough to accept, common enough to keep the quick-access button as the everyday way.
+		// HELD, not pressed. L3 and R3 are ordinary game buttons and hitting both at the same instant
+		// is something a player does by accident all the time. Measured on 14 August: two switches at
+		// 22:51:51.831 and 22:51:52.675, a second apart, with nothing but the two sticks being pushed
+		// — the pad changed mode twice while the user thought he was aiming. The hold is what tells a
+		// deliberate chord from a collision, and two seconds is long enough that no game input reaches
+		// it by chance.
+		//
+		// The cost, named: for those two seconds both clicks still reach the game or the profile. That
+		// is the price of a hold and it is the right way round — a short simultaneous press has to
+		// stay a short simultaneous press.
 		var chord = SteamControllerButtons.LeftStick | SteamControllerButtons.RightStick;
 		bool chordHeld = (state.Buttons & chord) == chord;
-		bool chordRising = chordHeld && !_wasChordHeld;
-		_wasChordHeld = chordHeld;
+
+		if (!chordHeld)
+			_chordHeldSince = null;
+		else
+			_chordHeldSince ??= state.Timestamp;
 
 		// The latch clears only once both clicks are released. Withholding on the switching frame
 		// alone would leak L3 and R3 to the game for every frame the user keeps holding them, which
@@ -113,12 +132,19 @@ public sealed class InputModeHandler
 		if ((state.Buttons & chord) == 0)
 			_chordConsumed = false;
 
-		if (switchRising || chordRising)
+		// Once per hold: _chordConsumed stays set until both clicks come back up, so keeping them
+		// down does not switch again every frame after the second second.
+		bool chordCompleted =
+			!_chordConsumed &&
+			_chordHeldSince is { } heldSince &&
+			state.Timestamp - heldSince >= ChordHold;
+
+		if (switchRising || chordCompleted)
 		{
 			if (_lastToggle.HasValue && state.Timestamp - _lastToggle.Value < _debounce)
 				return false;
 
-			if (chordRising)
+			if (chordCompleted)
 				_chordConsumed = true;
 
 			CurrentMode = (CurrentMode == ControllerOutputMode.Xbox360)
@@ -141,19 +167,15 @@ public sealed class InputModeHandler
 
 	/// <summary>Strips the buttons that were consumed as commands, before the mappers see them.</summary>
 	/// <remarks>
-	/// X is withheld along with Steam when the environment was requested. Without it the chord would
-	/// also fire whatever the profile binds X to — a click, a key — at the same moment the
-	/// environment opens.
+	/// The Steam button is withheld along with the command that used it, so the same press does not
+	/// also reach the profile mapper as a plain button.
 	/// </remarks>
 	public ControllerState ConsumeButton(ControllerState state)
 	{
 		SteamControllerButtons buttons = state.Buttons & ~_switchButtons;
 
-		if (SteamLaunchRequested || SteamKillRequested || DesktopRequested)
+		if (SteamLaunchRequested || SteamKillRequested)
 			buttons &= ~SteamControllerButtons.Steam;
-
-		if (DesktopRequested)
-			buttons &= ~SteamControllerButtons.X;
 
 		// Held from the moment the chord switches mode until both clicks are released. Otherwise the
 		// switch also fires whatever the profile or the game binds to L3 and R3, at the exact instant
