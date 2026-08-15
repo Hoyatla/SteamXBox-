@@ -2,7 +2,7 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.8.2"
+#define MyAppVersion "4.8.3"
 #define MyAppPublisher "Hoyatla"
 #define MyAppURL "https://github.com/Hoyatla/SteamXBox"
 #define MyAppExeName "SteamXBox.exe"
