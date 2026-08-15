@@ -98,14 +98,10 @@
                                    FontWeight="Bold" Foreground="{StaticResource TextDimBrush}"/>
                         <RadioButton Content="{loc:T Text='📋  Profils PS5'}" Tag="1:DualSense"
                                      Click="Nav_Click" GroupName="Nav" Style="{StaticResource NavButton}"/>
-                        <RadioButton Content="{loc:T Text='🎮  DualSense'}" Tag="2:DualSense"
-                                     Click="Nav_Click" GroupName="Nav" Style="{StaticResource NavButton}"/>
 
                         <TextBlock Text="{loc:T Text='MANETTE XBOX'}" Margin="12,16,0,4" FontSize="10"
                                    FontWeight="Bold" Foreground="{StaticResource TextDimBrush}"/>
                         <RadioButton Content="{loc:T Text='📋  Profils Xbox'}" Tag="1:XInput"
-                                     Click="Nav_Click" GroupName="Nav" Style="{StaticResource NavButton}"/>
-                        <RadioButton Content="{loc:T Text='🎮  Xbox Xbox'}" Tag="2:XInput"
                                      Click="Nav_Click" GroupName="Nav" Style="{StaticResource NavButton}"/>
                     </StackPanel>
                 </DockPanel>
