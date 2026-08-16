@@ -301,8 +301,8 @@ static async Task<bool> WaitWhileSteamOwnsAsync(
     StopOskOverlay(oskInstances, log);
 
     // Unplug every virtual pad. Leaving one plugged in makes Steam enumerate a phantom controller
-    // (an Xbox 360 pad or, for a DualSense, a DualShock 4) alongside the real one, and games
-    // launched from Steam may bind to the phantom.
+    // (a virtual Xbox 360 pad) alongside the real one, and games launched from Steam may bind to
+    // the phantom.
     await virtualPads.DisposeAsync();
     log($"Virtual pad(s) unplugged ({virtualPads.Count} still connected).");
 
@@ -497,29 +497,12 @@ static DateTime ControllerProfilesTimestamp()
 }
 
 /// <summary>
-/// Builds one controller's gamepad mappers from its family's layout: the Xbox report mapper and the
-/// DualShock 4 report mapper a DualSense uses. Both read the same profile section, so a family with
-/// a profile of its own maps from that profile's layout; families without one keep the layout the
-/// bridge was launched with (the statics). One file carries the whole pad, and one reload covers
-/// both mappers.
+/// Builds one controller's gamepad mappers from its family's layout: the Xbox report mapper every
+/// family uses, and the DualShock 4 report mapper kept for the DS4 sink family. Both read the same
+/// profile section, so a family with a profile of its own maps from that profile's layout; families
+/// without one keep the layout the bridge was launched with (the statics). One file carries the
+/// whole pad, and one reload covers both mappers.
 /// </summary>
-/// <summary>
-/// Si, pour cette famille, "natif" veut dire rendre la manette physique plutot que l'emuler.
-/// </summary>
-/// <remarks>
-/// Vrai pour la PS5 et pour la Xbox : Windows sait les lire toutes les deux, donc la meilleure
-/// imitation que SteamXBox puisse produire est moins bonne que l'original. Une DualSense emulee sort
-/// en DualShock 4, avec d'autres boutons et d'autres reperes a l'ecran.
-///
-/// <para>
-/// Faux pour la manette Steam, et ce n'est pas un oubli : Windows ne la gere pas. La demasquer
-/// donnerait une manette que rien ne lit. Son mode natif reste un pad Xbox 360 virtuel, qui est
-/// exactement ce qui la rend utilisable.
-/// </para>
-/// </remarks>
-static bool NativeMeansUncloaked(ControllerKind kind)
-    => kind is ControllerKind.DualSense or ControllerKind.XInput;
-
 static (ControllerOutputMapper Xbox, DualSenseGamepadMapper DualSense) BuildGamepadMappersFor(
     string controllerId,
     string familyId,
@@ -1216,9 +1199,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     try
                     {
                         // The Steam Controller is the one Xbox-family pad with no XInput slot of its
-                        // own, so it vibrates through the haptics report; every other Xbox-family pad
-                        // goes straight to its slot. Both retune from the session at the moment of
-                        // the rumble, so a profile change reaches the very next one.
+                        // own, so it vibrates through the haptics report. A DualSense and an Xbox pad
+                        // now also own an Xbox 360 pad — their switch emulates a gamepad — so their
+                        // rumble goes back to the physical pad: the DualSense over the HID stream
+                        // (it has no XInput slot), the Xbox pad straight to its own XInput slot,
+                        // which SteamXBox still owns while cloaked. All three retune from the session
+                        // at the moment of the rumble, so a profile change reaches the very next one.
                         if (identity.Kind == ControllerKind.SteamController)
                         {
                             var hapticMapper = new XboxRumbleToSteamHapticsMapper
@@ -1230,11 +1216,23 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                             return;
                         }
 
-                        var tuning = TuningFor(identity.Id);
+                        if (identity.Kind == ControllerKind.DualSense)
+                        {
+                            var tuning = TuningFor(identity.Id);
+                            await dualSenseRumbler.RumbleAsync(
+                                    identity.Id,
+                                    tuning.ApplyVibration(rumble.LeftMotor),
+                                    tuning.ApplyVibration(rumble.RightMotor),
+                                    CancellationToken.None)
+                                .ConfigureAwait(false);
+                            return;
+                        }
+
+                        var xboxTuning = TuningFor(identity.Id);
                         Sc2Xboxed.Windows.XInputRumble.SetVibration(
                             identity.Slot,
-                            tuning.ApplyVibration(rumble.LeftMotor),
-                            tuning.ApplyVibration(rumble.RightMotor));
+                            xboxTuning.ApplyVibration(rumble.LeftMotor),
+                            xboxTuning.ApplyVibration(rumble.RightMotor));
                     }
                     catch (Exception exception) when (exception is IOException or InvalidOperationException or TimeoutException)
                     {
@@ -1472,29 +1470,12 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     continue;
                 }
 
-                // Une PS5 ou une Xbox demarree en mode natif n'emule rien : son natif est la manette
-                // elle-meme. La creerait-on que le pad virtuel resterait muet — la sortie native le
-                // saute, voir "cette famille s'emule" plus bas — pendant que la vraie manette
-                // resterait masquee : le jeu verrait un pad mort et ne verrait pas la manette. Meme
-                // regle qu'a la bascule, au demarrage.
-                if (NativeMeansUncloaked(controller.Identity.Kind))
-                {
-                    Sc2Xboxed.App.Console.ControllerCloak.Uncloak(controller.Identity.Id, log);
-                    continue;
-                }
-
+                // Une manette demarree en mode natif emule son pad Xbox 360 virtuel, comme a la
+                // bascule. Chaque famille passe par le meme pad : un DualSense et une Xbox aussi,
+                // depuis que leur bascule emule un slot plutot que de rendre la manette physique.
                 try
                 {
-                    // Each family gets the pad that looks like it: a DualSense becomes a virtual
-                    // DualShock 4, everything else a virtual Xbox 360.
-                    if (controller.Identity.Kind == ControllerKind.DualSense)
-                    {
-                        await virtualPads.ForDS4Async(controller.Identity, cancellation.Token);
-                    }
-                    else
-                    {
-                        await virtualPads.ForAsync(controller.Identity, cancellation.Token);
-                    }
+                    await virtualPads.ForAsync(controller.Identity, cancellation.Token);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -1609,27 +1590,15 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                 // Une manette arrivee en cours de session, a sa premiere trame. Comme au demarrage,
                 // elle n'obtient un pad que si elle est en mode natif : "quel que soit le mode" est
                 // ce qui faisait de chaque manette allumee un joueur connecte.
-                //
-                // Et jamais pour une famille dont le natif est la manette elle-meme. Sans ce test,
-                // ce bloc reconstruisait le pad que la bascule venait de debrancher : mesure a
-                // 00:18:11, "rendue au systeme" a .167 et "virtual pad 1 connected" a .204, trente-
-                // sept millisecondes plus tard. La bascule etait annulee par la trame suivante.
                 if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360
-                    && !NativeMeansUncloaked(frame.Source.Kind)
                     && !virtualPads.Has(frameSource))
                 {
                     try
                     {
-                        // Same rule as at attach: a DualSense gets its DualShock 4 pad, other
-                        // families their Xbox 360 one.
-                        if (frame.Source.Kind == ControllerKind.DualSense)
-                        {
-                            await virtualPads.ForDS4Async(frame.Source, cancellation.Token);
-                        }
-                        else
-                        {
-                            await virtualPads.ForAsync(frame.Source, cancellation.Token);
-                        }
+                        // Same rule as at attach: one virtual Xbox 360 pad per controller, for every
+                        // family — DualSense and Xbox included, since their switches emulate a
+                        // normal gamepad rather than lending the physical pad to the system.
+                        await virtualPads.ForAsync(frame.Source, cancellation.Token);
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
@@ -1640,18 +1609,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // its keyboard is pre-warmed the moment its first frame is read, so the first
                     // toggle pays a file rather than the four seconds of a cold start.
                     PrewarmOsk(frameSource, frame.Source.Kind);
-                }
-                else if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360
-                         && NativeMeansUncloaked(frame.Source.Kind)
-                         && !Sc2Xboxed.App.Console.ControllerCloak.IsOnLoan(frameSource))
-                {
-                    // Une PS5 ou une Xbox branchee en cours de session pendant que le mode natif est
-                    // actif. Le rebalayage vient de la masquer comme toutes les autres ; sans ce
-                    // bloc, elle resterait invisible pour le jeu jusqu'a la prochaine bascule — le
-                    // natif est la manette elle-meme, et le pad virtuel ne la remplacera jamais.
-                    // IsOnLoan garde ceci a UN appel : apres le premier, la manette est pretee et le
-                    // rebalayage suivant ne la reprendra pas.
-                    Sc2Xboxed.App.Console.ControllerCloak.Uncloak(frameSource, log);
                 }
 
                 // The keyboard's claim on this pad, weighed against whether the keyboard is actually
@@ -1839,32 +1796,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                         await virtualPads.ForgetAsync(frameSource);
                     }
 
-                    // Pour une PS5 ou une Xbox, le natif n'est pas une imitation : c'est la manette
-                    // elle-meme. On la rend au systeme en la retirant du masquage HidHide, et le jeu
-                    // la voit avec son vrai identifiant — une DualSense reste une DualSense.
-                    //
-                    // Au retour au profil, Apply la remasque : elle redevient la manette de
-                    // SteamXBox et personne d'autre ne la lit.
-                    //
-                    // Le pad virtuel a deja ete debranche juste au-dessus dans un sens, et n'est
-                    // jamais cree dans l'autre, donc a aucun moment le jeu ne voit les deux.
-                    if (NativeMeansUncloaked(frame.Source.Kind))
-                    {
-                        if (modeSwitcher.CurrentMode == ControllerOutputMode.Xbox360)
-                        {
-                            await virtualPads.ForgetAsync(frameSource);
-                            Sc2Xboxed.App.Console.ControllerCloak.Uncloak(frameSource, log);
-                            log.Info(LogCategory.Mode,
-                                $"{Shorten(frameSource)} rendue au systeme : manette native, sans profil.");
-                        }
-                        else
-                        {
-                            Sc2Xboxed.App.Console.ControllerCloak.Recloak(frameSource, log);
-                            log.Info(LogCategory.Mode,
-                                $"{Shorten(frameSource)} reprise par SteamXBox : profil reapplique.");
-                        }
-                    }
-
                     Console.WriteLine($"Mode switched to {modeSwitcher.CurrentMode}.");
                 }
 
@@ -1889,8 +1820,9 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     // produisait un deuxieme "MODE SWITCH -> Xbox360" pour la meme manette.
                     //
                     // Demande le 13 aout : les manettes PS5 et Xbox "gardent leur switch profil a
-                    // natif et ignore steam software". Lancer Steam, oui. Se retirer, non.
-                    if (!NativeMeansUncloaked(frame.Source.Kind))
+                    // natif et ignore steam software". Lancer Steam, oui. Se retirer, non. Seule la
+                    // manette Steam se retire ; verifier l'espece.
+                    if (frame.Source.Kind == ControllerKind.SteamController)
                     {
                         // Hand over before Steam is observable: the process takes seconds to appear
                         // and SteamXBox must not still be writing to the device meanwhile.
@@ -1948,6 +1880,55 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     }
 
                     Console.WriteLine($"Mode switched to {suggestedMode} ({foregroundArbiter.LastForegroundProcess}).");
+                }
+
+                // Steam ouvert = manette en natif, tant que Steam tourne. C'est la regle demandee :
+                // "le switch reste sur xbox360 jusqu'a la fermeture de steam software". Quand Steam
+                // part, chaque manette revient au mode ou elle etait avant — pas a un defaut, sinon
+                // une manette deja en natif serait jettee au bureau a la fermeture de Steam.
+                //
+                // Place apres le chord manuel et l'arbitre de premier plan, pour que "Steam ouvert"
+                // soit le dernier mot sur le mode a chaque trame : quoi qu'il l'ait bouge, Steam
+                // ouvert le ramene en natif, et le mode d'avant revient quand Steam ferme. Le pad,
+                // lui, n'a rien a faire ici : la branche mode Xbox demande le sien a chaque trame
+                // et le cree s'il manque, comme apres une bascule manuelle.
+                if (steamWatcher.Owner == ControllerOwner.Steam)
+                {
+                    if (session.ModeBeforeSteam is null)
+                    {
+                        session.ModeBeforeSteam = modeSwitcher.CurrentMode;
+                        log.Info(LogCategory.Mode,
+                            $"*** STEAM OPEN -> {Shorten(frameSource)} pinned to Xbox 360 (was {modeSwitcher.CurrentMode}) ***");
+                    }
+
+                    if (modeSwitcher.CurrentMode != ControllerOutputMode.Xbox360)
+                    {
+                        modeSwitcher.SetMode(ControllerOutputMode.Xbox360);
+                        mapper.ResetTransientState();
+                        profileMapper.Reset();
+                    }
+                }
+                else if (session.ModeBeforeSteam is { } previousMode)
+                {
+                    session.ModeBeforeSteam = null;
+
+                    if (modeSwitcher.CurrentMode != previousMode)
+                    {
+                        modeSwitcher.SetMode(previousMode);
+                        mapper.ResetTransientState();
+                        profileMapper.Reset();
+                    }
+
+                    // Steam ferme : repasser au bureau debranche le pad, comme la bascule manuelle
+                    // et l'arbitre de premier plan. Un pad reste connecte pendant que personne ne
+                    // joue est un joueur de plus pour le jeu.
+                    if (previousMode == ControllerOutputMode.Profile)
+                    {
+                        await virtualPads.ForgetAsync(frameSource);
+                    }
+
+                    log.Info(LogCategory.Mode,
+                        $"*** STEAM CLOSED -> {Shorten(frameSource)} back to {previousMode} ***");
                 }
 
                 if (modeSwitcher.CurrentMode == ControllerOutputMode.Profile)
@@ -2390,116 +2371,61 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     if (source is INativeLayerControl nativeLayer)
                         await nativeLayer.SetNativeLayerEnabledAsync(false);
 
-                    // Une manette PS5 ou Xbox en mode natif : SteamXBox s'efface.
-                    //
-                    // Sa manette physique a ete demasquee a la bascule, donc le jeu la voit
-                    // directement, avec son vrai identifiant. Emettre un pad virtuel en plus
-                    // donnerait deux manettes pour un joueur — chaque appui compte double — et
-                    // remplacerait une DualSense par une DualShock 4, qui n'a ni les memes boutons ni
-                    // les memes reperes a l'ecran.
-                    //
-                    // Le flux continue d'etre lu, et c'est tout ce qui reste : sans lui, la tenue
-                    // L3+R3 qui ramene au profil n'arriverait jamais.
-                    //
-                    // La manette Steam ne passe pas par ici. Windows ne la gere pas nativement : la
-                    // demasquer donnerait une manette morte, donc elle garde son pad Xbox 360
-                    // virtuel, qui est ce qui la rend utilisable.
+                    // Une manette en mode natif : son pad Xbox 360 virtuel est nourri ici. Toutes
+                    // les familles passent par ce pad — la Xbox aussi, depuis que sa bascule emule
+                    // un slot plutot que de rendre la manette physique — donc le jeu ne voit jamais
+                    // que des manettes Xbox 360 ordinaires.
                     //
                     // Un "if" et non un "continue" : la ligne de compteurs par seconde est plus bas
                     // dans la boucle, et sauter la trame la sauterait aussi. Sur une machine dont la
                     // seule manette est en natif, le journal deviendrait entierement muet — l'etat
                     // exact que ces compteurs ont ete ecrits pour supprimer.
-                    if (!NativeMeansUncloaked(frame.Source.Kind))
-                    {
 
                     // Xbox mode used to report nothing at all: the per-second line showed frames and
                     // a mode, and stayed silent on whether the virtual pad was being fed. "It does
                     // not work" was then impossible to place — mapper producing nothing, or submit
                     // failing? These three numbers separate the two.
                     //
-                    // The counters are family-agnostic: a DualSense is counted through its DualShock
-                    // 4 report, translated back to the Xbox button names the status line has always
-                    // used, so one line serves both families.
-                    if (frame.Source.Kind == ControllerKind.DualSense)
+                    // The counters are family-agnostic: every family is counted through its virtual
+                    // Xbox 360 report, so one line serves all of them.
+                    var output = mapper.Map(mappedState);
+                    var report = output.Gamepad;
+                    if (report.Buttons != Xbox360Buttons.None)
                     {
-                        var ds4Report = session.DualSenseMapper.Map(mappedState);
-                        var ds4Buttons = DualSenseGamepadMapper.ToXbox360(ds4Report);
-                        if (ds4Buttons != Xbox360Buttons.None)
-                        {
-                            xboxButtonFrames++;
-                            xboxButtons |= ds4Buttons;
-                        }
-
-                        if (ds4Report.LeftThumbX != 128 || ds4Report.LeftThumbY != 128 ||
-                            ds4Report.RightThumbX != 128 || ds4Report.RightThumbY != 128)
-                        {
-                            xboxStickFrames++;
-                        }
-
-                        if (ds4Report.LeftTrigger != 0 || ds4Report.RightTrigger != 0)
-                        {
-                            xboxTriggerFrames++;
-                        }
-
-                        try
-                        {
-                            // This DualSense's own virtual DualShock 4 pad. Routing every controller
-                            // to one pad is what made split-screen impossible: the game would see a
-                            // single player receiving two people's inputs interleaved, which is not
-                            // two players — it is one player being fought over.
-                            var pad = await virtualPads.ForDS4Async(frame.Source, cancellation.Token);
-                            await pad.SubmitAsync(ds4Report, cancellation.Token);
-                        }
-                        catch (Exception exception)
-                        {
-                            // Previously this propagated and killed the loop. A driver that rejects
-                            // one report should cost one frame, and should say so.
-                            xboxSubmitFailures++;
-                            log.Warn(LogCategory.Mapping,
-                                $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
-                        }
-                    }
-                    else
-                    {
-                        var output = mapper.Map(mappedState);
-                        var report = output.Gamepad;
-                        if (report.Buttons != Xbox360Buttons.None)
-                        {
-                            xboxButtonFrames++;
-                            xboxButtons |= report.Buttons;
-                        }
-
-                        if (report.LeftThumbX != 0 || report.LeftThumbY != 0 ||
-                            report.RightThumbX != 0 || report.RightThumbY != 0)
-                        {
-                            xboxStickFrames++;
-                        }
-
-                        if (report.LeftTrigger != 0 || report.RightTrigger != 0)
-                        {
-                            xboxTriggerFrames++;
-                        }
-
-                        try
-                        {
-                            // To this controller's own virtual pad. Routing every controller to one
-                            // pad is what made split-screen impossible: the game would see a single
-                            // player receiving two people's inputs interleaved, which is not two
-                            // players — it is one player being fought over.
-                            var pad = await virtualPads.ForAsync(frame.Source, cancellation.Token);
-                            await pad.SubmitAsync(report, cancellation.Token);
-                        }
-                        catch (Exception exception)
-                        {
-                            // Previously this propagated and killed the loop. A driver that rejects
-                            // one report should cost one frame, and should say so.
-                            xboxSubmitFailures++;
-                            log.Warn(LogCategory.Mapping,
-                                $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
-                        }
+                        xboxButtonFrames++;
+                        xboxButtons |= report.Buttons;
                     }
 
-                    } // fin de "cette famille s'emule" — voir NativeMeansUncloaked plus haut
+                    if (report.LeftThumbX != 0 || report.LeftThumbY != 0 ||
+                        report.RightThumbX != 0 || report.RightThumbY != 0)
+                    {
+                        xboxStickFrames++;
+                    }
+
+                    if (report.LeftTrigger != 0 || report.RightTrigger != 0)
+                    {
+                        xboxTriggerFrames++;
+                    }
+
+                    try
+                    {
+                        // To this controller's own virtual pad. Routing every controller to one
+                        // pad is what made split-screen impossible: the game would see a single
+                        // player receiving two people's inputs interleaved, which is not two
+                        // players — it is one player being fought over. Every family switches to
+                        // an ordinary Xbox 360 slot — DualSense and Xbox included — and the slot
+                        // fed here must be the same one its switch created.
+                        var pad = await virtualPads.ForAsync(frame.Source, cancellation.Token);
+                        await pad.SubmitAsync(report, cancellation.Token);
+                    }
+                    catch (Exception exception)
+                    {
+                        // Previously this propagated and killed the loop. A driver that rejects
+                        // one report should cost one frame, and should say so.
+                        xboxSubmitFailures++;
+                        log.Warn(LogCategory.Mapping,
+                            $"gamepad submit failed: {exception.GetType().Name}: {exception.Message}");
+                    }
                 }
 
                 var now = DateTimeOffset.UtcNow;

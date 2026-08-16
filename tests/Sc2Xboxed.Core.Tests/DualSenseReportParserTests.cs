@@ -280,10 +280,11 @@ public class DualSenseReportParserTests
     // The real Bluetooth compatibility report is not the ten-byte fixture above but the full
     // 78-byte frame. Bytes captured from a DualSense connected over Bluetooth, right stick mid-way:
     //   [01 80 7E F6 7D 08 00 24 00 00 00 00]
-    // Byte 7 runs 0x24, 0x28, 0x2C, … 0x3C, 0x00, 0x04, … — a per-frame counter, not the PS/mute
-    // byte. Read as the system byte it held the mute button (Quick Access, the mode-switch chord)
-    // on and off by itself, and the controller switched mode roughly twice a second. This is the
-    // regression that test pins.
+    // Byte 7 runs 0x24, 0x28, 0x2C, … 0x3C, 0x00, 0x04, … — a per-frame counter on its top bits.
+    // Read whole as the system byte it held the mute button (Quick Access, the mode-switch chord)
+    // on and off by itself, and the controller switched mode roughly twice a second. That is the
+    // regression these tests pin. Only the low bit of the byte is the PS button, and only that bit
+    // is read below.
     private static byte[] BluetoothCompactFull()
     {
         var report = new byte[78];
@@ -326,6 +327,46 @@ public class DualSenseReportParserTests
         Assert.Equal(SteamControllerButtons.None, state.Buttons);
     }
 
+    // Manoeuvre 14 settled it: PS, mute, pad click pressed in that order, and only the PS presses
+    // moved bit 0x01 of the byte. The mute button is not emitted in this report shape at all, and
+    // the two rest manoeuvres moved neither low bit (bits 0x3C and nothing else). Decoding the low
+    // bit is what gives a Bluetooth DualSense a PS button again, without the full-report lag.
+    [Fact]
+    public void ThePsButtonIsReadFromTheCompactBluetoothReport()
+    {
+        var report = BluetoothCompactFull();
+        report[7] = 0x25;    // counter 0x24 | PS bit 0x01
+
+        var state = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value;
+
+        Assert.True(state.Buttons.HasFlag(SteamControllerButtons.Steam));
+    }
+
+    // The touchpad contact bit is deliberately not decoded: the pad is a contactor, not a surface,
+    // in this shape, and it has no Xbox equivalent to be wired to without guessing.
+    [Fact]
+    public void TheTouchpadContactBitIsNotDecoded()
+    {
+        var report = BluetoothCompactFull();
+        report[7] = 0x26;    // counter 0x24 | contact bit 0x02
+
+        var state = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value;
+
+        Assert.Equal(SteamControllerButtons.None, state.Buttons);
+    }
+
+    [Fact]
+    public void PsAndTouchpadContactTogetherGiveSteamOnly()
+    {
+        var report = BluetoothCompactFull();
+        report[7] = 0x27;    // counter 0x24 | PS 0x01 | contact 0x02
+
+        var state = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value;
+
+        Assert.True(state.Buttons.HasFlag(SteamControllerButtons.Steam));
+        Assert.False(state.Buttons.HasFlag(SteamControllerButtons.QuickAccess));
+    }
+
     [Fact]
     public void ATriggerIsNeverReadAsARowOfButtons()
     {
@@ -355,5 +396,45 @@ public class DualSenseReportParserTests
         report[1] = 255;
 
         Assert.True(DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value.LeftStick.X > 0.9);
+    }
+
+    // Measured on the bench on 15 August: a pad lying on the table drifts up to five counts from
+    // centre. At the old rest band of four it leaked 0,04 of stick out of a controller nobody was
+    // touching, which is what "the pointer moves on its own" looks like from the outside.
+    [Fact]
+    public void TheDriftMeasuredOnARestingPadIsFlattened()
+    {
+        var report = Usb();
+        report[2] = 123;    // five counts below centre, the worst rest value measured
+
+        Assert.Equal(0, DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value.LeftStick.Y);
+    }
+
+    // The other half of the same rule: the band absorbs drift, it does not swallow movement.
+    [Fact]
+    public void DeliberateMovementSurvivesTheRestBand()
+    {
+        var report = Usb();
+        report[2] = 120;
+
+        Assert.True(DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value.LeftStick.Y > 0);
+    }
+
+    // Over Bluetooth in compatibility mode the trigger byte is not analogue: a slow full-travel press
+    // produced two values on the bench, 0x00 and 0xFF. The shoulder byte states the same triggers as
+    // plain bits, and they are the only thing left if that byte ever goes missing.
+    [Theory]
+    [InlineData(0x04)]
+    [InlineData(0x08)]
+    public void ATriggerHeldDownIsReadFromItsShoulderBit(int bit)
+    {
+        var report = BluetoothCompact();
+        report[6] = (byte)bit;
+
+        var state = DualSenseReportParser.Parse(report, TimeSpan.Zero)!.Value;
+
+        Assert.Equal(1.0, bit == 0x04 ? state.LeftTrigger : state.RightTrigger, 2);
+        Assert.Equal(0.0, bit == 0x04 ? state.RightTrigger : state.LeftTrigger, 2);
+        Assert.Equal(SteamControllerButtons.None, state.Buttons);
     }
 }

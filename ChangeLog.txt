@@ -2,6 +2,42 @@ SteamXBox - Change log
 ======================
 
 
+4.8.3
+-----
+  Le GUI n'expose plus de bascule entre profil et natif pour les familles PS5
+  et Xbox : chaque famille ne propose plus que Profils. En interne, la bascule
+  demeure accessible (--start-mode xbox360) et les reglages sont conserves dans
+  le profil. Les correctifs de la semaine portent sur le clavier a l'ecran
+  apres un aller-retour par Steam, et sur la lecture du bouton PS quand la
+  manette parle en Bluetooth compat.
+
+  * Retrait des onglets switch DualSense et Xbox du GUI. Une PS5 ou une Xbox ne
+    montre plus que sa page Profils ; les valeurs de bascule restent dans le
+    profil et rien n'est perdu au demarrage.
+
+  * Le clavier a l'ecran ne perd plus la main au hand-over Steam. Quand Steam
+    reprend la manette, chaque incrustation voit son pipe se fermer ; la boucle
+    de lecture retablit la connexion d'elle-meme et les curseurs reparaissent
+    au prochain appel. Mesure du 16 aout : les deux pipes (DualSense et Xbox)
+    mouraient au hand-over sans jamais revenir, et le clavier qui reparaissait
+    etait une coquille sans curseurs.
+
+  * L'ensemble des instances de clavier est desormais serialise par un verrou.
+    Les taches de lecture ferment un clavier quand leur pad disparait pendant
+    que la boucle de frames en ouvre d'autres : sans garde, la course corrompait
+    le dictionnaire au point que chaque ouverture suivante levait une exception,
+    meme depuis le thread de la boucle.
+
+  * Le bouton PS est decode dans les rapports Bluetooth compat. Quand Steam a
+    bascule la manette (rapport 0x31), le Core lisait encore le rapport 0x01 et
+    perdait le bouton PS ; il lit desormais les deux et le bouton n'est plus
+    jamais perdu.
+
+  * (Indexer) L'indexeur sait convertir un document numerise : extraction du
+    texte par rendu PDF en trames (PdfToPpm) puis reconnaissance optique
+    Tesseract, branchee dans le plugin convertir-document.
+
+
 4.8.2
 -----
   Le bouton PS ouvre Steam, dans les deux modes, et le signal d'arret de la

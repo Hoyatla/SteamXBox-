@@ -23,10 +23,23 @@ namespace Sc2Xboxed.App.Console;
 /// The set owns the channels and the lifetime; where the keys go once typed is the overlay's
 /// business, and it stays that way — the bridge never learns what was typed.
 /// </para>
+///
+/// <para>
+/// Safe to call from any thread. The controller reader tasks run on their own threads and close a
+/// keyboard through <see cref="CloseAsync"/> when their pad disappears — <c>onLeft</c> calls it
+/// fire-and-forget — at the same time the frame loop is opening keyboards and looking them up.
+/// Without a guard the two would corrupt the dictionary: the Steam hand-over reopens every pad
+/// while the previous readers are still winding down, and one such concurrent update poisoned the
+/// collection so badly that every later <see cref="Open"/> threw, even from the loop's own thread.
+/// Every access is therefore serialised on one gate. <see cref="CloseAsync"/> removes under the
+/// gate but disposes outside it — a disposal that blocks on the overlay must not hold the gate the
+/// loop needs for its next lookup.
+/// </para>
 /// </remarks>
 public sealed class OskInstanceSet : IAsyncDisposable
 {
     private readonly Dictionary<string, OskInstance> _instances = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
     private readonly Action<string>? _log;
     private readonly Func<HapticCommand, CancellationToken, ValueTask>? _hapticDispatch;
 
@@ -43,18 +56,43 @@ public sealed class OskInstanceSet : IAsyncDisposable
     }
 
     /// <summary>How many keyboards are open.</summary>
-    public int Count => _instances.Count;
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _instances.Count;
+            }
+        }
+    }
 
     /// <summary>Whether this controller currently has a keyboard.</summary>
-    public bool IsOpen(string controllerId) => _instances.ContainsKey(controllerId);
+    public bool IsOpen(string controllerId)
+    {
+        lock (_gate)
+        {
+            return _instances.ContainsKey(controllerId);
+        }
+    }
 
     /// <summary>The sender feeding this controller's keyboard, or null when it has none.</summary>
     public PadDataSender? SenderFor(string controllerId)
-        => _instances.TryGetValue(controllerId, out var instance) ? instance.Sender : null;
+    {
+        lock (_gate)
+        {
+            return _instances.TryGetValue(controllerId, out var instance) ? instance.Sender : null;
+        }
+    }
 
     /// <summary>This controller's keyboard, or null when it has none.</summary>
     public OskInstance? InstanceFor(string controllerId)
-        => _instances.TryGetValue(controllerId, out var instance) ? instance : null;
+    {
+        lock (_gate)
+        {
+            return _instances.TryGetValue(controllerId, out var instance) ? instance : null;
+        }
+    }
 
     /// <summary>
     /// Opens this controller's keyboard, or returns the one it already has.
@@ -63,49 +101,85 @@ public sealed class OskInstanceSet : IAsyncDisposable
     /// The suffix is derived from the controller id on both sides — here and in the overlay, from
     /// the same function. A suffix that disagreed would be a pipe that never connects, with nothing
     /// anywhere to say why.
+    ///
+    /// <para>
+    /// The whole method holds the gate: a controller being re-opened mid hand-over must not get a
+    /// second sender while the first is still registered for it. Nothing here awaits, so the gate is
+    /// never held across a suspension.
+    /// </para>
     /// </remarks>
     public OskInstance Open(string controllerId)
     {
-        if (_instances.TryGetValue(controllerId, out var existing))
+        lock (_gate)
         {
-            return existing;
+            if (_instances.TryGetValue(controllerId, out var existing))
+            {
+                return existing;
+            }
+
+            var naming = OskInstanceNaming.For(controllerId);
+            var sender = new PadDataSender(naming.PadPipeName);
+            sender.Start();
+
+            var hapticReceiver = _hapticDispatch is null
+                ? null
+                : new HapticRequestReceiver(_hapticDispatch, _log, naming.HapticPipeName);
+            hapticReceiver?.Start();
+
+            var instance = new OskInstance(controllerId, naming, sender, hapticReceiver);
+            _instances[controllerId] = instance;
+
+            _log?.Invoke($"keyboard opened for {controllerId} on {naming.PadPipeName}");
+
+            return instance;
         }
-
-        var naming = OskInstanceNaming.For(controllerId);
-        var sender = new PadDataSender(naming.PadPipeName);
-        sender.Start();
-
-        var hapticReceiver = _hapticDispatch is null
-            ? null
-            : new HapticRequestReceiver(_hapticDispatch, _log, naming.HapticPipeName);
-        hapticReceiver?.Start();
-
-        var instance = new OskInstance(controllerId, naming, sender, hapticReceiver);
-        _instances[controllerId] = instance;
-
-        _log?.Invoke($"keyboard opened for {controllerId} on {naming.PadPipeName}");
-
-        return instance;
     }
 
     /// <summary>Closes this controller's keyboard and releases its channels.</summary>
     public async ValueTask CloseAsync(string controllerId)
     {
-        if (!_instances.Remove(controllerId, out var instance))
+        // Remove under the gate, dispose outside it: disposal can block on the overlay, and a
+        // blocked CloseAsync must not stall the loop's next Open or lookup.
+        OskInstance? instance;
+        lock (_gate)
         {
-            return;
+            if (!_instances.Remove(controllerId, out instance))
+            {
+                return;
+            }
         }
 
         await instance.DisposeAsync().ConfigureAwait(false);
         _log?.Invoke($"keyboard closed for {controllerId}");
     }
 
-    /// <summary>Every open keyboard, for the transitions that must reach all of them.</summary>
-    public IReadOnlyCollection<OskInstance> All => _instances.Values;
+    /// <summary>
+    /// Every open keyboard, for the transitions that must reach all of them.
+    /// </summary>
+    /// <remarks>
+    /// A snapshot, not a live view: the caller walks it while other threads may be closing
+    /// keyboards, and enumerating the dictionary itself under those conditions would throw.
+    /// </remarks>
+    public IReadOnlyCollection<OskInstance> All
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return new List<OskInstance>(_instances.Values);
+            }
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var id in _instances.Keys.ToList())
+        List<string> ids;
+        lock (_gate)
+        {
+            ids = _instances.Keys.ToList();
+        }
+
+        foreach (var id in ids)
         {
             await CloseAsync(id).ConfigureAwait(false);
         }

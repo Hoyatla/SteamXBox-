@@ -1,0 +1,382 @@
+{
+  "date": "2026-08-15T23:08:52.7973591\u002B02:00",
+  "transport": "bluetooth",
+  "mode": "compat",
+  "note": "",
+  "chemin": "\\\\?\\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid\u00260002054c_pid\u00260ce6#8\u002615f755c8\u00263\u00260000#{4d1e55b2-f16f-11cf-88cb-001111000030}",
+  "cleDurable": "bt:90b685f7696f",
+  "longueurEntree": 78,
+  "windows": "Microsoft Windows NT 10.0.26200.0",
+  "secondes": 150.8703515,
+  "commandes": [
+    {
+      "nom": "Croix",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 40,
+          "bits": 32
+        }
+      ]
+    },
+    {
+      "nom": "Rond",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 72,
+          "bits": 64
+        }
+      ]
+    },
+    {
+      "nom": "Carr\u00E9",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 24,
+          "bits": 16
+        },
+        {
+          "octet": 4,
+          "avant": 132,
+          "extreme": 133,
+          "bits": 2
+        }
+      ]
+    },
+    {
+      "nom": "Triangle",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 136,
+          "bits": 128
+        }
+      ]
+    },
+    {
+      "nom": "L1",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 1,
+          "bits": 1
+        }
+      ]
+    },
+    {
+      "nom": "R1",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 2,
+          "bits": 2
+        }
+      ]
+    },
+    {
+      "nom": "L2",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 8,
+          "avant": 0,
+          "extreme": 255,
+          "bits": 255
+        },
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 4,
+          "bits": 4
+        }
+      ]
+    },
+    {
+      "nom": "R2",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 9,
+          "avant": 0,
+          "extreme": 255,
+          "bits": 255
+        },
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 8,
+          "bits": 8
+        }
+      ]
+    },
+    {
+      "nom": "L3",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 64,
+          "bits": 64
+        },
+        {
+          "octet": 2,
+          "avant": 128,
+          "extreme": 127,
+          "bits": 127
+        },
+        {
+          "octet": 1,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 127
+        }
+      ]
+    },
+    {
+      "nom": "R3",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 128,
+          "bits": 128
+        },
+        {
+          "octet": 4,
+          "avant": 131,
+          "extreme": 130,
+          "bits": 16
+        },
+        {
+          "octet": 3,
+          "avant": 130,
+          "extreme": 129,
+          "bits": 117
+        }
+      ]
+    },
+    {
+      "nom": "Create",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 16,
+          "bits": 16
+        }
+      ]
+    },
+    {
+      "nom": "Options",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 6,
+          "avant": 0,
+          "extreme": 32,
+          "bits": 32
+        },
+        {
+          "octet": 4,
+          "avant": 131,
+          "extreme": 130,
+          "bits": 0
+        }
+      ]
+    },
+    {
+      "nom": "PS",
+      "ignoree": false,
+      "effets": []
+    },
+    {
+      "nom": "Muet",
+      "ignoree": false,
+      "effets": []
+    },
+    {
+      "nom": "Clic du pav\u00E9 tactile",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 3,
+          "avant": 130,
+          "extreme": 129,
+          "bits": 0
+        }
+      ]
+    },
+    {
+      "nom": "Doigt gliss\u00E9 sur le pav\u00E9",
+      "ignoree": false,
+      "effets": []
+    },
+    {
+      "nom": "Croix directionnelle HAUT",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 0,
+          "bits": 0
+        }
+      ]
+    },
+    {
+      "nom": "Croix directionnelle DROITE",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 2,
+          "bits": 2
+        }
+      ]
+    },
+    {
+      "nom": "Croix directionnelle BAS",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 4,
+          "bits": 4
+        }
+      ]
+    },
+    {
+      "nom": "Croix directionnelle GAUCHE",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 5,
+          "avant": 8,
+          "extreme": 6,
+          "bits": 6
+        }
+      ]
+    },
+    {
+      "nom": "Stick gauche \u00E0 DROITE",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 1,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 122
+        },
+        {
+          "octet": 2,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 127
+        }
+      ]
+    },
+    {
+      "nom": "Stick gauche en HAUT",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 1,
+          "avant": 128,
+          "extreme": 127,
+          "bits": 111
+        },
+        {
+          "octet": 2,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 0
+        }
+      ]
+    },
+    {
+      "nom": "Stick droit \u00E0 DROITE",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 3,
+          "avant": 130,
+          "extreme": 247,
+          "bits": 125
+        },
+        {
+          "octet": 4,
+          "avant": 132,
+          "extreme": 111,
+          "bits": 123
+        },
+        {
+          "octet": 1,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 127
+        },
+        {
+          "octet": 2,
+          "avant": 128,
+          "extreme": 129,
+          "bits": 5
+        }
+      ]
+    },
+    {
+      "nom": "Stick droit en HAUT",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 4,
+          "avant": 130,
+          "extreme": 9,
+          "bits": 4
+        },
+        {
+          "octet": 3,
+          "avant": 129,
+          "extreme": 140,
+          "bits": 118
+        }
+      ]
+    },
+    {
+      "nom": "Manette secou\u00E9e",
+      "ignoree": false,
+      "effets": [
+        {
+          "octet": 3,
+          "avant": 128,
+          "extreme": 127,
+          "bits": 121
+        },
+        {
+          "octet": 4,
+          "avant": 129,
+          "extreme": 128,
+          "bits": 116
+        }
+      ]
+    }
+  ]
+}

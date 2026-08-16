@@ -1,0 +1,231 @@
+{
+  "date": "2026-08-15T22:34:14.3107164\u002B02:00",
+  "transport": "bluetooth",
+  "mode": "compat",
+  "note": "",
+  "chemin": "\\\\?\\hid#{00001124-0000-1000-8000-00805f9b34fb}_vid\u00260002054c_pid\u00260ce6#8\u002615f755c8\u00263\u00260000#{4d1e55b2-f16f-11cf-88cb-001111000030}",
+  "cleDurable": "bt:90b685f7696f",
+  "longueurEntree": 78,
+  "windows": "Microsoft Windows NT 10.0.26200.0",
+  "trames": 37460,
+  "secondes": 64.1307103,
+  "commandes": [
+    {
+      "nom": "Croix",
+      "ignoree": false,
+      "trames": 78,
+      "effets": [
+        {
+          "octet": 5,
+          "repos": 8,
+          "extreme": 40,
+          "bits": 32
+        }
+      ]
+    },
+    {
+      "nom": "Rond",
+      "ignoree": false,
+      "trames": 98,
+      "effets": [
+        {
+          "octet": 5,
+          "repos": 8,
+          "extreme": 72,
+          "bits": 64
+        }
+      ]
+    },
+    {
+      "nom": "Carr\u00E9",
+      "ignoree": false,
+      "trames": 115,
+      "effets": [
+        {
+          "octet": 5,
+          "repos": 8,
+          "extreme": 24,
+          "bits": 16
+        }
+      ]
+    },
+    {
+      "nom": "Triangle",
+      "ignoree": false,
+      "trames": 126,
+      "effets": [
+        {
+          "octet": 5,
+          "repos": 8,
+          "extreme": 136,
+          "bits": 128
+        }
+      ]
+    },
+    {
+      "nom": "L1",
+      "ignoree": false,
+      "trames": 74,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 1,
+          "bits": 1
+        }
+      ]
+    },
+    {
+      "nom": "R1",
+      "ignoree": false,
+      "trames": 48,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 2,
+          "bits": 2
+        }
+      ]
+    },
+    {
+      "nom": "L2",
+      "ignoree": false,
+      "trames": 100,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 4,
+          "bits": 4
+        },
+        {
+          "octet": 8,
+          "repos": 0,
+          "extreme": 253,
+          "bits": 255
+        }
+      ]
+    },
+    {
+      "nom": "R2",
+      "ignoree": false,
+      "trames": 95,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 8,
+          "bits": 8
+        },
+        {
+          "octet": 9,
+          "repos": 0,
+          "extreme": 255,
+          "bits": 255
+        }
+      ]
+    },
+    {
+      "nom": "L3",
+      "ignoree": false,
+      "trames": 660,
+      "effets": [
+        {
+          "octet": 1,
+          "repos": 129,
+          "extreme": 134,
+          "bits": 126
+        },
+        {
+          "octet": 2,
+          "repos": 127,
+          "extreme": 159,
+          "bits": 128
+        },
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 64,
+          "bits": 64
+        }
+      ]
+    },
+    {
+      "nom": "R3",
+      "ignoree": false,
+      "trames": 7728,
+      "effets": [
+        {
+          "octet": 3,
+          "repos": 127,
+          "extreme": 96,
+          "bits": 0
+        },
+        {
+          "octet": 4,
+          "repos": 132,
+          "extreme": 117,
+          "bits": 123
+        },
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 128,
+          "bits": 128
+        }
+      ]
+    },
+    {
+      "nom": "Create",
+      "ignoree": false,
+      "trames": 163,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 16,
+          "bits": 16
+        }
+      ]
+    },
+    {
+      "nom": "Options",
+      "ignoree": false,
+      "trames": 101,
+      "effets": [
+        {
+          "octet": 6,
+          "repos": 0,
+          "extreme": 32,
+          "bits": 32
+        }
+      ]
+    },
+    {
+      "nom": "PS",
+      "ignoree": false,
+      "trames": 39,
+      "effets": [
+        {
+          "octet": 4,
+          "repos": 132,
+          "extreme": 133,
+          "bits": 1
+        },
+        {
+          "octet": 7,
+          "repos": 52,
+          "extreme": 61,
+          "bits": 1
+        }
+      ]
+    },
+    {
+      "nom": "Muet",
+      "ignoree": true,
+      "trames": 0,
+      "effets": []
+    }
+  ]
+}

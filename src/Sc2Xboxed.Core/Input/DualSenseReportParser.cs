@@ -36,8 +36,17 @@ public static class DualSenseReportParser
     /// A DualSense at rest does not report exactly 128. Left raw, a pad sitting untouched on a desk
     /// produces a slow permanent drift — which on this project has already been mistaken for a bug
     /// in the mapping three times over.
+    ///
+    /// <para>
+    /// Six, not four. Measured on the bench on 15 August over two twelve-second rest recordings, a
+    /// pad lying on the table drifts up to <b>five counts</b> from centre (left Y down to 123). At
+    /// four, that leaked <c>0,04</c> of stick out of a controller nobody was touching — which is
+    /// exactly what "the pointer moves on its own" looks like from the outside. Six absorbs the
+    /// measured drift with one count to spare; going wider starts eating deliberate slow movement.
+    /// See <c>mesures/dualsense-bt/</c>.
+    /// </para>
     /// </remarks>
-    private const double RestBand = 4.0 / 128.0;
+    private const double RestBand = 6.0 / 128.0;
 
     /// <summary>Whether a report can be decoded at all.</summary>
     public static bool CanParse(ReadOnlySpan<byte> report)
@@ -60,8 +69,27 @@ public static class DualSenseReportParser
     /// <c>0x24, 0x28, 0x2C, … 0x3C, 0x00, 0x04, …</c>: a six-bit counter stepping by four. Decoded as
     /// the system byte, its bit <c>0x04</c> fired the mute button — Quick Access, the mode-switch
     /// chord — on and off by itself, and the controller changed mode about twice a second with nobody
-    /// touching it. The pad in this mode reports no PS or mute state at all, so the byte is not a
-    /// button anywhere in this report.
+    /// touching it.
+    ///
+    /// <para>
+    /// <b>The counter is the top of the byte, not the whole of it.</b> Measured on the bench on
+    /// 15 August across thirteen manoeuvres: the counter occupies bits <c>0x3C</c>, and the two low
+    /// bits are real inputs. <c>0x02</c> follows the touchpad being <i>touched</i> — it is the only
+    /// bit that moves during a slide with no click, and the pad reports no coordinates at all in this
+    /// shape, so the touchpad here is a contact and nothing more. <c>0x01</c> is the PS button:
+    /// manoeuvre 14 of <c>docs/protocole-dualsense-bt.md</c> pressed PS, then mute, then the pad
+    /// click, in that order, and only the PS presses moved the bit — the mute button is not emitted
+    /// in this report shape at all. The two rest manoeuvres moved neither low bit (bits <c>0x3C</c>
+    /// and nothing else), so decoding <c>0x01</c> cannot fire a button on a pad nobody is touching.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>0x01</c> is decoded as <see cref="SteamControllerButtons.Steam"/> in <see cref="Parse"/>.
+    /// The contact bit <c>0x02</c> is not decoded: the touchpad is a contactor, not a surface, in
+    /// this shape, and it has no Xbox equivalent to be wired to without guessing. This does not
+    /// touch the full Bluetooth report <c>0x31</c>, which is what turned the pipeline into lag on
+    /// 12 August; the bit is read from the compatibility report the pad already sends at full rate.
+    /// </para>
     /// </remarks>
     private const int CompactBluetoothReportLength = 78;
 
@@ -129,11 +157,21 @@ public static class DualSenseReportParser
         var leftStick = new NormalizedStick(Axis(report[layout.Axes]), -Axis(report[layout.Axes + 1]));
         var rightStick = new NormalizedStick(Axis(report[layout.Axes + 2]), -Axis(report[layout.Axes + 3]));
 
-        var leftTrigger = report[layout.Triggers] / 255.0;
-        var rightTrigger = report[layout.Triggers + 1] / 255.0;
-
         var faceAndDpad = report[layout.Buttons];
         var shoulders = report[layout.Buttons + 1];
+
+        // The triggers, from both places the pad states them.
+        //
+        // The analogue byte is the real source, and over Bluetooth in compatibility mode it is not
+        // analogue at all: measured on 15 August, a slow full-travel press of L2 produced exactly two
+        // values on its byte — 0x00 and 0xFF — and R2 three. There is no progression to read in that
+        // report shape, and an analogue trigger threshold set in a profile cannot do anything there.
+        //
+        // The shoulder byte carries L2 and R2 as plain bits at 0x04 and 0x08, unread until now. They
+        // agree with the byte whenever both are present, so nothing changes on USB; they are taken as
+        // a floor rather than as the answer, so a pad that does send a real analogue value keeps it.
+        var leftTrigger = Math.Max(report[layout.Triggers] / 255.0, (shoulders & 0x04) != 0 ? 1.0 : 0.0);
+        var rightTrigger = Math.Max(report[layout.Triggers + 1] / 255.0, (shoulders & 0x08) != 0 ? 1.0 : 0.0);
 
         var buttons = SteamControllerButtons.None;
 
@@ -162,10 +200,10 @@ public static class DualSenseReportParser
         if ((shoulders & 0x80) != 0) buttons |= SteamControllerButtons.RightStick;
 
         // Third button byte: PS, touchpad click, mute. The three button bytes are consecutive in
-        // both layouts, so it is always one past the shoulders wherever those are. It exists only in
-        // the USB-shaped reports: the Bluetooth compatibility report carries a per-frame counter in
-        // that byte's place (see <see cref="CompactBluetoothReportLength"/>), and no PS or mute
-        // state at all. Read by shape, not by id — the id alone cannot tell the transports apart.
+        // both layouts, so it is always one past the shoulders wherever those are. Over USB it is
+        // the system byte; over Bluetooth in compatibility mode the same byte carries a per-frame
+        // counter on its top bits, but its low bit is still the PS button (see
+        // <see cref="CompactBluetoothReportLength"/>). Both transports are read the same way.
         //
         // The PS button becomes Steam, the same flag a Steam Controller's Steam button produces, so
         // it reaches the launcher already wired to it rather than through a second path.
@@ -176,9 +214,7 @@ public static class DualSenseReportParser
         // InputModeHandler, where the L3+R3 hold lives.
         //
         // Guarded on length: a truncated report must lose the button, not throw.
-        var isBluetoothCompactReport =
-            report[0] == UsbReportId && report.Length >= CompactBluetoothReportLength;
-        if (!isBluetoothCompactReport && report.Length > layout.Buttons + 2)
+        if (report.Length > layout.Buttons + 2)
         {
             var system = report[layout.Buttons + 2];
             if ((system & 0x01) != 0) buttons |= SteamControllerButtons.Steam;   // PS

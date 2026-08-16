@@ -84,6 +84,19 @@ public sealed class ControllerSession
     public InputModeHandler ModeSwitcher { get; }
 
     /// <summary>
+    /// The output mode this controller was in before Steam started, pinned by the Steam-session
+    /// override, or null when no such override is in force.
+    /// </summary>
+    /// <remarks>
+    /// Steam running pins every controller to Xbox 360 for as long as it stays up, so Steam's games
+    /// see normal gamepads. This records what to come back to when Steam closes — the controller's
+    /// own mode, not a default, so a pad that was already in Xbox 360 before Steam started stays
+    /// there afterwards. Lives here so the memory survives the frame loop; the loop only sets and
+    /// clears it, it never invents a value.
+    /// </remarks>
+    public ControllerOutputMode? ModeBeforeSteam { get; set; }
+
+    /// <summary>
     /// Power-off chord detection for this controller.
     /// </summary>
     /// <remarks>

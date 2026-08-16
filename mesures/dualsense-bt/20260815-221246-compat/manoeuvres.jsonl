@@ -1,0 +1,14 @@
+{"id":"01-repos","titre":"Repos","secondes":12.1243712,"trames":6997,"gestes":0,"gestesAttendus":0,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"02-stick-gauche-tenu","titre":"Stick gauche pouss\u00E9 et maintenu","secondes":4.3057316,"trames":2496,"gestes":1,"gestesAttendus":1,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"03-stick-gauche-lent","titre":"Stick gauche, cercles lents","secondes":13.678488,"trames":8106,"gestes":1,"gestesAttendus":1,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"04-stick-gauche-extremes","titre":"Stick gauche, huit directions","secondes":12.4429228,"trames":7322,"gestes":8,"gestesAttendus":8,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"05-stick-droit-extremes","titre":"Stick droit, huit directions","secondes":23.9771506,"trames":13862,"gestes":8,"gestesAttendus":8,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"06-gachettes","titre":"G\u00E2chettes, course lente","secondes":10.0281235,"trames":5699,"gestes":2,"gestesAttendus":2,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"07-boutons-face","titre":"Boutons de face, un par un","secondes":5.8933721,"trames":3439,"gestes":4,"gestesAttendus":4,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"08-croix-directionnelle","titre":"Croix directionnelle","secondes":57.4685252,"trames":33968,"gestes":6,"gestesAttendus":6,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"09-epaules-et-sticks","titre":"L1, R1, L3, R3","secondes":24.6117054,"trames":14147,"gestes":5,"gestesAttendus":4,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"10-boutons-systeme","titre":"Create, Options, PS, Muet, clic pav\u00E9","secondes":67.245212,"trames":38587,"gestes":6,"gestesAttendus":5,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"11-pave-tactile","titre":"Pav\u00E9 tactile, gliss\u00E9","secondes":26.6627462,"trames":15431,"gestes":2,"gestesAttendus":2,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"12-mouvement-manette","titre":"Manette secou\u00E9e, aucune commande touch\u00E9e","secondes":10.2046784,"trames":5849,"gestes":1,"gestesAttendus":1,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"14-ps-muet-pave","titre":"PS, Muet, clic pav\u00E9 \u2014 d\u00E9partage","secondes":39.3175493,"trames":22970,"gestes":6,"gestesAttendus":6,"plafond":false,"formes":[{"id":1,"longueur":78}]}
+{"id":"13-repos-final","titre":"Repos, seconde fois","secondes":12.1422352,"trames":7336,"gestes":0,"gestesAttendus":0,"plafond":false,"formes":[{"id":1,"longueur":78}]}

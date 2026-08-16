@@ -40,11 +40,15 @@ public static class Program
         // extraction problem from a network one.
         var dryRun = args.Any(a => a.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
 
+        // Demandee explicitement, jamais deduite. Voir le bloc qui la construit plus bas : c'est le
+        // temps d'indexation du partage qui est en jeu, pas la qualite d'un resultat.
+        var ocr = args.Any(a => a.Equals("--ocr", StringComparison.OrdinalIgnoreCase));
+
         if (root is null || (url is null && !dryRun))
         {
             Console.Error.WriteLine(
                 "Usage: SteamXBox.Indexer --root <dossier> [--url <instance>] "
-                + "[--index <nom>] [--key <cle>] [--dry-run]");
+                + "[--index <nom>] [--key <cle>] [--dry-run] [--ocr]");
 
             return 2;
         }
@@ -59,13 +63,38 @@ public static class Program
         // extractor can read must never reach it.
         using var libreOffice = new LibreOfficeTextExtractor();
 
-        var extractors = new ITextExtractor[]
+        // La reconnaissance de caracteres : eteinte par defaut, et volontairement. Un partage plein
+        // de scans passe d'une heure d'indexation a une nuit — c'est une decision d'exploitation,
+        // pas un reglage qui s'active tout seul.
+        //
+        // Placee AVANT PdfTextExtractor : elle lit d'abord le texte de chaque page comme lui, et ne
+        // dessine que les pages qui n'en ont pas. Derriere lui, elle ne verrait jamais un seul PDF.
+        using var renderer = new PdfToPpmPageRenderer();
+        var scanned = new ScannedPdfTextExtractor(renderer, new TesseractTextRecognizer());
+
+        if (ocr)
         {
-            new PlainTextExtractor(),
-            new PdfTextExtractor(),
-            new OfficeTextExtractor(),
-            libreOffice,
-        };
+            Console.WriteLine(scanned.IsAvailable
+                ? $"Reconnaissance de caracteres active : {scanned.Describe()}"
+                : $"Reconnaissance de caracteres demandee mais indisponible : {scanned.Describe()}");
+        }
+
+        var extractors = ocr && scanned.IsAvailable
+            ? new ITextExtractor[]
+            {
+                new PlainTextExtractor(),
+                scanned,
+                new PdfTextExtractor(),
+                new OfficeTextExtractor(),
+                libreOffice,
+            }
+            : new ITextExtractor[]
+            {
+                new PlainTextExtractor(),
+                new PdfTextExtractor(),
+                new OfficeTextExtractor(),
+                libreOffice,
+            };
 
         using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
 

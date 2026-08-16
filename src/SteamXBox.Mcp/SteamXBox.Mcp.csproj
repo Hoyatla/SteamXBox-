@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SteamXBox.Mcp</AssemblyName>
+    <RootNamespace>SteamXBox.Mcp</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      Aucune dependance. Le protocole tient en trois methodes JSON-RPC, et un SDK ne ferait
+      qu'ajouter une bibliotheque a suivre pour ce que System.Text.Json fait deja. C'est la meme
+      regle que LibreOffice et tesseract : ce qui n'est pas embarque n'est pas a corriger.
+
+      Pas de reference a Sc2Xboxed.Core ni au produit : ce serveur lit des fichiers et ne touche
+      jamais au processus qui pilote les manettes. Il ne peut donc pas le casser.
+    -->
+  </PropertyGroup>
+
+</Project>

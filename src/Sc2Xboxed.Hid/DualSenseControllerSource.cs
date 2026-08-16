@@ -295,6 +295,17 @@ public sealed class DualSenseControllerSource : IPhysicalControllerSource, IPowe
     /// report logged as <c>id=0x01 len=78</c> with its payload ending at byte seven.
     ///
     /// <para>
+    /// <b>That rate description did not hold up.</b> Measured again on the bench on 15 August, same
+    /// pad, compatibility mode: a steady <b>600 reports a second</b> whatever is happening — 599 with
+    /// the pad lying untouched on a table, 591 with a stick pushed against its stop and held still for
+    /// twelve seconds, worst gap 20 ms across thirteen manoeuvres. The per-frame counter advances on
+    /// every one of them, so they are the pad's own reports and not Windows replaying a buffer. What
+    /// differed between the two measurements is the Bluetooth link itself, which is the one thing
+    /// neither reading controlled for. Whatever makes the DualSense pointer stutter, it is not this
+    /// source going quiet.
+    /// </para>
+    ///
+    /// <para>
     /// The read is the whole point — the calibration values are discarded. Wired pads never come here:
     /// over USB the full report is what arrives from the first frame.
     /// </para>

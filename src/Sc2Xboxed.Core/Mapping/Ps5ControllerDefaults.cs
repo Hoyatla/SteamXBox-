@@ -23,6 +23,16 @@ namespace Sc2Xboxed.Core.Mapping;
 /// Ce n'est pas une raison de refusionner les deux fichiers : un clavier et une souris peuvent
 /// partager un taux de repetition sans devenir le meme appareil. La duplication est le but.
 /// </para>
+///
+/// <para>
+/// <b>Ce que cette famille n'a pas en Bluetooth.</b> Mesure au banc du 15 aout, mode de
+/// compatibilite : les gachettes sont tout-ou-rien — une course lente et complete de L2 n'a produit
+/// que deux valeurs, <c>0x00</c> et <c>0xFF</c>. Tout reglage de seuil analogique de gachette est
+/// donc sans effet sur ce transport, et le rester tant que le mode complet <c>0x31</c> n'est pas
+/// rallume. Le pave tactile n'y est qu'un contact, sans coordonnees, et ni gyroscope ni
+/// accelerometre n'y sont emis. Rien de tout cela ne doit etre propose comme reglage a
+/// l'utilisateur d'une manette connectee sans fil. Voir <c>mesures/dualsense-bt/</c>.
+/// </para>
 /// </remarks>
 public static class Ps5ControllerDefaults
 {
