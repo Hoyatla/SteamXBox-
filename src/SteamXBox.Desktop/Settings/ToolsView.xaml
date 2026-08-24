@@ -103,6 +103,35 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
+
+            <!-- Le générateur tient dans un fichier : c'est ce qui le rend portable.
+
+                 Le programme et son interpréteur — torch et CUDA compris — font cinq gigaoctets et
+                 ne s'installent nulle part : ni registre, ni service, ni dossier système. Ils
+                 partent donc dans une archive, et se remettent en place sur une autre machine sans
+                 rien télécharger. Les modèles, eux, restent dehors : soixante-six gigaoctets qui ne
+                 se compressent pas, et que Modeles\jeux-modeles.json sait déjà nommer et réclamer. -->
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="{loc:T Text='Générateur portable'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock x:Name="PaquetInfo" Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="Compresser" Content="{loc:T Text='Compresser…'}"
+                            Padding="12,6" Click="CompresserClic"/>
+                    <Button x:Name="Decompresser" Content="{loc:T Text='Décompresser…'}"
+                            Margin="8,0,0,0" Padding="12,6" Click="DecompresserClic"/>
+                    <Button x:Name="ArreterPaquet" Content="{loc:T Text='Arrêter'}"
+                            Margin="8,0,0,0" Padding="12,6" Visibility="Collapsed"
+                            Click="ArreterPaquetClic"/>
+                </StackPanel>
+
+                <ProgressBar x:Name="PaquetBarre" Height="4" Margin="0,10,0,0"
+                             Visibility="Collapsed" Minimum="0" Maximum="1000"/>
+                <TextBlock x:Name="PaquetEtat" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
           </StackPanel>
         </ScrollViewer>
     </DockPanel>

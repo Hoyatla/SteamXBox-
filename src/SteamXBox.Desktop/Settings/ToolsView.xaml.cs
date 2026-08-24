@@ -77,10 +77,156 @@ public partial class ToolsView : UserControl
         Dependances.ItemsSource = dependances;
         BlocDependances.Visibility = dependances.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        PaquetInfo.Text = Pesee();
+
         Status.Text = $"{rows.Length} outil(s). Les changements prennent effet au prochain démarrage "
             + "de l'environnement. Les outils livrés avec SteamXBox ne s'effacent pas d'ici : "
             + "supprimez leur dossier dans Plugins si vous y tenez."
             + WindowsLeftBehind();
+    }
+
+    private CancellationTokenSource? _paquetArret;
+
+    /// <summary>Ce que pèserait le paquet, dit avant qu'on le demande.</summary>
+    /// <remarks>
+    /// Cinq gigaoctets ne se compressent pas en une seconde. Annoncer le poids et le nombre de
+    /// fichiers avant le clic évite qu'on lance l'opération en croyant qu'elle sera instantanée,
+    /// puis qu'on la prenne pour un blocage.
+    /// </remarks>
+    private static string Pesee()
+    {
+        try
+        {
+            var fichiers = SteamXBox.Tools.Generation.PaquetGenerateur.Contenu(AppContext.BaseDirectory);
+
+            if (fichiers.Count == 0)
+            {
+                return "Aucun générateur installé : il n'y a rien à empaqueter pour l'instant.";
+            }
+
+            var octets = fichiers.Sum(f => new FileInfo(f).Length);
+
+            return $"Le programme et son interpréteur — {fichiers.Count} fichiers, "
+                + $"{octets / 1024 / 1024 / 1024.0:0.0} Go — tiennent dans une archive qui se "
+                + "remet en place sur une autre machine sans rien télécharger. Les modèles restent "
+                + "dehors : ils ne se compressent pas, et les jeux de modèles savent déjà les "
+                + "réclamer.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return $"Le générateur n'a pas pu être mesuré : {exception.Message}";
+        }
+    }
+
+    private void CompresserClic(object sender, RoutedEventArgs e)
+    {
+        var boite = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Où écrire le paquet du générateur",
+            FileName = "generateur-steamxbox.zip",
+            Filter = "Archive (*.zip)|*.zip",
+        };
+
+        if (boite.ShowDialog() != true)
+        {
+            return;
+        }
+
+        Travailler(
+            "Empaquetage",
+            arret => SteamXBox.Tools.Generation.PaquetGenerateur.Compresser(
+                AppContext.BaseDirectory, boite.FileName, Avancer, arret),
+            $"Paquet écrit : {boite.FileName}");
+    }
+
+    private void DecompresserClic(object sender, RoutedEventArgs e)
+    {
+        var boite = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Le paquet du générateur à remettre en place",
+            Filter = "Archive (*.zip)|*.zip",
+        };
+
+        if (boite.ShowDialog() != true)
+        {
+            return;
+        }
+
+        Travailler(
+            "Déballage",
+            arret => SteamXBox.Tools.Generation.PaquetGenerateur.Decompresser(
+                AppContext.BaseDirectory, boite.FileName, Avancer, arret),
+            "Générateur remis en place. Il sera pris au prochain démarrage.");
+    }
+
+    private void ArreterPaquetClic(object sender, RoutedEventArgs e) => _paquetArret?.Cancel();
+
+    /// <summary>
+    /// Fait le travail hors du fil d'affichage, et tient l'écran pendant ce temps.
+    /// </summary>
+    /// <remarks>
+    /// Cinq gigaoctets sur le fil d'affichage, c'est la fenêtre figée le temps de l'opération — et
+    /// l'utilisateur qui conclut à un plantage au bout de vingt secondes. Le même raisonnement que
+    /// pour les panneaux d'outils, et la même solution.
+    /// </remarks>
+    private async void Travailler(string quoi, Func<CancellationToken, string> travail, string succes)
+    {
+        _paquetArret?.Dispose();
+        _paquetArret = new CancellationTokenSource();
+
+        Compresser.IsEnabled = false;
+        Decompresser.IsEnabled = false;
+        ArreterPaquet.Visibility = Visibility.Visible;
+        PaquetBarre.Visibility = Visibility.Visible;
+        PaquetBarre.Value = 0;
+        PaquetEtat.Text = $"{quoi} en cours…";
+
+        try
+        {
+            var arret = _paquetArret.Token;
+            var dit = await Task.Run(() => travail(arret));
+
+            PaquetEtat.Text = dit.Length == 0 ? succes : dit;
+        }
+        catch (Exception exception)
+        {
+            UiLog.Failure(quoi.ToLowerInvariant() + " du générateur", exception);
+            PaquetEtat.Text = exception.Message;
+        }
+        finally
+        {
+            Compresser.IsEnabled = true;
+            Decompresser.IsEnabled = true;
+            ArreterPaquet.Visibility = Visibility.Collapsed;
+            PaquetBarre.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Montre l'avancement, sans noyer le fil d'affichage.</summary>
+    /// <remarks>
+    /// Un paquet porte des dizaines de milliers de fichiers : rendre la main à l'affichage à chacun
+    /// coûterait plus que la compression elle-même. Le texte ne change donc qu'au pour-mille près,
+    /// ce qui reste imperceptible à l'œil et divise par mille le nombre de bascules de fil.
+    /// </remarks>
+    private void Avancer(SteamXBox.Tools.Generation.AvanceePaquet ou)
+    {
+        if (ou.Total <= 0)
+        {
+            return;
+        }
+
+        var pour = (int)(ou.Fait * 1000 / ou.Total);
+
+        if (pour == (int)PaquetBarre.Value)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            PaquetBarre.Value = pour;
+            PaquetEtat.Text = $"{pour / 10.0:0.0} % — {ou.Quoi}";
+        });
     }
 
     /// <summary>
