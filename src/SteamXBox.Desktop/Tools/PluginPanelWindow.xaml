@@ -3,9 +3,21 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Outil" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
+        MinWidth="360" MinHeight="220"
+        ResizeMode="CanResize"
         Background="{StaticResource BgDarkBrush}">
 
+    <!-- Redimensionnable, et la taille est retenue par outil.
+
+         Le panneau etait en NoResize : il se calait sur son contenu et l'utilisateur n'avait
+         aucune poignee. Un outil a neuf reglages ouvrait une fenetre haute qu'on ne pouvait ni
+         reduire ni elargir, et celui qui voulait voir sa description en entier n'avait rien a
+         tirer. SizeToContent reste pour la PREMIERE ouverture — c'est la bonne taille tant que
+         personne n'en a choisi une — et cede des que l'utilisateur en impose une.
+
+         Le contenu passe dans un defilement : agrandi en largeur il respire, reduit en hauteur il
+         defile au lieu d'etre coupe. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="20">
         <TextBlock x:Name="PanelTitle" FontSize="18" Margin="0,0,0,2"
                    Foreground="{StaticResource TextPrimaryBrush}"/>
@@ -19,4 +31,5 @@
              l'atelier. -->
         <Border x:Name="Hote"/>
     </StackPanel>
+    </ScrollViewer>
 </Window>

@@ -67,6 +67,9 @@ public partial class ModelesWindow : Window
     {
         InitializeComponent();
 
+        // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
+        SuiviFenetre.Suivre(this, "modeles");
+
         _journal = journal;
         _jeux = [.. JeuxModeles.Charger(journal)];
 

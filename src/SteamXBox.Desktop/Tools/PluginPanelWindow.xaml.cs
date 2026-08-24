@@ -19,6 +19,10 @@ public partial class PluginPanelWindow : Window
     {
         InitializeComponent();
 
+        // Par outil, et non par « panneau » : chacun a ses réglages, donc sa hauteur naturelle, et
+        // celui qui élargit le convertisseur de documents n'a pas demandé à élargir l'agrandisseur.
+        SuiviFenetre.Suivre(this, SteamXBox.Tools.Interface.Geometrie.Outil(manifeste.Id), log);
+
         _panneau = new PanneauOutil(manifeste, log);
 
         Title = manifeste.Name;

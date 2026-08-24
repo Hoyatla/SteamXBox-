@@ -31,6 +31,9 @@ public partial class ActiviteWindow : Window
     {
         InitializeComponent();
 
+        // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
+        SuiviFenetre.Suivre(this, "activite");
+
         _journal = journal;
         Loaded += (_, _) => Peupler();
     }

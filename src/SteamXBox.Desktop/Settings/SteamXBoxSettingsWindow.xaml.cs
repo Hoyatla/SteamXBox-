@@ -21,6 +21,9 @@ public partial class SteamXBoxSettingsWindow : Window
     {
         InitializeComponent();
 
+        // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
+        SuiviFenetre.Suivre(this, "reglages");
+
         SettingsView.DataContext = new SettingsViewModel();
         DebugView.DataContext = _debug;
         _screens = [SettingsView, LogView, DebugView, ToolsView];

@@ -77,9 +77,47 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// Met la console du moniteur au-dessus de tout, y compris de l'incrustation plein écran.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige, et ce n'en était pas un.</b> « Le moniteur se ferme quand je
+    /// lance le lanceur de débogage. » Mesuré le 24 août : il ne se fermait pas. Le processus vit,
+    /// sa console existe, elle est visible au sens de Windows — et l'incrustation de SteamXBox
+    /// occupe 3 440 × 1 392 pixels à partir de l'origine, prend le premier plan une seconde après,
+    /// et l'enterre. Relevé : le moniteur à 312,312 en 993 × 519, le bureau du produit à 0,0 sur
+    /// tout l'écran, aucun des deux topmost — c'est l'ordre d'empilement qui décide, et le dernier
+    /// arrivé gagne.
+    ///
+    /// <para>
+    /// Un instrument qu'on ne peut pas lire pendant qu'on s'en sert ne sert à rien, et rien ne
+    /// coûte plus cher que déboguer l'outil de débogage. Il flotte donc au-dessus, ce qui est la
+    /// place d'un instrument : on le déplace ou on le réduit si on veut voir dessous.
+    /// </para>
+    ///
+    /// <para>
+    /// Il s'exclut en retour de ses propres relevés — voir <see cref="Survey"/>. Sans cela, le seul
+    /// outil capable de dire qui met une fenêtre au-dessus des autres commencerait son journal en
+    /// se dénonçant lui-même.
+    /// </para>
+    /// </remarks>
+    private static void Flotter()
+    {
+        const uint SansBouger = 0x0002 | 0x0001;   // SWP_NOMOVE | SWP_NOSIZE
+        var topmost = new IntPtr(-1);              // HWND_TOPMOST
+
+        var console = GetConsoleWindow();
+
+        if (console != IntPtr.Zero)
+        {
+            SetWindowPos(console, topmost, 0, 0, 0, 0, SansBouger);
+        }
+    }
+
     private static void Main()
     {
         Console.OutputEncoding = Encoding.UTF8;
+        Flotter();
 
         var path = Path.Combine(Journaux(), $"moniteur-{DateTime.Now:yyyy-MM-dd-HHmm}.log");
         _log = new StreamWriter(path, append: true) { AutoFlush = true };
@@ -126,10 +164,30 @@ internal static class Program
     {
         var found = new Dictionary<IntPtr, Seen>();
         var handle = GetTopWindow(IntPtr.Zero);
+        var soi = Environment.ProcessId;
 
         while (handle != IntPtr.Zero)
         {
             var title = TitleOf(handle);
+
+            if (title.Length > 0)
+            {
+                GetWindowThreadProcessId(handle, out var aQui);
+
+                // Ses propres fenêtres ne sont pas des observations.
+                //
+                // Le moniteur se met au-dessus de tout pour rester lisible — voir Flotter — donc il
+                // se verrait lui-même passer topmost. Sur un instrument dont l'unique métier est de
+                // répondre « qui a mis cette fenêtre au-dessus des autres », se dénoncer soi-même
+                // au premier relevé serait pire qu'inutile : c'est une fausse piste servie en tête
+                // du journal, exactement là où on cherche le coupable.
+                if (aQui == soi)
+                {
+                    handle = GetWindow(handle, 2);
+
+                    continue;
+                }
+            }
 
             if (title.Length > 0)
             {
@@ -588,6 +646,12 @@ internal static class Program
         (0x01, "Bouton gauche"), (0x02, "Bouton droit"), (0x04, "Bouton milieu"),
         (0x09, "Tab"), (0x1B, "Échap"), (0x0D, "Entrée"), (0xBF, "§"),
     ];
+
+    [DllImport("kernel32.dll")] private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr handle, IntPtr apres, int x, int y, int largeur, int hauteur, uint drapeaux);
 
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] private static extern IntPtr GetTopWindow(IntPtr handle);

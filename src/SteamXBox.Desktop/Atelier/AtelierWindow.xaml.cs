@@ -88,6 +88,9 @@ public partial class AtelierWindow : Window
     {
         InitializeComponent();
 
+        // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
+        SuiviFenetre.Suivre(this, "atelier");
+
         _journal = journal;
 
         var outils = PluginCatalog.Scan(PluginTools.Folder).Loaded
