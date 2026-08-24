@@ -33,6 +33,36 @@ public static class LibreOffice
     public static bool IsInstalled => Find() is not null;
 
     /// <summary>
+    /// Un LibreOffice accueilli dans le dossier des outils du produit.
+    /// </summary>
+    /// <remarks>
+    /// Cherché sur la forme plutôt que sur un nom de dossier fixe : celui qui accueille l'outil
+    /// choisit comment il s'appelle, et <c>program\soffice.exe</c> est la disposition que LibreOffice
+    /// se donne lui-même quelle que soit sa version.
+    /// </remarks>
+    private static string? Accueilli()
+    {
+        var outils = Path.Combine(AppContext.BaseDirectory, "Outils");
+
+        try
+        {
+            if (!Directory.Exists(outils))
+            {
+                return null;
+            }
+
+            return Directory
+                .EnumerateDirectories(outils)
+                .Select(dossier => Path.Combine(dossier, "program", "soffice.exe"))
+                .FirstOrDefault(File.Exists);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Where LibreOffice is, or null.
     /// </summary>
     /// <remarks>
@@ -42,6 +72,15 @@ public static class LibreOffice
     /// </remarks>
     public static string? Find()
     {
+        // Ce que SteamXBox héberge d'abord. Un LibreOffice accueilli dans Outils appartient au
+        // produit : il est déplacé, archivé et supprimé avec lui, alors qu'une installation du
+        // système peut disparaître sans prévenir. Le préférer n'est pas une politesse, c'est
+        // choisir la copie dont on répond.
+        if (Accueilli() is { } chezNous)
+        {
+            return chezNous;
+        }
+
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "")
                      .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
@@ -157,14 +196,18 @@ public static class LibreOffice
     /// </remarks>
     public static Result Convert(string input, string format, string outputDirectory, Action<string>? log = null)
     {
-        if (Find() is not { } soffice)
-        {
-            return new Result("", "LibreOffice n'est pas installé sur cette machine.");
-        }
-
+        // La demande avant la machine. Un format qu'on ne sait pas produire est une faute de
+        // l'appelant, vraie partout et sans rien à installer ; la signaler d'abord évite de rendre
+        // « LibreOffice n'est pas là » à quelqu'un dont le vrai problème est qu'il a écrit
+        // « wordperfect ». Il l'installerait, et obtiendrait le même refus.
         if (!Formats.TryGetValue(format, out var filter))
         {
             return new Result("", $"Format inconnu : {format}.");
+        }
+
+        if (Find() is not { } soffice)
+        {
+            return new Result("", "LibreOffice n'est pas installé sur cette machine.");
         }
 
         if (!File.Exists(input))

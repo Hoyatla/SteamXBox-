@@ -254,3 +254,113 @@ public class RangDesOutilsTests
                 > SteamXBox.Tools.Search.IndexPlan.StoreApplicationPriority);
     }
 }
+
+/// <summary>
+/// Le cas où l'on ne sait pas quoi ouvrir, et où on l'avoue.
+/// </summary>
+/// <remarks>
+/// Mesuré sur LibreOffice : rien à la racine de son dossier, seize programmes à fenêtre dans
+/// <c>program\</c>, et ni raccourci ni clé de registre pour désigner le principal. La distinction
+/// d'avec un interpréteur tient à la racine — Python et llama.cpp y posent leurs exécutables,
+/// LibreOffice n'en pose aucun.
+/// </remarks>
+public class PorteInconnueTests : IDisposable
+{
+    private readonly DirectoryInfo _outils = Directory.CreateTempSubdirectory("portes");
+
+    public void Dispose()
+    {
+        _outils.Delete(recursive: true);
+        GC.SuppressFinalize(this);
+    }
+
+    private static void Exe(string chemin, ushort sousSysteme, int taille = 256)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(chemin)!);
+
+        var octets = new byte[Math.Max(taille, 256)];
+
+        BitConverter.GetBytes(128).CopyTo(octets, 60);
+        BitConverter.GetBytes(0x00004550u).CopyTo(octets, 128);
+        BitConverter.GetBytes(sousSysteme).CopyTo(octets, 128 + 92);
+
+        File.WriteAllBytes(chemin, octets);
+    }
+
+    private string Bureautique()
+    {
+        var dossier = Path.Combine(_outils.FullName, "LibreOffice");
+
+        Exe(Path.Combine(dossier, "program", "soffice.exe"), 2, 8000);
+        Exe(Path.Combine(dossier, "program", "swriter.exe"), 2, 2000);
+        Exe(Path.Combine(dossier, "program", "unopkg.exe"), 3, 4000);
+
+        return dossier;
+    }
+
+    /// <summary>Des fenêtres sous la racine, rien à la racine : la porte est inconnue.</summary>
+    [Fact]
+    public void WindowsBelowTheRootAndNothingAtItMeansTheDoorIsUnknown()
+        => Assert.Equal(
+            FormeProgramme.PorteInconnue,
+            Reconnaissance.Regarder(Bureautique())!.Forme);
+
+    /// <summary>On ne propose que ce qui ouvre une fenêtre.</summary>
+    /// <remarks>
+    /// Proposer les programmes console reviendrait à demander à l'utilisateur de choisir entre des
+    /// réponses dont certaines sont sûrement fausses.
+    /// </remarks>
+    [Fact]
+    public void OnlyWhatOpensAWindowIsOffered()
+    {
+        var portes = Reconnaissance.Portes(Bureautique()).Select(Path.GetFileName).ToList();
+
+        Assert.Contains("soffice.exe", portes);
+        Assert.DoesNotContain("unopkg.exe", portes);
+    }
+
+    /// <summary>Le plus gros vient en tête, comme aide et non comme certitude.</summary>
+    [Fact]
+    public void TheLargestComesFirstAsAnAidNotACertainty()
+        => Assert.Equal("soffice.exe", Path.GetFileName(Reconnaissance.Portes(Bureautique())[0]));
+
+    /// <summary>
+    /// Un interpréteur ne devient pas une porte inconnue pour autant.
+    /// </summary>
+    /// <remarks>
+    /// Python a un exécutable à fenêtre — <c>pythonw.exe</c> — et resterait une bibliothèque : ce
+    /// qui le distingue est qu'il pose ses exécutables à la racine.
+    /// </remarks>
+    [Fact]
+    public void AnInterpreterDoesNotBecomeAnUnknownDoor()
+    {
+        var dossier = Path.Combine(_outils.FullName, "Python");
+
+        Exe(Path.Combine(dossier, "python.exe"), 3);
+        Exe(Path.Combine(dossier, "pythonw.exe"), 2);
+        Exe(Path.Combine(dossier, "Scripts", "pip.exe"), 3);
+
+        Assert.Equal(FormeProgramme.Bibliotheque, Reconnaissance.Regarder(dossier)!.Forme);
+    }
+
+    /// <summary>Une porte désignée par l'utilisateur pose la tuile, même sans reconnaissance.</summary>
+    /// <remarks>
+    /// Et elle garde le chemin depuis le dossier de l'outil : la porte est un cran plus bas, et ne
+    /// retenir que le nom du fichier donnerait une cible qui n'existe pas.
+    /// </remarks>
+    [Fact]
+    public void ADoorNamedByTheUserLaysTheTileAndKeepsItsPath()
+    {
+        var dossier = Bureautique();
+        var plugins = Path.Combine(_outils.FullName, "Plugins");
+        var programme = Reconnaissance.Regarder(dossier)!;
+
+        var dit = AccueilOutil.Declarer(
+            programme, plugins, Path.Combine(dossier, "program", "soffice.exe"));
+
+        Assert.Contains("tuile posée", dit, StringComparison.Ordinal);
+        Assert.Equal(
+            @"{tools}\LibreOffice\program\soffice.exe",
+            PluginCatalog.Scan(plugins).Loaded.Single().Target);
+    }
+}

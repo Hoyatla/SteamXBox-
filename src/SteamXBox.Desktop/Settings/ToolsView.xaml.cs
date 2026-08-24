@@ -233,7 +233,61 @@ public partial class ToolsView : UserControl
             arret => Raconter(
                 SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, temoins, PluginTools.Folder, arret)),
             "",
-            AccueilEtat);
+            AccueilEtat,
+            () => Designer(dossier));
+    }
+
+    /// <summary>
+    /// Demande une fois quel programme ouvre l'outil, quand rien ne permet de le deviner.
+    /// </summary>
+    /// <remarks>
+    /// <b>L'aveu plutôt que la devinette.</b> LibreOffice, mesuré : rien à la racine de son dossier,
+    /// seize programmes à fenêtre dans <c>program\</c>, et ni raccourci ni clé de registre pour dire
+    /// lequel est le principal. Choisir <c>soffice</c> plutôt que <c>swriter</c> demanderait de
+    /// connaître LibreOffice, et une règle fondée sur ce qu'on croit savoir d'un programme se
+    /// trompera sur le suivant.
+    ///
+    /// <para>
+    /// La question est posée une seule fois : la réponse part dans le manifeste, et l'outil est
+    /// ensuite un outil comme les autres. Le plus gros exécutable est proposé en premier — ce n'est
+    /// pas une certitude, mais sur une suite le programme principal porte ce que les autres
+    /// appellent, et sur LibreOffice cela tombe juste.
+    /// </para>
+    /// </remarks>
+    private void Designer(string dossier)
+    {
+        if (SteamXBox.Plugins.Reconnaissance.Regarder(dossier) is not
+            { Forme: SteamXBox.Plugins.FormeProgramme.PorteInconnue } programme)
+        {
+            return;
+        }
+
+        var portes = SteamXBox.Plugins.Reconnaissance.Portes(dossier);
+
+        var boite = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"Lequel de ces programmes ouvre {programme.Nom} ?",
+            Filter = "Programme (*.exe)|*.exe",
+            InitialDirectory = portes.Count > 0 ? Path.GetDirectoryName(portes[0]) : dossier,
+            FileName = portes.Count > 0 ? Path.GetFileName(portes[0]) : "",
+        };
+
+        AccueilEtat.Text += Environment.NewLine
+            + $"{programme.Nom} est installé, mais rien ne dit lequel de ses "
+            + $"{portes.Count} programmes l'ouvre. Désignez-le une fois.";
+
+        if (boite.ShowDialog() != true)
+        {
+            AccueilEtat.Text += Environment.NewLine
+                + "Pas de tuile pour l'instant : relancez l'accueil pour la poser plus tard.";
+
+            return;
+        }
+
+        AccueilEtat.Text += Environment.NewLine
+            + SteamXBox.Plugins.AccueilOutil.Declarer(programme, Root, boite.FileName);
+
+        Refresh();
     }
 
     /// <summary>Le nom de dossier tiré de celui de l'installeur.</summary>
@@ -275,7 +329,12 @@ public partial class ToolsView : UserControl
     /// l'utilisateur qui conclut à un plantage au bout de vingt secondes. Le même raisonnement que
     /// pour les panneaux d'outils, et la même solution.
     /// </remarks>
-    private async void Travailler(string quoi, Func<CancellationToken, string> travail, string succes, TextBlock? ou = null)
+    private async void Travailler(
+        string quoi,
+        Func<CancellationToken, string> travail,
+        string succes,
+        TextBlock? ou = null,
+        Action? apres = null)
     {
         _paquetArret?.Dispose();
         _paquetArret = new CancellationTokenSource();
@@ -293,6 +352,10 @@ public partial class ToolsView : UserControl
             var dit = await Task.Run(() => travail(arret));
 
             (ou ?? PaquetEtat).Text = dit.Length == 0 ? succes : dit;
+
+            // Après, et sur le fil d'affichage : ce qui suit un accueil peut avoir à poser une
+            // question, et une question ne se pose pas depuis un fil de travail.
+            apres?.Invoke();
         }
         catch (Exception exception)
         {

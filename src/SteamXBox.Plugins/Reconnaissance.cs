@@ -6,6 +6,18 @@ public enum FormeProgramme
     /// <summary>Quelque chose qu'on ouvre, et qui mérite donc une tuile.</summary>
     Application,
 
+    /// <summary>
+    /// Une application, sans doute — mais rien ne dit laquelle de ses portes est la bonne.
+    /// </summary>
+    /// <remarks>
+    /// Le cas de LibreOffice, mesuré : rien à la racine, vingt-sept exécutables graphiques dans
+    /// <c>program\</c>, aucun raccourci et aucune clé de registre pour désigner le principal. Deviner
+    /// <c>soffice</c> plutôt que <c>swriter</c> demanderait de connaître LibreOffice, et une règle
+    /// fondée sur ce qu'on croit savoir d'un programme se trompera sur le suivant. On l'avoue donc,
+    /// et l'on demande une fois.
+    /// </remarks>
+    PorteInconnue,
+
     /// <summary>Des programmes dont d'autres se servent : un interpréteur, un encodeur, un moteur.</summary>
     Bibliotheque,
 
@@ -105,6 +117,20 @@ public static class Reconnaissance
                 lancables[0],
                 FormeProgramme.Application,
                 "un seul exécutable à la racine, et il ouvre une fenêtre");
+        }
+
+        // Rien à ouvrir à la racine, mais des fenêtres juste en dessous : c'est une application dont
+        // on ne sait pas nommer la porte. La distinction d'avec un interpréteur tient à la racine —
+        // Python et llama.cpp posent leurs exécutables là, LibreOffice n'en pose aucun.
+        if (lancables.Count == 0 && Portes(dossier) is { Count: > 0 } candidates)
+        {
+            return new ProgrammeReconnu(
+                id,
+                id,
+                dossier,
+                "",
+                FormeProgramme.PorteInconnue,
+                $"{candidates.Count} programmes à fenêtre, et rien ne dit lequel est le principal");
         }
 
         var partout = Executable(dossier);
@@ -224,6 +250,36 @@ public static class Reconnaissance
                 .EnumerateFiles(dossier, "*.exe", SearchOption.TopDirectoryOnly)
                 .Where(f => !Desinstalleur(Path.GetFileName(f)))
                 .OrderBy(f => f)];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Les portes possibles d'un programme dont la principale n'est pas évidente.
+    /// </summary>
+    /// <remarks>
+    /// Un seul niveau sous la racine : c'est là que vivent <c>program\</c>, <c>bin\</c> et leurs
+    /// semblables. Descendre plus bas ramasserait les outils internes — les convertisseurs, les
+    /// rapporteurs de plantage — et allongerait la liste de choses que personne ne veut ouvrir.
+    ///
+    /// <para>
+    /// Ordonnées par poids décroissant. Ce n'est pas une certitude, c'est une aide : sur LibreOffice
+    /// comme sur la plupart des suites, le programme principal est le plus gros parce qu'il porte ce
+    /// que les autres appellent.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> Portes(string dossier)
+    {
+        try
+        {
+            return [.. Directory
+                .EnumerateDirectories(dossier)
+                .SelectMany(sous => Directory.EnumerateFiles(sous, "*.exe", SearchOption.TopDirectoryOnly))
+                .Where(f => !Desinstalleur(Path.GetFileName(f)) && Graphique(f))
+                .OrderByDescending(f => new FileInfo(f).Length)];
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

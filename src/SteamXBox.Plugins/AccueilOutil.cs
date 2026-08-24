@@ -69,6 +69,47 @@ public static class AccueilOutil
     /// </remarks>
     public static string Ou(string dossier) => $"/D={Court(dossier)}";
 
+    /// <summary>Cet installeur est-il un paquet Windows Installer ?</summary>
+    public static bool EstMsi(string setup)
+        => Path.GetExtension(setup).Equals(".msi", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Ce qu'il faut dire à cet installeur-ci pour qu'il se taise et s'installe là.
+    /// </summary>
+    /// <remarks>
+    /// <b>Il n'y a pas une porte, il y en a une par famille.</b> C'est le cœur du protocole : on ne
+    /// force pas un installeur, on lui parle dans sa langue. NSIS — donc Electron et la plupart des
+    /// programmes téléchargés — entend <c>/S</c> et <c>/D=</c>. Windows Installer n'entend ni l'un ni
+    /// l'autre : il se pilote par <c>msiexec</c>, se tait sur <c>/qn</c>, et reçoit sa destination
+    /// dans une propriété.
+    ///
+    /// <para>
+    /// <b><c>MSIINSTALLPERUSER=1 ALLUSERS=2</c> n'est pas décoratif.</b> Un MSI s'installe par défaut
+    /// pour toute la machine, donc sous élévation — et Windows refuse de composer l'environnement
+    /// d'un processus qu'il élève. Sans ces deux propriétés, l'accueil ne peut pas avoir lieu du
+    /// tout : c'est une installation pour l'utilisateur, ou rien.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Et le nom court ne sert que du côté NSIS.</b> <c>msiexec</c> accepte des guillemets, donc
+    /// un chemin qui contient des espaces passe tel quel ; NSIS, lui, coupe au premier espace, ce qui
+    /// a déjà créé un <c>C:\Program</c> à la racine du disque.
+    /// </para>
+    /// </remarks>
+    public static ProcessStartInfo Commande(string setup, string dossier)
+        => EstMsi(setup)
+            ? new ProcessStartInfo("msiexec.exe")
+            {
+                Arguments = $"/i \"{setup}\" /qn /norestart "
+                    + $"MSIINSTALLPERUSER=1 ALLUSERS=2 INSTALLLOCATION=\"{dossier}\"",
+                WorkingDirectory = dossier,
+            }
+            : new ProcessStartInfo(setup)
+            {
+                Arguments = $"{Silence} {Ou(dossier)}",
+                WorkingDirectory = dossier,
+            };
+
     /// <summary>Le nom court du dossier, celui qui ne porte pas d'espaces.</summary>
     /// <remarks>
     /// Windows ne donne un nom court qu'à ce qui existe : le dossier est donc créé d'abord. Si la
@@ -123,7 +164,7 @@ public static class AccueilOutil
         // directive serait tronquée et l'installeur s'installerait ailleurs en annonçant une
         // réussite. On refuse ici plutôt que de le découvrir en trouvant un dossier inconnu à la
         // racine du disque.
-        if (Court(dossier).Contains(' ', StringComparison.Ordinal))
+        if (!EstMsi(setup) && Court(dossier).Contains(' ', StringComparison.Ordinal))
         {
             return new AccueilRapport(-1, dossier, 0,
             [
@@ -134,13 +175,7 @@ public static class AccueilOutil
             ]);
         }
 
-        // L'ordre compte : /D prend tout ce qui suit jusqu'à la fin de la ligne, donc il vient en
-        // dernier, et sans guillemets.
-        var depart = new ProcessStartInfo(setup)
-        {
-            Arguments = $"{Silence} {Ou(dossier)}",
-            WorkingDirectory = dossier,
-        };
+        var depart = Commande(setup, dossier);
 
         if (EnvironnementIsole.Preparer(depart, dossier, declare) is { Length: > 0 } refus)
         {
@@ -214,14 +249,18 @@ public static class AccueilOutil
     /// connaître, mais une tuile qui ouvre une console n'a rien à faire sur la grille.
     /// </para>
     /// </remarks>
-    public static string Declarer(ProgrammeReconnu programme, string plugins)
+    public static string Declarer(ProgrammeReconnu programme, string plugins, string porte = "")
     {
-        if (programme.Forme != FormeProgramme.Application)
+        // Une porte désignée par l'utilisateur tranche : c'est le seul cas où quelqu'un sait, et il
+        // n'a pas à le redire une seconde fois.
+        var ouvre = porte.Length > 0 ? porte : programme.Executable;
+
+        if (porte.Length == 0 && programme.Forme != FormeProgramme.Application)
         {
             return $"{programme.Nom} : pas de tuile — {programme.Pourquoi}.";
         }
 
-        if (programme.Executable.Length == 0)
+        if (ouvre.Length == 0)
         {
             return $"{programme.Nom} : pas de tuile — rien à ouvrir dans ce dossier.";
         }
@@ -252,7 +291,10 @@ public static class AccueilOutil
                 + "Il vit dans le produit : le supprimer, c'est supprimer son dossier.",
             Surface = "tile",
             Does = PluginActions.Application,
-            Target = $"{{tools}}\\{relatif}\\{Path.GetFileName(programme.Executable)}",
+            // Le chemin depuis le dossier de l'outil, pas seulement le nom du fichier : la porte
+            // d'un programme est souvent d'un cran plus bas — « program\soffice.exe » chez
+            // LibreOffice — et ne garder que le nom donnerait une cible qui n'existe pas.
+            Target = $"{{tools}}\\{relatif}\\{Path.GetRelativePath(programme.Dossier, ouvre)}",
             Environnement = new EnvironnementOutil { Dossier = $"{{tools}}\\{relatif}" },
             Enabled = true,
         };
@@ -269,7 +311,7 @@ public static class AccueilOutil
                 System.Text.Json.JsonSerializer.Serialize(manifeste, Ecriture),
                 new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-            return $"{programme.Nom} : tuile posée, elle ouvrira {Path.GetFileName(programme.Executable)}.";
+            return $"{programme.Nom} : tuile posée, elle ouvrira {Path.GetFileName(ouvre)}.";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

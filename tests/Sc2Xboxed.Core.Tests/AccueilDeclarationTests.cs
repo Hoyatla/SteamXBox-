@@ -147,3 +147,62 @@ public class AccueilDeclarationTests : IDisposable
         Assert.Equal("mon-diteur-2026", PluginCatalog.Scan(Plugins).Loaded.Single().Id);
     }
 }
+
+/// <summary>
+/// La langue qu'on parle à chaque famille d'installeur.
+/// </summary>
+/// <remarks>
+/// Le protocole ne force pas un installeur, il lui parle dans sa langue. Se tromper de langue ne
+/// donne pas une erreur claire : NSIS ignore ce qu'il ne comprend pas et s'installe où il veut,
+/// Windows Installer ouvre une fenêtre que personne ne verra.
+/// </remarks>
+public class CommandeInstalleurTests
+{
+    /// <summary>Un paquet Windows Installer se pilote par msiexec, jamais directement.</summary>
+    [Fact]
+    public void AWindowsInstallerPackageIsDrivenThroughMsiexec()
+    {
+        var commande = SteamXBox.Plugins.AccueilOutil.Commande(
+            @"C:\Telechargements\LibreOffice.msi", @"C:\Program Files\SteamXbox\Outils\LibreOffice");
+
+        Assert.EndsWith("msiexec.exe", commande.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/qn", commande.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Il s'installe pour l'utilisateur, sinon il ne s'installe pas du tout.
+    /// </summary>
+    /// <remarks>
+    /// Un MSI vise la machine entière par défaut, donc l'élévation — et Windows refuse de composer
+    /// l'environnement d'un processus qu'il élève. Sans ces deux propriétés, l'accueil est
+    /// impossible, pas seulement imparfait.
+    /// </remarks>
+    [Fact]
+    public void ItInstallsForTheUserOrNotAtAll()
+    {
+        var commande = SteamXBox.Plugins.AccueilOutil.Commande(@"C:\x.msi", @"C:\Outils\X");
+
+        Assert.Contains("MSIINSTALLPERUSER=1", commande.Arguments, StringComparison.Ordinal);
+        Assert.Contains("ALLUSERS=2", commande.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>La destination d'un MSI supporte les espaces, parce qu'elle est entre guillemets.</summary>
+    [Fact]
+    public void AnMsiDestinationToleratesSpacesBecauseItIsQuoted()
+        => Assert.Contains(
+            @"INSTALLLOCATION=""C:\Program Files\SteamXbox\Outils\LibreOffice""",
+            SteamXBox.Plugins.AccueilOutil.Commande(
+                @"C:\x.msi", @"C:\Program Files\SteamXbox\Outils\LibreOffice").Arguments,
+            StringComparison.Ordinal);
+
+    /// <summary>Un installeur ordinaire garde la langue de NSIS.</summary>
+    [Fact]
+    public void AnOrdinaryInstallerKeepsTheNsisTongue()
+    {
+        var commande = SteamXBox.Plugins.AccueilOutil.Commande(
+            @"C:\Telechargements\Setup.exe", Path.GetTempPath());
+
+        Assert.EndsWith("Setup.exe", commande.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("/S /D=", commande.Arguments, StringComparison.Ordinal);
+    }
+}
