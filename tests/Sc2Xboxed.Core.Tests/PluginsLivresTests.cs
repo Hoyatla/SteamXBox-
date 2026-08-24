@@ -212,10 +212,16 @@ public class PluginsLivresTests
             // Le nom du fichier produit traverse toutes les recettes : c'est le seul réglage qu'un
             // moteur ne peut pas ignorer, et le vérifier prouve que la substitution a bien atteint
             // le graphe de cette recette-là.
+            //
+            // La valeur attendue est lue dans le manifeste, jamais recopiée ici : une épreuve qui
+            // mémorise « animation » échoue le jour où l'outil est rebaptisé, en accusant la
+            // substitution alors que seul un libellé a changé.
+            var attendu = outil.Content.First(c => c.Id == "prefixe").Value;
+
             using var document = JsonDocument.Parse(pose);
 
             Assert.Contains(
-                "animation",
+                attendu,
                 document.RootElement.EnumerateObject()
                     .Select(n => n.Value.GetProperty("inputs"))
                     .Where(i => i.TryGetProperty("filename_prefix", out _))

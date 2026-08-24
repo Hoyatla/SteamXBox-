@@ -1,12 +1,12 @@
 {
   "id": "flux-image-video",
-  "name": "Animer une image",
+  "name": "Créer une vidéo",
   "category": "tool",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E786",
-  "hint": "Fabrique une vidéo à partir d'une image fixe. Deux moteurs selon ce qui est installé : Wan 2.2 suit une description écrite et tient environ trois secondes, SVD anime sans description et tient deux secondes. Compter deux à cinq minutes.",
+  "hint": "Fabrique une vidéo, à partir d'une description seule ou d'une image de départ. Laissez « Image de départ » vide pour partir du texte. Trois routes selon ce qui est installé ; seules celles qui peuvent tourner sur cette machine sont proposées. Compter deux à cinq minutes.",
   "surface": "panel",
   "remembers": [
     "moteur",
@@ -18,26 +18,27 @@
   ],
   "content": [
     {
-      "kind": "file",
-      "id": "image",
-      "label": "Image de départ",
-      "options": [
-        "png",
-        "jpg",
-        "jpeg",
-        "webp",
-        "bmp"
-      ]
-    },
-    {
       "kind": "choice",
       "id": "moteur",
-      "label": "Moteur",
-      "hint": "Seuls les moteurs dont les modèles sont sur cette machine sont proposés. Wan 2.2 obéit à une description écrite ; SVD n'en lit aucune et se contente d'animer ce qu'il voit.",
+      "label": "Route",
+      "hint": "Texte vers vidéo n'a besoin que d'une description. Les deux autres animent une image que vous désignez. Seules les routes dont les modèles sont sur cette machine apparaissent ici.",
       "recettes": [
         {
-          "id": "wan22",
-          "label": "Wan 2.2 — suit une description",
+          "id": "t2v",
+          "label": "Texte vers vidéo — sans image de départ",
+          "exige": [
+            "unet/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf",
+            "unet/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf",
+            "text_encoders/umt5-xxl-encoder-Q4_K_M.gguf",
+            "vae/wan_2.1_vae.safetensors",
+            "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+            "loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+          ],
+          "target": "{app}\\Flux\\Wan22_T2V.json|!8.text={description}|11.width={taille}|11.height={taille}|11.length=49|12.noise_seed={graine}|13.noise_seed={graine}|15.fps=16|16.filename_prefix={prefixe}"
+        },
+        {
+          "id": "i2v",
+          "label": "Image vers vidéo — Wan 2.2, suit la description",
           "exige": [
             "unet/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf",
             "unet/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf",
@@ -50,7 +51,7 @@
         },
         {
           "id": "svd",
-          "label": "SVD — sans description, plus léger",
+          "label": "Image vers vidéo — SVD, sans description",
           "exige": [
             "checkpoints/svd_xt.safetensors"
           ],
@@ -61,21 +62,33 @@
     {
       "kind": "text",
       "id": "description",
-      "label": "Description — Wan seulement",
+      "label": "Description",
       "value": "",
-      "hint": "Ce que la scène doit faire, en anglais de préférence. Ignoré par SVD, qui n'a pas d'encodeur de texte : lui se contente d'animer ce qu'il voit sur l'image."
+      "hint": "Ce que la vidéo doit montrer, en anglais de préférence. Indispensable en texte vers vidéo. Ignoré par SVD, qui n'a pas d'encodeur de texte et se contente d'animer ce qu'il voit."
+    },
+    {
+      "kind": "file",
+      "id": "image",
+      "label": "Image de départ — à laisser vide pour partir du texte",
+      "options": [
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "bmp"
+      ]
     },
     {
       "kind": "choice",
       "id": "taille",
-      "label": "Taille — Wan seulement",
+      "label": "Taille",
       "value": "640",
       "options": [
         "480=480 par 480, le plus sûr",
         "640=640 par 640, équilibré",
         "768=768 par 768, demande de la marge"
       ],
-      "hint": "Mesuré sur une carte de douze gigaoctets : 640 tient avec sept cents mégaoctets de marge. Au-dessus, un navigateur ouvert peut suffire à faire dépasser."
+      "hint": "Mesuré sur une carte de douze gigaoctets : 640 tient avec sept cents mégaoctets de marge. Au-dessus, un navigateur ouvert peut suffire à faire dépasser. Sans effet sur SVD, qui impose sa propre taille."
     },
     {
       "kind": "choice",
@@ -106,7 +119,7 @@
       "kind": "text",
       "id": "prefixe",
       "label": "Nom du fichier",
-      "value": "animation",
+      "value": "video",
       "hint": "Le début du nom du fichier produit. Le générateur y ajoute un numéro pour ne rien écraser."
     },
     {
@@ -117,11 +130,11 @@
       "value": "42",
       "min": 0,
       "max": 999999,
-      "hint": "Le point de départ du hasard. À réglages égaux, deux graines donnent deux animations très différentes — l'une peut tenir là où l'autre se dissout. La même graine redonne exactement la même vidéo."
+      "hint": "Le point de départ du hasard. À réglages égaux, deux graines donnent deux vidéos très différentes — l'une peut tenir là où l'autre se dissout. La même graine redonne exactement la même vidéo."
     },
     {
       "kind": "action",
-      "label": "Animer",
+      "label": "Créer la vidéo",
       "does": "flux",
       "target": "{recette:moteur}"
     },
