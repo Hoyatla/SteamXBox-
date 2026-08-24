@@ -1,12 +1,12 @@
-﻿{
+{
   "id": "sequence-animee",
-  "name": "Animer une sÃ©rie",
+  "name": "Animer une série",
   "category": "tool",
   "version": "1.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E8B2",
-  "hint": "Anime chaque image d'un dossier et recolle les clips en une seule vidÃ©o. C'est ainsi qu'on dÃ©passe les deux secondes : plusieurs images choisies, chacune animÃ©e briÃ¨vement. Compter cinq minutes par image â€” une sÃ©rie de six demande une demi-heure.",
+  "hint": "Anime chaque image d'un dossier et recolle les clips en une seule vidéo. C'est ainsi qu'on dépasse les deux secondes : plusieurs images choisies, chacune animée brièvement. Compter cinq minutes par image — une série de six demande une demi-heure.",
   "surface": "panel",
   "remembers": [
     "ponts",
@@ -20,7 +20,7 @@
       "id": "dossier",
       "label": "Dossier d'images",
       "from": "LoadImageDataSetFromFolder.folder",
-      "hint": "Les dossiers prÃ©sents dans les EntrÃ©es du gÃ©nÃ©rateur â€” le bouton Â« EntrÃ©es Â» en haut de cette fenÃªtre les ouvre. Vos images y seront animÃ©es dans l'ordre de leurs noms : nommez-les 01, 02, 03 pour choisir la suite."
+      "hint": "Les dossiers présents dans les Entrées du générateur — le bouton « Entrées » en haut de cette fenêtre les ouvre. Vos images y seront animées dans l'ordre de leurs noms : nommez-les 01, 02, 03 pour choisir la suite."
     },
     {
       "kind": "choice",
@@ -31,7 +31,7 @@
         "1=2 secondes",
         "2=4 secondes"
       ],
-      "hint": "MesurÃ© : un clip tient deux secondes, et repartir de sa derniÃ¨re image en donne quatre encore nettes. Un troisiÃ¨me enchaÃ®nement perd le visage et l'anatomie â€” il n'est donc pas proposÃ©. PrÃ©fÃ©rez deux secondes : moins le modÃ¨le invente, moins il s'Ã©loigne de votre image."
+      "hint": "Mesuré : un clip tient deux secondes, et repartir de sa dernière image en donne quatre encore nettes. Un troisième enchaînement perd le visage et l'anatomie — il n'est donc pas proposé. Préférez deux secondes : moins le modèle invente, moins il s'éloigne de votre image."
     },
     {
       "kind": "choice",
@@ -39,11 +39,11 @@
       "label": "Mouvement",
       "value": "127",
       "options": [
-        "60=LÃ©ger",
-        "127=ModÃ©rÃ©",
+        "60=Léger",
+        "127=Modéré",
         "180=Ample"
       ],
-      "hint": "Combien la scÃ¨ne doit bouger, pour chaque plan de la sÃ©rie."
+      "hint": "Combien la scène doit bouger, pour chaque plan de la série."
     },
     {
       "kind": "choice",
@@ -53,20 +53,20 @@
       "options": [
         "14=Rapide",
         "20=Standard",
-        "28=SoignÃ©"
+        "28=Soigné"
       ],
-      "hint": "Le nombre de passes par plan. Sur une sÃ©rie, c'est ce rÃ©glage qui dÃ©cide de la durÃ©e totale du travail : passer de Rapide Ã  SoignÃ© double presque l'attente."
+      "hint": "Le nombre de passes par plan. Sur une série, c'est ce réglage qui décide de la durée totale du travail : passer de Rapide à Soigné double presque l'attente."
     },
     {
       "kind": "text",
       "id": "prefixe",
       "label": "Nom du fichier",
       "value": "serie",
-      "hint": "Le dÃ©but du nom des clips et de la vidÃ©o assemblÃ©e. Les clips restent dans les Sorties Ã  cÃ´tÃ© du montage, au cas oÃ¹ vous prÃ©fÃ©reriez en refaire un seul."
+      "hint": "Le début du nom des clips et de la vidéo assemblée. Les clips restent dans les Sorties à côté du montage, au cas où vous préféreriez en refaire un seul."
     },
     {
       "kind": "action",
-      "label": "Animer la sÃ©rie",
+      "label": "Animer la série",
       "does": "sequence",
       "target": "{dossier}|{ponts}|{mouvement}|{rendu}|{prefixe}|{app}\\Flux\\SVD_Image_to_Video.json"
     }

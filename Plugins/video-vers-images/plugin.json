@@ -1,12 +1,12 @@
-﻿{
+{
   "id": "video-vers-images",
-  "name": "DÃ©couper une vidÃ©o",
+  "name": "Découper une vidéo",
   "category": "tool",
   "version": "1.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E8B9",
-  "hint": "Extrait toutes les images d'une vidÃ©o, une par une, dans le dossier Sorties. Utile pour retoucher une image prÃ©cise, en agrandir une seule, ou repartir d'une image pour l'animer autrement.",
+  "hint": "Extrait toutes les images d'une vidéo, une par une, dans le dossier Sorties. Utile pour retoucher une image précise, en agrandir une seule, ou repartir d'une image pour l'animer autrement.",
   "surface": "panel",
   "remembers": [
     "prefixe"
@@ -15,7 +15,7 @@
     {
       "kind": "file",
       "id": "video",
-      "label": "VidÃ©o",
+      "label": "Vidéo",
       "options": [
         "mp4",
         "mkv",
@@ -23,18 +23,18 @@
         "avi",
         "webm"
       ],
-      "hint": "La vidÃ©o Ã  dÃ©couper. Une seconde de vidÃ©o Ã  30 images par seconde donne trente fichiers : sur un long film, cela fait beaucoup."
+      "hint": "La vidéo à découper. Une seconde de vidéo à 30 images par seconde donne trente fichiers : sur un long film, cela fait beaucoup."
     },
     {
       "kind": "text",
       "id": "prefixe",
       "label": "Nom des images",
       "value": "image",
-      "hint": "Le dÃ©but du nom de chaque fichier produit. Le gÃ©nÃ©rateur y ajoute un numÃ©ro, dans l'ordre de la vidÃ©o."
+      "hint": "Le début du nom de chaque fichier produit. Le générateur y ajoute un numéro, dans l'ordre de la vidéo."
     },
     {
       "kind": "action",
-      "label": "DÃ©couper",
+      "label": "Découper",
       "does": "flux",
       "target": "{app}\\Flux\\Video_Vers_Images.json|!1.file={video}|3.filename_prefix={prefixe}"
     }

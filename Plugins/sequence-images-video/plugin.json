@@ -1,12 +1,12 @@
-﻿{
+{
   "id": "sequence-images-video",
-  "name": "Monter une sÃ©quence",
+  "name": "Monter une séquence",
   "category": "tool",
   "version": "2.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E8B2",
-  "hint": "Assemble un dossier de photos en une vidÃ©o, dans l'ordre des noms de fichiers. Chaque photo reste Ã  l'Ã©cran le temps que vous choisissez, avec ou sans mouvement.",
+  "hint": "Assemble un dossier de photos en une vidéo, dans l'ordre des noms de fichiers. Chaque photo reste à l'écran le temps que vous choisissez, avec ou sans mouvement.",
   "surface": "panel",
   "remembers": [
     "duree",
@@ -19,12 +19,12 @@
       "id": "dossier",
       "label": "Dossier de photos",
       "from": "LoadAndBatchImagesFromFolder.folder",
-      "hint": "Les dossiers prÃ©sents dans les EntrÃ©es du gÃ©nÃ©rateur â€” le bouton Â« EntrÃ©es Â» en haut de cette fenÃªtre les ouvre. DÃ©posez-y vos photos dans un sous-dossier, elles seront prises dans l'ordre de leurs noms."
+      "hint": "Les dossiers présents dans les Entrées du générateur — le bouton « Entrées » en haut de cette fenêtre les ouvre. Déposez-y vos photos dans un sous-dossier, elles seront prises dans l'ordre de leurs noms."
     },
     {
       "kind": "choice",
       "id": "duree",
-      "label": "DurÃ©e par photo",
+      "label": "Durée par photo",
       "value": "48",
       "options": [
         "24=1 seconde",
@@ -32,7 +32,7 @@
         "72=3 secondes",
         "120=5 secondes"
       ],
-      "hint": "Combien de temps chaque photo reste Ã  l'Ã©cran. Sept photos Ã  deux secondes font une vidÃ©o de quatorze secondes."
+      "hint": "Combien de temps chaque photo reste à l'écran. Sept photos à deux secondes font une vidéo de quatorze secondes."
     },
     {
       "kind": "choice",
@@ -42,31 +42,31 @@
       "options": [
         "static=Aucun",
         "zoom_in=Zoom avant",
-        "zoom_out=Zoom arriÃ¨re",
+        "zoom_out=Zoom arrière",
         "pan_left=Vers la gauche",
         "pan_right=Vers la droite",
         "pan_up=Vers le haut",
         "pan_down=Vers le bas",
         "pan_random=Au hasard"
       ],
-      "hint": "Un lent dÃ©placement sur chaque photo. Sans mouvement, la vidÃ©o est un diaporama ; avec, elle respire. Aucun modÃ¨le n'est employÃ© et cela ne coÃ»te rien en temps de calcul."
+      "hint": "Un lent déplacement sur chaque photo. Sans mouvement, la vidéo est un diaporama ; avec, elle respire. Aucun modèle n'est employé et cela ne coûte rien en temps de calcul."
     },
     {
       "kind": "text",
       "id": "prefixe",
       "label": "Nom du fichier",
       "value": "sequence",
-      "hint": "Le dÃ©but du nom de la vidÃ©o produite. Le gÃ©nÃ©rateur y ajoute un numÃ©ro pour ne rien Ã©craser."
+      "hint": "Le début du nom de la vidéo produite. Le générateur y ajoute un numéro pour ne rien écraser."
     },
     {
       "kind": "number",
       "id": "taille",
-      "label": "DÃ©finition",
+      "label": "Définition",
       "value": "1024",
       "min": 256,
       "max": 2048,
       "avance": true,
-      "hint": "Le plus grand cÃ´tÃ© de la vidÃ©o, en points. Au-delÃ  de 1024 le fichier grossit vite sans que le diaporama y gagne."
+      "hint": "Le plus grand côté de la vidéo, en points. Au-delà de 1024 le fichier grossit vite sans que le diaporama y gagne."
     },
     {
       "kind": "action",

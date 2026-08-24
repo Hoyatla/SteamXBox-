@@ -144,17 +144,29 @@ public sealed class AssistantLocal
         + "son message : regarde-la et dis ce que tu y vois. Ne réponds jamais que tu ne sais pas "
         + "lire une image.\n\n"
 
+        + "PARS DU RÉSULTAT DEMANDÉ, JAMAIS D'UN OUTIL. Lis la demande, dis-toi quel FICHIER ou "
+        + "quel effet l'utilisateur veut obtenir, puis cherche par quels outils on y arrive. "
+        + "« Une vidéo d'un arbre dans le vent » veut dire : un fichier vidéo montrant cela. "
+        + "Ce n'est pas une question, c'est une commande — fabrique-la.\n\n"
+
+        + "LES ÉTAPES SONT TON TRAVAIL, PAS LE SIEN. Beaucoup de résultats demandent d'enchaîner "
+        + "deux outils. Fabriquer une vidéo à partir d'un texte, par exemple, c'est créer une image "
+        + "d'après la description PUIS l'animer — deux appels, un seul travail. Enchaîne-les "
+        + "toi-même en passant le fichier produit par le premier au second. Demander à "
+        + "l'utilisateur de choisir entre « créer une image » et « animer une image » quand il a "
+        + "demandé une vidéo, c'est lui rendre la plomberie qu'il te confie.\n\n"
+
         + "AGIS, N'ÉNUMÈRE PAS. Une liste d'options écrite dans ta réponse n'est pas une réponse : "
         + "elle renvoie à l'utilisateur le travail de choisir à ta place. S'il te manque UNE "
         + "information, pose UNE question courte. Ne repose jamais la même question sous une autre "
         + "forme, et ne propose pas deux fois la même liste — s'il a déjà répondu, tiens sa réponse "
         + "pour acquise et sers-toi de l'outil qui convient.\n\n"
 
-        + "LA SEULE EXCEPTION est proposer_choix, qui pose de vrais boutons devant l'utilisateur au "
-        + "lieu d'un paragraphe. Un choix offert une fois, avant de commencer, lui épargne un "
-        + "travail entier pris dans la mauvaise direction ; le même choix récrit à la main dans ta "
-        + "réponse ne lui donne rien à cliquer. Choisir entre les deux ne t'appartient pas : le "
-        + "rappel en tête de chaque demande dit lequel des deux modes s'applique.\n\n"
+        + "proposer_choix ne sert QUE devant une vraie bifurcation : deux routes dont les RÉSULTATS "
+        + "diffèrent, et dont tu ne peux pas décider à sa place. Choisir entre deux moteurs qui "
+        + "rendent la même chose n'en est pas une, et les étapes d'un même travail encore moins. "
+        + "Dans le doute, fais — un résultat qu'il n'aime pas se refait ; une question de trop lui "
+        + "coûte un aller-retour et lui donne l'impression de piloter à ta place.\n\n"
 
         + "FAIS, PLUTÔT QUE DE NOTER. Le cas normal est d'exécuter la demande tout de suite : "
         + "appelle l'outil, réponds, et n'écris aucun carnet. Un carnet coûte un tour d'attente à "
@@ -269,11 +281,13 @@ public sealed class AssistantLocal
               + "le travail. Retiens avec travail_retenir tout ce que tu établis en chemin, sinon "
               + "tu le redemanderas. N'interromps l'utilisateur que pour un choix que tu lui "
               + "recommandes, avec proposer_choix."
-            : "MODE GUIDÉ. Devant une demande neuve, ne lance rien tout de suite : appelle "
-              + "proposer_choix pour montrer les routes possibles, et laisse l'utilisateur "
-              + "décider. N'écris pas l'option « fais-le toi-même », l'hôte l'ajoute lui-même à "
-              + "chaque choix. Une fois qu'il a choisi, exécute son choix sans reposer la "
-              + "question.";
+            : "MODE GUIDÉ. Une demande claire s'exécute, elle ne se met pas aux voix : « une vidéo "
+              + "d'un arbre dans le vent » dit exactement ce qu'il veut, alors fabrique-la. "
+              + "N'appelle proposer_choix que devant une vraie bifurcation — deux routes dont les "
+              + "RÉSULTATS diffèrent, et dont tu ne peux pas décider à sa place — ou s'il manque "
+              + "une information que rien ne te permet de déduire. Les étapes d'un même travail ne "
+              + "sont jamais une bifurcation. N'écris pas l'option « fais-le toi-même », l'hôte "
+              + "l'ajoute lui-même à chaque choix.";
 
     /// <summary>
     /// Ce qui marque le rappel des travaux, pour le retrouver et le remplacer.
@@ -993,12 +1007,32 @@ public sealed class AssistantLocal
                 // savoir ce que vaut 180 sur une échelle de mouvement, ce que personne ne sait.
                 // Il dit « Ample », l'hôte traduit — exactement comme l'utilisateur qui choisit
                 // dans une liste.
-                foreach (var option in OptionsOutil.Lire(champ.Options))
+                // Un choix qui porte des recettes tire ses valeurs de LEURS libellés.
+                //
+                // Sans cela l'énumération sortait vide — les recettes ne sont pas des options — et
+                // le modèle inventait : « SVD », « Wan 2.2 », puis un nom de fichier de modèle,
+                // trois essais dont aucun ne pouvait aboutir. Une énumération vide est pire que pas
+                // d'énumération du tout : elle promet une contrainte qu'elle n'exprime pas.
+                if (champ.Recettes.Count > 0)
                 {
-                    valeurs.Add(option.Libelle);
+                    foreach (var recette in champ.Recettes)
+                    {
+                        valeurs.Add(recette.Label.Length > 0 ? recette.Label : recette.Id);
+                    }
+                }
+                else
+                {
+                    foreach (var option in OptionsOutil.Lire(champ.Options))
+                    {
+                        valeurs.Add(option.Libelle);
+                    }
                 }
 
-                decrit["enum"] = valeurs;
+                if (valeurs.Count > 0)
+                {
+                    decrit["enum"] = valeurs;
+                }
+
                 break;
 
             case "number":

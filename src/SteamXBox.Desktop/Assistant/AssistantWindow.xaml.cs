@@ -1015,21 +1015,22 @@ public partial class AssistantWindow : Window
         [
             new AssistantLocal.Capacite(
                 "flux_modeles",
-                "Liste TOUS les modèles installés sur cette machine, et le nœud qui charge chacun. "
-                + "À appeler EN PREMIER, avant de composer un flux ou de demander à l'utilisateur "
-                + "quel modèle employer. Les modèles ne se chargent pas tous par le même nœud : "
-                + "chercher « load checkpoint » n'en montre qu'une partie, et te fera conclure à "
-                + "tort qu'il n'y en a qu'un.",
+                "RÉSERVÉ À LA COMPOSITION D'UN GRAPHE DE GÉNÉRATION. Ne l'appelle que si tu as déjà "
+                + "décidé d'écrire un graphe toi-même, ce qui doit rester rare : les outils de la "
+                + "grille font le travail sans que tu composes quoi que ce soit. Rend alors les "
+                + "modèles installés et le nœud qui charge chacun — ils ne se chargent pas tous par "
+                + "le même, et chercher « load checkpoint » n'en montre qu'une partie.",
                 [],
                 _ => Modeles(Port, journal),
                 Interne: true),
 
             new AssistantLocal.Capacite(
                 "flux_prets",
-                "Liste les flux DÉJÀ ÉCRITS et éprouvés sur cette machine, et lesquels peuvent "
-                + "tourner ici. À appeler juste après flux_modeles, et AVANT de composer quoi que "
-                + "ce soit : en lancer un coûte un appel, en composer un en coûte quinze et donne "
-                + "un graphe qui n'est pas taillé pour cette carte.",
+                "RÉSERVÉ À LA COMPOSITION D'UN GRAPHE DE GÉNÉRATION. Liste les flux déjà écrits et "
+                + "éprouvés ici. Si tu t'apprêtais à en composer un, lis d'abord cette liste : en "
+                + "lancer un coûte un appel, en composer un en coûte quinze et donne un graphe qui "
+                + "n'est pas taillé pour cette carte. Mais avant tout cela, regarde si un outil de "
+                + "la grille ne fait pas déjà le travail — c'est presque toujours le cas.",
                 [],
                 _ => Prets(Port, journal),
                 Interne: true),
@@ -1453,6 +1454,30 @@ public partial class AssistantWindow : Window
         }
 
         var cible = action.Target;
+
+        // La recette d'abord, comme dans le panneau — et c'est ce qui manquait.
+        //
+        // La résolution de « {recette:id} » vivait dans PanneauOutil, donc elle ne s'appliquait
+        // qu'à un clic de l'utilisateur. Lancé par l'assistant, l'outil recevait « {recette:moteur} »
+        // tel quel et rendait « Le flux est absent : {recette:moteur} » — cinq fois de suite le
+        // 24 août, le modèle essayant « SVD », puis « Wan 2.2 », puis un nom de fichier de modèle,
+        // sans qu'aucun de ces essais ne puisse aboutir. Une recette qui n'existe que pour le
+        // panneau n'est pas une recette, c'est une moitié de mécanisme.
+        foreach (var choix in manifeste.Content.Where(c => c.Recettes.Count > 0 && c.Id.Length > 0))
+        {
+            var demande = reglages.GetValueOrDefault(choix.Id, "");
+
+            // Par identifiant ou par libellé : le modèle lit la déclaration et rend volontiers
+            // « Wan 2.2 » là où l'outil attend « wan22 ». Refuser sur cette nuance lui ferait
+            // relancer le même appel jusqu'à épuiser ses tours, ce qu'il a fait.
+            var recette = choix.Recettes.FirstOrDefault(r =>
+                    r.Id.Equals(demande, StringComparison.OrdinalIgnoreCase)
+                    || r.Label.Equals(demande, StringComparison.OrdinalIgnoreCase))
+                ?? choix.Recettes[0];
+
+            cible = cible.Replace(
+                "{recette:" + choix.Id + '}', recette.Target, StringComparison.OrdinalIgnoreCase);
+        }
 
         foreach (var champ in manifeste.Content)
         {
