@@ -2,9 +2,9 @@
 ; Compile with: iscc SteamXBox_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.8.3"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "Hoyatla"
-#define MyAppURL "https://github.com/Hoyatla/SteamXBox"
+#define MyAppURL "https://github.com/Hoyatla/SteamXBox-Explorer"
 #define MyAppExeName "SteamXBox.exe"
 
 [Setup]
@@ -49,6 +49,9 @@ Source: "Sc2XboxedXbox.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Indexer.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox-Moniteur.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Le serveur MCP. Pose et retire avec le produit, jamais lance par lui : c'est le client qui le
+; demarre et l'arrete. Sans client installe, ce fichier ne fait rien et n'ouvre aucun port.
+Source: "SteamXBox.Mcp.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion

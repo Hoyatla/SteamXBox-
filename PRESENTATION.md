@@ -1,6 +1,6 @@
 # SteamXBox
 
-*Texte de présentation — version 4.7*
+*Texte de présentation — version 0.5.0*
 
 ---
 

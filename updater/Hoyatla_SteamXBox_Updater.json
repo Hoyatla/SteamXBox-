@@ -1,6 +1,6 @@
 {
   "instance": {
-    "serverUrlTemplate": "https://hoyatla.github.io/SteamXBox-/api/{}/updates.json",
+    "serverUrlTemplate": "https://hoyatla.github.io/SteamXBox-Explorer/api/{}/updates.json",
     "authority": "Remote"
   },
   "shared": {

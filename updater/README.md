@@ -48,18 +48,31 @@ Deux heures d'attente au maximum, puis il renonce jusqu'au lendemain.
    et le renommer `Hoyatla_SteamXBox_Updater.exe` dans ce dossier. *Non fait : télécharger un
    exécutable est une décision qui appartient à l'éditeur du produit, pas à son outillage.*
 
-2. **Choisir où publier `updates.json`** et corriger l'adresse dans les deux fichiers. La valeur
-   actuelle suppose GitHub Pages sur le dépôt `origin` :
+2. **Publier `updates.json`.** L'adresse suppose GitHub Pages sur le dépôt du projet,
+   `SteamXBox-Explorer` :
 
    ```
-   https://hoyatla.github.io/SteamXBox-/api/Hoyatla/SteamXBox/updates.json
+   https://hoyatla.github.io/SteamXBox-Explorer/api/Hoyatla/SteamXBox/updates.json
    ```
 
-   À vérifier — le dépôt s'appelle `SteamXBox-`, avec un tiret final, et les installeurs déclarent
-   une troisième adresse (`github.com/Hoyatla/SteamXBox`) qui ne correspond à aucun des deux remotes.
+   Le segment `Hoyatla/SteamXBox` de la fin n'est **pas** un dépôt : c'est le fabricant et le
+   produit, tels que le nom de l'agent les encode (voir plus haut). Il ne suit pas le nom du dépôt
+   et ne doit pas être renommé avec lui.
 
-3. **Renseigner `downloadSize`** dans `updates.json` : la taille exacte en octets du programme
-   d'installation publié. Elle vaut `0` aujourd'hui, ce qui est un marqueur, pas une valeur.
+   Reste à activer Pages sur `SteamXBox-Explorer` et à y déposer le fichier ; tant que ce n'est pas
+   fait, l'agent ne trouve rien et ne propose donc aucune mise à jour.
+
+3. **Écrire la première publication** dans `updates.json`. La liste `releases` est **vide**, et
+   c'est volontaire : rien n'a encore été publié dans la suite qui commence à la 0.5.0.
+
+   Elle portait les 4.8.2 et 4.7.0 de l'ancienne numérotation. Les laisser aurait retourné
+   l'agent contre le produit : il compare des numéros, il aurait vu une 4.8.2 « plus récente »
+   qu'une 0.5.0 installée, et proposé au client d'installer par-dessus une version antérieure —
+   dont les fichiers vivent d'ailleurs sur l'autre dépôt. Leurs notes ne sont pas perdues : le
+   `ChangeLog.txt` du produit les garde toutes.
+
+   `downloadSize` se renseigne à ce moment-là : la taille exacte en octets du programme
+   d'installation publié, et non `0`, qui n'est un marqueur que tant que rien n'est publié.
 
 4. **Signer l'agent et l'installeur.** `signatureVerificationMode` est sur `WhenPresent` : la
    signature est vérifiée si elle existe. Une fois les binaires signés, passer à `Required` fait de

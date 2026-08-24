@@ -2,6 +2,37 @@ SteamXBox - Change log
 ======================
 
 
+0.5.0
+-----
+  La numerotation repart a 0.5.0, et le produit tient desormais sa suite dans
+  son propre depot, SteamXBox-Explorer.
+
+  Ce qui la rend possible : la ligne publique et gratuite s'arrete a la 3.2 et
+  n'ira pas plus loin. Les numeros 4.0 a 4.8.3 sont ceux de ce produit-ci, sous
+  l'ancienne numerotation ; rien n'oblige donc a continuer de compter par-dessus
+  une ligne qui ne bouge plus, et une suite qui repart avant la 1.0 dit ce
+  qu'elle est — un produit qui n'a pas encore atteint sa premiere version
+  publiee a un client.
+
+  Un numero qui descend n'est pas un retour en arriere : c'est un autre
+  compteur. Ce que la 4.8.3 apportait est dans la 0.5.0, et la suite se compte a
+  partir d'ici.
+
+  * Toutes les adresses du produit designent desormais SteamXBox-Explorer :
+    la page du projet dans README.txt, l'adresse d'assistance et de mise a jour
+    des deux installeurs, et l'adresse ou l'agent de mise a jour ira lire son
+    manifeste.
+
+  * Les numeros de version des deux installeurs et des binaires suivent le
+    produit. La fenetre et l'onglet Debogage lisent la version de l'assemblage,
+    donc rien n'y est a recopier.
+
+  * Le manifeste de mise a jour repart d'une liste vide. Il portait les 4.8.2 et
+    4.7.0 de l'ancienne numerotation : l'agent compare des numeros, et une 4.8.2
+    laissee la aurait ete proposee comme une mise a jour par-dessus une 0.5.0
+    installee. Leurs notes restent dans ce fichier.
+
+
 4.8.3
 -----
   Le GUI n'expose plus de bascule entre profil et natif pour les familles PS5
@@ -513,3 +544,7 @@ Earlier versions
 ----------------
   Releases 1.0 through 3.2 were published without a change log. The packages remain
   available in the project's dist folder.
+
+  That line is closed: 3.2 is the last of it, and it stays where it was published —
+  the free, public repository. Everything from 4.0 onwards belongs to this product,
+  which now counts from 0.5.0 in SteamXBox-Explorer.

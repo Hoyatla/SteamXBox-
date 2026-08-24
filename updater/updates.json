@@ -1,6 +1,6 @@
 {
   "instance": {
-    "helpUrl": "https://github.com/Hoyatla/SteamXBox-"
+    "helpUrl": "https://github.com/Hoyatla/SteamXBox-Explorer"
   },
   "shared": {
     "windowTitle": "Mise à jour de SteamXBox",
@@ -26,32 +26,5 @@
       "maxWaitMinutes": 120
     }
   },
-  "releases": [
-    {
-      "name": "SteamXBox 4.8.2",
-      "version": "4.8.2.0",
-      "publishedAt": "2026-08-15T00:00:00Z",
-      "summary": "# SteamXBox 4.8.2\n\n## Le bouton PS, le signal d'arrêt et le mode natif\n\nTrois régressions corrigées après la 4.7 :\n\n- **Le bouton PS ouvre Steam dans les deux modes.** Lancer Steam n'est pas rendre la manette au système : le retrait devant Steam reste réservé à la manette Steam (seule à avoir une couche firmware que Steam reprend).\n- **Le signal d'arrêt de la manette Steam est de retour : PS+Y** tue le processus Steam et reconnecte la manette, dans les deux modes. Une manette coincée en mode Xbox360 doit pouvoir arrêter Steam sans le clavier. PS+X n'ouvre pas l'environnement : un appui PS reste un appui PS.\n- **Le mode natif démarre enfin en natif.** `--start-mode native` est pris en charge : la PS5 démarre en mode Xbox360 natif au lieu de retomber silencieusement sur le profil, et Windows la voit réellement avec son vrai identifiant.\n\n## Manette par famille\n\nTrois claviers à l'écran distincts, un par famille (Steam, PS5, Xbox), chacun produit par son propre projet — fini le binaire copié à la main sous deux noms.",
-      "downloadUrl": "https://github.com/Hoyatla/SteamXBox-/releases/download/v4.8.2/SteamXBox_Full_Setup_4.8.2_win-x64.exe",
-      "downloadSize": 312419410,
-      "launchArguments": "/SILENT /NORESTART",
-      "exitCode": {
-        "skipCheck": false,
-        "successCodes": [0, 3010, 1641]
-      }
-    },
-    {
-      "name": "SteamXBox 4.7",
-      "version": "4.7.0.0",
-      "publishedAt": "2026-08-11T00:00:00Z",
-      "summary": "# SteamXBox 4.7\n\n## Ce que SteamXBox laissait derrière lui\n\nUn défaut signalé depuis le début du projet — « SteamXBox casse mon système, et ça continue après l'avoir fermé » — était traité chaque fois comme un incident isolé. Il ne l'était pas.\n\n- **Il n'existait aucune sortie propre.** La croix de la fenêtre, `Stop-SteamXBox.cmd` et `Core.exe stop` tuaient tous les trois le processus, donc la ligne qui rend les manettes n'était jamais atteinte.\n- **Le clavier de toute la machine pouvait se figer** 33 secondes en copiant un dossier dans l'explorateur.\n- **Les exécutables ne demandent plus l'administrateur.** La justification supposée était HidHide ; mesure faite, elle était fausse.\n- **Le clavier et la souris physiques ne peuvent plus être masqués**, même sur un appareil combiné manette-clavier.\n- **Steam retrouve la manette** quand SteamXBox se met en retrait, et la manette est remise à zéro quand Steam s'en va.\n\n## Confidentialité\n\nL'index du courrier et l'historique de recherche sont **chiffrés au repos**. Ils contenaient dix-sept mégaoctets de correspondance en clair.\n\n## Conversions\n\nAucune conversion depuis un PDF ne passe plus par LibreOffice : `docx`, `odt`, `rtf`, `html`, `txt`, `pptx`, `odp`, `xlsx`, `ods` et `csv` ont chacune leur route. Le format libre et le format propriétaire donnent le même résultat.\n\n## Clavier à l'écran\n\nIl reste résident après sa première ouverture : les quatre secondes de démarrage ne sont plus payées qu'une fois par session.",
-      "downloadUrl": "https://github.com/Hoyatla/SteamXBox-/releases/download/v4.7.0/SteamXBox_Full_Setup_4.7_win-x64.exe",
-      "downloadSize": 0,
-      "launchArguments": "/SILENT /NORESTART",
-      "exitCode": {
-        "skipCheck": false,
-        "successCodes": [0, 3010, 1641]
-      }
-    }
-  ]
+  "releases": []
 }

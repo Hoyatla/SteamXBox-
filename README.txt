@@ -152,5 +152,5 @@ Licences
 SteamXBox is proprietary software, all rights reserved. See LICENSE.
 Third-party components keep their own licenses; see THIRD-PARTY-NOTICES.txt.
 
-Project page: https://github.com/Hoyatla/SteamXBox
+Project page: https://github.com/Hoyatla/SteamXBox-Explorer
 Community:    https://discord.gg/MmmvB5s3E

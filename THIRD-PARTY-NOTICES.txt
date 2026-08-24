@@ -74,6 +74,153 @@ texte accompagne les fichiers concernés :
   Library/Icons/*/LICENSE.txt
   Plugins/*/LICENSE.txt
 
+OUTILS EXTERNES DÉTECTÉS, JAMAIS EMBARQUÉS
+------------------------------------------
+
+SteamXBox n'inclut ni ne redistribue aucun des programmes ci-dessous. Il les
+cherche sur la machine et s'en sert s'ils y sont ; sinon la fonction concernée
+s'éteint et le dit. C'est l'utilisateur ou l'administrateur qui les installe, et
+donc lui qui les met à jour.
+
+  LibreOffice          Mozilla Public License 2.0
+                       Conversion de documents, et lecture des anciens formats
+                       Office et OpenDocument pour l'indexeur.
+                       https://www.libreoffice.org/
+
+  Tesseract OCR        Apache License 2.0
+                       Reconnaissance de caractères sur les PDF dont les pages
+                       sont des images.
+                       https://github.com/tesseract-ocr/tesseract
+
+  Poppler (pdftoppm)   GNU General Public License
+                       Rendu des pages PDF en images, avant reconnaissance.
+                       https://poppler.freedesktop.org/
+
+ATTENTION SUR POPPLER — sa licence est GPL. L'appeler comme programme séparé,
+installé par l'utilisateur, n'engage pas le code de SteamXBox ; le LIVRER avec le
+produit, si. Aucun installeur ne doit le poser, et aucun binaire poppler ne doit
+entrer dans une archive de distribution. Si un moteur de rendu PDF devait un jour
+être embarqué, ce serait PDFium (BSD-3), jamais poppler.
+
+  ComfyUI              GNU General Public License v3
+                       Interface de generation d'images par diffusion, lancee comme
+                       programme separe. Sa licence est GPL : il ne doit jamais etre
+                       livre avec le produit ni pose par un installeur.
+                       https://github.com/comfyanonymous/ComfyUI
+
+  ffmpeg               LGPL 2.1 de base, GPL dès qu'une compilation active
+                       --enable-gpl
+                       Décodage et encodage de la vidéo. Les deux moteurs de
+                       calcul sont livrés, lui non, et la raison est mesurable :
+                       la compilation courante pour Windows annonce
+                       --enable-gpl --enable-version3, car c'est ce qui apporte
+                       libx264 — l'encodeur H.264 dont la chaîne vidéo se sert.
+                       Une compilation LGPL serait livrable, mais elle n'a
+                       justement pas libx264 : il faudrait encoder par le
+                       matériel, ce qui exclut les machines sans carte
+                       compatible. Le détecter écarte la question sans rien
+                       imposer. Absent, l'outil vidéo le dit et s'arrête.
+                       https://ffmpeg.org/
+
+                       UNE COPIE EST PRÉSENTE DANS Outilsfmpeg SUR LE POSTE
+                       DE DÉVELOPPEMENT. Elle est exclue du dépôt et ne figure
+                       dans aucune ligne de l'installeur. Elle sert à
+                       développer et à mesurer, jamais à distribuer.
+
+  Real-ESRGAN (PyTorch) BSD 3-Clause
+                       RETIRÉE DU PROJET. L'agrandissement d'images comme celui
+                       de vidéos passe par la version compilée, plus bas, qui
+                       n'exige ni Python ni PyTorch. Cette version-ci n'était plus
+                       appelée par aucun outil ; la garder revenait à entretenir
+                       une dépendance de plusieurs gigaoctets pour rien.
+                       https://github.com/xinntao/Real-ESRGAN
+
+COMPOSANT EXTERNE EMBARQUÉ
+--------------------------
+
+Contrairement à tous les outils ci-dessus, celui-ci est livré avec le produit.
+Sa licence le permet sans contrepartie sur notre propre code.
+
+  Real-ESRGAN ncnn Vulkan   BSD 3-Clause
+  (realesrgan-ncnn-vulkan)  Copyright (c) 2021 Xintao Wang
+                            https://github.com/xinntao/Real-ESRGAN
+
+                            Agrandissement de vidéo. Version compilée, sans
+                            Python ni PyTorch : 52 Mo au lieu de plusieurs
+                            gigaoctets, et environ trois fois plus rapide que
+                            la voie PyTorch (mesuré). C'est ce qui justifie de
+                            l'embarquer plutôt que de le détecter.
+
+                            Il contient la bibliothèque ncnn (BSD 3-Clause,
+                            copyright (c) 2017 THL A29 Limited, filiale de
+                            Tencent) et les modèles pré-entraînés du projet
+                            Real-ESRGAN, sous la même licence BSD 3-Clause.
+
+  RIFE ncnn Vulkan          MIT
+  (rife-ncnn-vulkan)        Copyright (c) 2020 nihui
+                            https://github.com/nihui/rife-ncnn-vulkan
+
+                            Interpolation d'images : fabrique les images
+                            intermédiaires pour augmenter la cadence d'une
+                            vidéo. Même auteur que la bibliothèque ncnn.
+                            L'archive officielle pèse 412 Mio et contient une
+                            quinzaine de générations de modèles ; seul rife-v4.6
+                            est retenu, soit 18 Mo. C'est le seul qui sache
+                            produire une image à un instant quelconque, ce
+                            qu'exige un rapport non entier comme 24 vers 60.
+
+  llama.cpp                 MIT
+  (llama-server)            Copyright (c) 2023-2024 The ggml authors
+                            https://github.com/ggml-org/llama.cpp
+
+                            Sert le modèle de langage de l'assistant, en local.
+                            Version Vulkan retenue plutôt que CUDA : 102 Mo au
+                            lieu de 513, et elle fonctionne sur NVIDIA, AMD et
+                            Intel. Le produit s'adresse à des machines qu'on ne
+                            choisit pas.
+
+  MODÈLE DE LANGAGE         AUCUN N'EST LIVRÉ — L'UTILISATEUR CHOISIT
+
+                            Un modèle n'est pas un programme : sa licence lui est
+                            propre, il pèse plusieurs gigaoctets, il vieillit vite,
+                            et la taille qui convient dépend de la machine. Il est
+                            donc téléchargé, jamais embarqué. L'installeur propose
+                            trois choix, dont un seul est nécessaire :
+
+                              Qwen3-8B                Apache 2.0   4,7 Go
+                              Qwen3-4B                Apache 2.0   2,3 Go
+                              Granite 3.3 8B          Apache 2.0   4,6 Go
+
+                            Ces trois licences ont été relevées à la source, sur
+                            l'API de Hugging Face, et non supposées d'après la
+                            réputation de leurs familles. Apache 2.0 n'impose rien
+                            au code de SteamXBox.
+
+                            SUR LA MACHINE DE DÉVELOPPEMENT UNIQUEMENT :
+                            Outils\Modeles contient Qwen3.5-9B, copié depuis une
+                            installation LM Studio. Son fichier GGUF ne porte aucun
+                            champ de licence et son éditeur n'a rien laissé sur la
+                            machine — la question n'est donc pas tranchée pour
+                            celui-là. Il sert à développer, il est exclu du dépôt,
+                            et il ne figure dans aucune ligne de l'installeur.
+
+  vcomp140.dll              Runtime OpenMP de Microsoft, redistribuable au
+                            titre des termes du Visual C++ Redistributable.
+                            Fourni dans les archives officielles Real-ESRGAN et RIFE.
+
+BSD 3-Clause — la redistribution, sous forme binaire, exige de reproduire la
+mention de copyright, la liste des conditions et l'avertissement de garantie
+dans la documentation. Le présent fichier remplit cette obligation. Elle
+n'impose ni l'ouverture ni le partage du code de SteamXBox.
+
+Le pilote de cette chaîne, src/SteamXBox.Tools/Video/VideoUpscale.cs, est notre
+code : il découpe la vidéo en tronçons, interpole, agrandit, réencode et efface
+au fur et à mesure, pour que le disque reste borné. Sans lui, un film de 80
+minutes réclamerait environ 570 Go d'images intermédiaires. Il a d'abord été
+écrit en Python ; l'avoir porté dans le produit supprime la dernière dépendance
+de l'outil vidéo envers un interpréteur installé par l'utilisateur.
+
+
 RÈGLE POUR TOUT AJOUT — SteamXBox étant un produit commercial fermé, seules les
 licences suivantes sont acceptables pour une nouvelle ressource graphique :
 

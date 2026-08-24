@@ -1,11 +1,11 @@
-; SteamXBox Portable - Installeur Complet "Un Clic"
+﻿; SteamXBox Portable - Installeur Complet "Un Clic"
 ; Inclut: SteamXBox + ViGEmBus + HidHide (drivers signés Microsoft)
 ; Compile: iscc SteamXBox_Full_Installer.iss
 
 #define MyAppName "SteamXBox"
-#define MyAppVersion "4.8.3"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "Hoyatla"
-#define MyAppURL "https://github.com/Hoyatla/SteamXBox"
+#define MyAppURL "https://github.com/Hoyatla/SteamXBox-Explorer"
 #define MyAppExeName "SteamXBox.exe"
 
 [Setup]
@@ -42,11 +42,60 @@ french.InstallViGEmBus=Installer ViGEmBus (bus virtuel manette Xbox/DS4)
 english.InstallViGEmBus=Install ViGEmBus (virtual Xbox/DS4 gamepad bus)
 french.InstallHidHide=Installer HidHide (masque les manettes physiques)
 english.InstallHidHide=Install HidHide (hides physical controllers)
+; Outils tiers NON embarques : la case ouvre leur page de telechargement a la fin de
+; l'installation, elle n'installe rien. Poppler est sous GPL et ne doit jamais etre livre avec le
+; produit ; LibreOffice et Tesseract ne le sont pas davantage, par la meme regle de maintenance.
+; Sans eux, SteamXBox fonctionne : les fonctions concernees se detectent absentes et le disent.
+french.GetLibreOffice=Ouvrir la page de LibreOffice (conversion de documents)
+english.GetLibreOffice=Open the LibreOffice download page (document conversion)
+french.GetTesseract=Ouvrir la page de Tesseract OCR (texte des PDF images)
+english.GetTesseract=Open the Tesseract OCR download page (text in image PDFs)
+french.GetPoppler=Ouvrir la page de Poppler (rendu des pages PDF)
+french.GetFfmpeg=Telecharger ffmpeg (agrandissement video) — a decompresser dans Outils\ffmpeg
+english.GetFfmpeg=Download ffmpeg (video enlarging) — unzip into Outils\ffmpeg
+french.GetPython=Ouvrir la page de Python (outils Real-ESRGAN, ComfyUI)
+english.GetPython=Open the Python download page (Real-ESRGAN, ComfyUI tools)
+english.GetPoppler=Open the Poppler download page (PDF page rendering)
+; Modeles de l'assistant. Trois choix, tous sous licence Apache 2.0 verifiee a la source, donc
+; utilisables dans un produit commercial. Un seul suffit : le serveur prend le premier fichier
+; .gguf trouve dans Outils\Modeles.
+french.ModeleAssistant=Telecharger un modele pour l'assistant (facultatif, un seul suffit)
+english.ModeleAssistant=Download a model for the assistant (optional, one is enough)
+french.ModeleQwen8=Qwen3-8B — polyvalent, le plus a l'aise pour lancer les outils. 4,7 Go, Apache 2.0
+english.ModeleQwen8=Qwen3-8B — all-round, best at driving the tools. 4.7 GB, Apache 2.0
+french.ModeleQwen4=Qwen3-4B — pour un ordinateur modeste : deux fois plus leger, un peu moins fin. 2,3 Go, Apache 2.0
+english.ModeleQwen4=Qwen3-4B — for a modest computer: half the size, slightly less capable. 2.3 GB, Apache 2.0
+french.ModeleGranite=Granite 3.3 8B — d'IBM, concu pour l'appel d'outils et l'usage en entreprise. 4,6 Go, Apache 2.0
+english.ModeleGranite=Granite 3.3 8B — from IBM, built for tool calling and business use. 4.6 GB, Apache 2.0
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
 Name: "vigembus"; Description: "{cm:InstallViGEmBus}"
 Name: "hidhide"; Description: "{cm:InstallHidHide}"
+; Decochees par defaut : ce sont des telechargements que l'utilisateur choisit, pas des composants
+; du produit. Rien ne casse si elles restent decochees.
+Name: "getlibreoffice"; Description: "{cm:GetLibreOffice}"; Flags: unchecked
+Name: "gettesseract"; Description: "{cm:GetTesseract}"; Flags: unchecked
+Name: "getpoppler"; Description: "{cm:GetPoppler}"; Flags: unchecked
+; Python n'est pas embarque non plus : c'est un composant systeme que l'utilisateur installe,
+; et dont il choisit la version. Les outils qui en ont besoin le detectent, et se taisent sinon.
+Name: "getpython"; Description: "{cm:GetPython}"; Flags: unchecked
+; ffmpeg porte le decodage et l'encodage de l'outil video. Les deux moteurs sont livres,
+; lui non : il est sous LGPL ou GPL selon la compilation choisie par celui qui le distribue,
+; et cette incertitude suffit a le garder dehors. Absent, l'outil le dit et s'arrete.
+Name: "getffmpeg"; Description: "{cm:GetFfmpeg}"; Flags: unchecked
+; L'assistant a besoin d'un modele, et d'un seul. Les trois sont sous Apache 2.0 — verifie a la
+; source, pas suppose — donc distribuables dans un produit ferme. Le modele lui-meme n'est jamais
+; embarque : plusieurs gigaoctets qui vieillissent vite, et un choix qui appartient a l'utilisateur
+; selon la machine qu'il a. Le fichier telecharge se depose dans Outils\Modeles.
+Name: "modele"; Description: "{cm:ModeleAssistant}"; Flags: unchecked
+Name: "modele\qwen8"; Description: "{cm:ModeleQwen8}"; Flags: exclusive unchecked
+Name: "modele\qwen4"; Description: "{cm:ModeleQwen4}"; Flags: exclusive unchecked
+Name: "modele\granite"; Description: "{cm:ModeleGranite}"; Flags: exclusive unchecked
+
+[Dirs]
+; Cree meme vide : l'utilisateur qui telecharge un modele doit voir ou le poser.
+Name: "{app}\Outils\Modeles"
 
 [Files]
 ; SteamXBox executables (self-contained single-file)
@@ -61,6 +110,9 @@ Source: "Sc2XboxedXbox.Osk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox.Indexer.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "SteamXBox-Moniteur.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Le serveur MCP. Pose et retire avec le produit, jamais lance par lui : c'est le client qui le
+; demarre et l'arrete. Sans client installe, ce fichier ne fait rien et n'ouvre aucun port.
+Source: "SteamXBox.Mcp.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts
 Source: "Stop-SteamXBox.cmd"; DestDir: "{app}"; Flags: ignoreversion
@@ -74,6 +126,28 @@ Source: "THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Icon
 Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; Tuiles d'outils. Le chargeur les lit dans {app}\Plugins ; sans elles, le centre de controle
+; n'affiche aucun outil. Cinq megaoctets de manifestes et d'icones.
+Source: "Plugins\*"; DestDir: "{app}\Plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Moteurs d'agrandissement et d'interpolation video. Compiles, autonomes, 70 Mo a eux deux, sous
+; licences permissives : BSD-3 pour Real-ESRGAN et ncnn, MIT pour RIFE. Ce sont les seuls
+; composants tiers que le produit a le droit de livrer. Voir THIRD-PARTY-NOTICES.txt.
+Source: "Outils\Real-ESRGAN-ncnn\*"; DestDir: "{app}\Outils\Real-ESRGAN-ncnn"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "Outils\rife-ncnn-vulkan\*"; DestDir: "{app}\Outils\rife-ncnn-vulkan"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "Outils\LISEZ-MOI.txt"; DestDir: "{app}\Outils"; Flags: ignoreversion skipifsourcedoesntexist
+
+; CE QUI N'EST PAS LIVRE, et ce n'est pas un oubli :
+;
+;   Outils\ComfyUI       GPL v3. Le livrer imposerait d'ouvrir le produit. Detecte, jamais embarque.
+;   Outils\Python        9,5 Go, et sa mise a jour appartient a l'utilisateur. La case "Ouvrir la
+;                        page de Python" s'en charge a la fin de l'installation.
+;   Outils\Real-ESRGAN   version PyTorch : inutilisable sans Python, et remplacee par la version
+;                        ncnn ci-dessus pour la video.
+;
+; L'outil video ne reclame plus rien d'autre : son pilote est dans le produit (VideoUpscale.cs) et
+; les deux moteurs sont ci-dessus. Seul l'outil d'agrandissement d'IMAGES passe encore par Python.
 
 ; Agent de mise a jour. Le fichier de configuration doit porter EXACTEMENT le nom de l'executable
 ; avec l'extension .json — c'est ainsi que l'agent le trouve — et le nom de l'executable lui-meme
@@ -121,6 +195,28 @@ Filename: "{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe"; Parameters: "/quiet /norest
 ; 2. HidHide (silencieux, admin)
 Filename: "{tmp}\HidHide_1.5.230_x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installation HidHide (masquage manettes)..."; Tasks: hidhide; Flags: waituntilterminated shellexec
 
+; 2 bis. Outils tiers, ouverture de leur page de telechargement seulement.
+;
+; L'installeur n'embarque ni ne telecharge aucun des trois : il ouvre la page, et l'utilisateur
+; decide. Pour Poppler c'est une obligation, pas un choix de confort — sa licence est GPL, et le
+; livrer avec un produit ferme exposerait le code de SteamXBox. Pour LibreOffice et Tesseract, c'est
+; la meme regle que le projet s'applique depuis le debut : ce qui n'est pas embarque n'est pas a
+; corriger chez le client.
+;
+; Coche ou non, rien ne change dans le produit : les fonctions concernees cherchent ces programmes
+; au lancement et se desactivent en le disant si elles ne les trouvent pas.
+Filename: "https://www.libreoffice.org/download/download-libreoffice/"; Tasks: getlibreoffice; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://github.com/UB-Mannheim/tesseract/wiki"; Tasks: gettesseract; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://poppler.freedesktop.org/"; Tasks: getpoppler; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://www.python.org/downloads/windows/"; Tasks: getpython; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"; Tasks: getffmpeg; Flags: shellexec nowait postinstall skipifsilent
+; Modeles de l'assistant. Liens directs vers le fichier, pas vers une page : l'utilisateur n'a
+; qu'a le deposer dans Outils\Modeles. Quantification Q4_K_M, le compromis habituel entre poids
+; et qualite. Un seul modele a la fois — le serveur prend le premier .gguf qu'il trouve.
+Filename: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"; Tasks: modele\qwen8; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf"; Tasks: modele\qwen4; Flags: shellexec nowait postinstall skipifsilent
+Filename: "https://huggingface.co/ibm-granite/granite-3.3-8b-instruct-GGUF/resolve/main/granite-3.3-8b-instruct-Q4_K_M.gguf"; Tasks: modele\granite; Flags: shellexec nowait postinstall skipifsilent
+
 ; 3. Agent de mise a jour : autostart + tache planifiee quotidienne. "--install" ne verifie rien et
 ; ne telecharge rien ; il enregistre seulement l'agent. La premiere verification a lieu a l'ouverture
 ; de session suivante.
@@ -151,6 +247,10 @@ Filename: "{app}\SteamXBox.Core.exe"; Parameters: "hidhide-off"; Flags: runhidde
 ; vraie manette Xbox 360 filaire d'un client, puisque en etre indiscernable est le but meme de
 ; l'emulation.
 Filename: "{app}\SteamXBox.Core.exe"; Parameters: "pads-cleanup"; Flags: runhidden; RunOnceId: "CleanPadRecords"
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\Outils\Real-ESRGAN-ncnn"
+Type: filesandordirs; Name: "{app}\Outils\rife-ncnn-vulkan"
 
 [Code]
 // Prevenir avant de partir : les curseurs de Windows survivent a la desinstallation, et
