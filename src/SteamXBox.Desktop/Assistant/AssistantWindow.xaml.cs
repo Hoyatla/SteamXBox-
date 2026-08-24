@@ -1009,7 +1009,7 @@ public partial class AssistantWindow : Window
     /// </remarks>
     private static IReadOnlyList<AssistantLocal.Capacite> Composition(Action<string>? journal)
     {
-        const int Port = 8188;
+        var Port = SteamXBox.Tools.Generation.ComfyServer.Port;
 
         return
         [
@@ -1468,12 +1468,46 @@ public partial class AssistantWindow : Window
             var demande = reglages.GetValueOrDefault(choix.Id, "");
 
             // Par identifiant ou par libellé : le modèle lit la déclaration et rend volontiers
-            // « Wan 2.2 » là où l'outil attend « wan22 ». Refuser sur cette nuance lui ferait
-            // relancer le même appel jusqu'à épuiser ses tours, ce qu'il a fait.
+            // « Wan 2.2 » là où l'outil attend « wan22 ».
             var recette = choix.Recettes.FirstOrDefault(r =>
-                    r.Id.Equals(demande, StringComparison.OrdinalIgnoreCase)
-                    || r.Label.Equals(demande, StringComparison.OrdinalIgnoreCase))
-                ?? choix.Recettes[0];
+                r.Id.Equals(demande, StringComparison.OrdinalIgnoreCase)
+                || r.Label.Equals(demande, StringComparison.OrdinalIgnoreCase));
+
+            // JAMAIS de repli sur la première recette.
+            //
+            // <b>Le défaut que ceci corrige, et c'était le pire de tous.</b> Un « ?? Recettes[0] »
+            // faisait qu'un moteur non reconnu tombait sur la première route de la liste — depuis
+            // que texte-vers-vidéo y figure en tête, cela voulait dire : ignorer l'image que
+            // l'utilisateur venait de désigner et générer depuis le texte. Quelle que soit l'image
+            // fournie, il sortait la même vidéo. Une erreur servie comme un résultat, ce qui est
+            // pire qu'une erreur : elle ne se voit pas, elle s'accuse.
+            if (recette is null)
+            {
+                var offertes = string.Join(", ", choix.Recettes.Select(r => $"« {r.Label} »"));
+
+                return $"Route inconnue : « {demande} ». Celles de cet outil sont : {offertes}. "
+                    + "Reprends avec l'une d'elles, exactement.";
+            }
+
+            // La route doit suivre ce qu'on lui donne.
+            //
+            // Une route qui ne nomme pas {image} n'en emploie aucune : lui en passer une, c'est la
+            // jeter en silence et rendre une vidéo qui n'a rien à voir avec ce que l'utilisateur a
+            // désigné. Il n'y verrait qu'un outil qui se moque de lui.
+            if (reglages.GetValueOrDefault("image", "").Trim().Length > 0
+                && !recette.Target.Contains("{image}", StringComparison.OrdinalIgnoreCase))
+            {
+                var avecImage = choix.Recettes
+                    .Where(r => r.Target.Contains("{image}", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => $"« {r.Label} »")
+                    .ToList();
+
+                return avecImage.Count == 0
+                    ? $"« {recette.Label} » ne part pas d'une image, et aucune route de cet outil "
+                      + "ne le fait. Relance sans image."
+                    : $"« {recette.Label} » ne part pas d'une image et ignorerait celle que tu "
+                      + $"donnes. Pour partir d'une image : {string.Join(", ", avecImage)}.";
+            }
 
             cible = cible.Replace(
                 "{recette:" + choix.Id + '}', recette.Target, StringComparison.OrdinalIgnoreCase);

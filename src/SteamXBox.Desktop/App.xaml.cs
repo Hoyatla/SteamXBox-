@@ -108,6 +108,25 @@ public partial class App : Application
             Tools.ToolRegistry.StartServices();
             UiLog.Info("tool services started");
 
+            // Le générateur est décrit par les réglages, pas par des constantes semées dans le code.
+            // Port et « installation à part » sont lus une fois, ici, et tout le reste du produit
+            // les demande à ComfyServer — il n'y a plus qu'un endroit où ce nombre existe.
+            SteamXBox.Tools.Generation.ComfyServer.Port = SettingsSvc.Settings.GenerateurPort;
+
+            // Externe dès que ComfyUI Desktop est là, sans qu'on ait à le régler.
+            //
+            // La dépendance le déclare, l'hôte constate — la règle habituelle. Desktop est une
+            // application que l'utilisateur installe, ouvre et garde ouverte : la démarrer serait
+            // en ouvrir une seconde, et la tuer à notre fermeture serait fermer la fenêtre de
+            // quelqu'un d'autre. Le réglage reste là pour le cas inverse, une installation à part
+            // que rien ne permet de deviner.
+            SteamXBox.Tools.Generation.ComfyServer.Externe =
+                SettingsSvc.Settings.GenerateurExterne || Tools.PluginTools.Presente("dependance-comfyui-desktop");
+
+            UiLog.Info(
+                $"générateur : port {SettingsSvc.Settings.GenerateurPort}"
+                + (SettingsSvc.Settings.GenerateurExterne ? ", installation à part" : ", lancé par le produit"));
+
             PrechaufferGenerateur();
 
             // Les carnets qu'on n'a pas rouverts depuis un mois s'effacent au démarrage. Sans cela

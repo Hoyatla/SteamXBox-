@@ -32,7 +32,35 @@ public static class ComfyServer
     private const string Ressource = "generation";
 
     /// <summary>Le port d'origine de ComfyUI ; ses flux et ses extensions l'attendent.</summary>
-    private const int Port = 8188;
+    /// <summary>
+    /// Le port du générateur, et l'unique endroit où il est décidé.
+    /// </summary>
+    /// <remarks>
+    /// <b>Il était écrit en dur à quatre endroits</b> — ici, dans le lecteur de flux, dans les
+    /// options vivantes et dans les capacités de l'assistant. Quatre copies d'un même nombre, dont
+    /// trois qu'on aurait oubliées le jour où il change. Il change précisément aujourd'hui :
+    /// ComfyUI Desktop n'écoute pas sur 8188.
+    /// </remarks>
+    public static int Port { get; set; } = 8188;
+
+    /// <summary>
+    /// Vrai quand le générateur ne nous appartient pas : c'est une installation à part.
+    /// </summary>
+    /// <remarks>
+    /// <b>Ce que ce drapeau interdit, et pourquoi il faut qu'il l'interdise.</b> Le produit sait
+    /// démarrer son générateur, l'inscrire au registre des ressources et le tuer à sa fermeture —
+    /// c'est ce qui a réglé les dix gigaoctets de mémoire vidéo restés pris après une sortie. Rien
+    /// de tout cela n'a de sens face à une application que l'utilisateur a installée, lancée et
+    /// gardera ouverte après nous : la démarrer serait en ouvrir une seconde sur un port déjà pris,
+    /// et la tuer serait fermer la fenêtre de quelqu'un d'autre.
+    ///
+    /// <para>
+    /// Externe, le produit se contente donc de frapper à la porte et de dire quoi faire si personne
+    /// ne répond. C'est moins de pouvoir, et c'est la seule attitude correcte envers un programme
+    /// qu'on n'a pas lancé.
+    /// </para>
+    /// </remarks>
+    public static bool Externe { get; set; }
 
     /// <summary>Ce qu'un démarrage à froid coûte ici, en secondes.</summary>
     /// <remarks>
@@ -194,6 +222,16 @@ public static class ComfyServer
         if (Repond())
         {
             return null;
+        }
+
+        // Un générateur qui ne nous appartient pas ne se démarre pas à sa place : on dit ce qui
+        // manque, et l'utilisateur ouvre sa fenêtre. Le message nomme le port pour que « il ne
+        // répond pas » ne devienne pas une devinette quand celui-ci a été changé.
+        if (Externe)
+        {
+            return $"Le générateur ne répond pas sur le port {Port.ToString(CultureInfo.InvariantCulture)}. "
+                + "Il est réglé comme une installation à part : ouvrez ComfyUI vous-même, puis "
+                + "relancez. Si son port n'est pas celui-là, corrigez-le dans les réglages.";
         }
 
         // Un démarrage déjà en cours appartient à qui l'a commencé : on l'attend au lieu d'en

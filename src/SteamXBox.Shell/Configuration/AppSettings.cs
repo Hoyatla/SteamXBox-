@@ -30,6 +30,28 @@ public sealed partial class AppSettings
     [JsonPropertyName("prechaufferGenerateur")]
     public bool PrechaufferGenerateur { get; set; }
 
+    /// <summary>Le port sur lequel le générateur d'images écoute.</summary>
+    /// <remarks>
+    /// <b>Un réglage, pas une constante.</b> Il était écrit en dur à quatre endroits du code — le
+    /// serveur, le lecteur de flux, les options vivantes, les capacités de l'assistant. Quatre
+    /// copies d'un même nombre dont trois seraient oubliées le jour où il change, et il change dès
+    /// qu'on emploie une autre installation de ComfyUI que celle que le produit démarre lui-même.
+    /// </remarks>
+    [JsonPropertyName("generateurPort")]
+    public int GenerateurPort { get; set; } = 8188;
+
+    /// <summary>
+    /// Le générateur est une installation à part, que le produit ne démarre ni n'arrête.
+    /// </summary>
+    /// <remarks>
+    /// Pour ComfyUI Desktop, ou toute installation que l'utilisateur gère lui-même. Le produit s'y
+    /// connecte et rien de plus : il ne la lance pas — ce serait en ouvrir une seconde sur un port
+    /// déjà pris — et surtout il ne la tue pas à sa fermeture, parce que fermer la fenêtre de
+    /// quelqu'un d'autre n'est pas du ménage.
+    /// </remarks>
+    [JsonPropertyName("generateurExterne")]
+    public bool GenerateurExterne { get; set; }
+
     [JsonPropertyName("devicePollInterval")]
     public int DevicePollIntervalMs { get; set; } = 3000;
 

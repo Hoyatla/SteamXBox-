@@ -17,7 +17,7 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "clip": ["2", 0],
-      "text": "a lone tree on a hill, wind in the branches, cinematic"
+      "text": ""
     }
   },
   "4": {
@@ -115,7 +115,7 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "clip": ["15", 0],
-      "text": "a lone tree on a hill, wind in the branches, cinematic"
+      "text": ""
     }
   },
   "17": {

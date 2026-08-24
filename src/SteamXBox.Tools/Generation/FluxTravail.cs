@@ -49,7 +49,7 @@ public readonly record struct LectureFlux(
 public static class FluxTravail
 {
     /// <summary>Le port d'origine de ComfyUI ; ses flux et ses extensions l'attendent.</summary>
-    private const int Port = 8188;
+    private static int Port => SteamXBox.Tools.Generation.ComfyServer.Port;
 
     /// <summary>
     /// Une génération est longue, et l'attendre est le travail du produit.

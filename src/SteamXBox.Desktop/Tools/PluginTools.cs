@@ -252,6 +252,23 @@ public static class PluginTools
             : Perform(manifeste.Does, manifeste.Target, log);
     }
 
+    /// <summary>Cette dépendance est-elle installée sur cette machine ?</summary>
+    /// <remarks>
+    /// Le manifeste dit où on la cherche, l'hôte constate — la règle du dépôt, appliquée ici pour
+    /// que le produit sache s'adapter à ce qui est présent sans qu'aucun chemin ne soit écrit dans
+    /// le code. C'est ainsi que la présence de ComfyUI Desktop suffit à faire basculer le générateur
+    /// en « installation à part », sans réglage à cocher.
+    /// </remarks>
+    public static bool Presente(string identifiant)
+    {
+        var manifeste = PluginCatalog.Scan(Folder).Loaded
+            .FirstOrDefault(m => m.Id.Equals(identifiant, StringComparison.OrdinalIgnoreCase));
+
+        return manifeste is not null
+               && manifeste.Target.Length > 0
+               && File.Exists(Resoudre(manifeste.Target));
+    }
+
     /// <summary>Le classeur qui réunit cet outil, s'il y en a un.</summary>
     private static PluginManifest? Classeur(string outil)
         => PluginCatalog.Scan(Folder).Loaded.FirstOrDefault(m =>
@@ -365,6 +382,12 @@ public static class PluginTools
                 AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), "Outils"),
                 StringComparison.OrdinalIgnoreCase)
             .Replace("{documents}", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                StringComparison.OrdinalIgnoreCase)
+
+            // Là où Windows installe ce qui n'est pas pour toute la machine — dont ComfyUI Desktop.
+            // Sans ce repère, un manifeste devrait écrire « C:\Users\Machin\AppData\Local\… » et ne
+            // marcherait que sur le poste de celui qui l'a écrit.
+            .Replace("{local}", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>

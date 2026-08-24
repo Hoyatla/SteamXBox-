@@ -52,7 +52,7 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "clip": ["7", 0],
-      "text": "a lone tree on a hill, strong wind bending the branches, cinematic"
+      "text": ""
     }
   },
   "9": {

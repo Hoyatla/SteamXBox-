@@ -1,0 +1,11 @@
+{
+  "id": "dependance-comfyui-desktop",
+  "name": "ComfyUI Desktop",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "Comfy Org",
+  "licence": "GPL v3 — jamais livré avec le produit",
+  "hint": "Le générateur d'images et de vidéos. SteamXBox s'y connecte, il ne le lance pas et ne l'arrête pas : c'est une application que vous installez et gardez ouverte. Ses modèles restent où ils sont — le fichier Flux\\extra_model_paths.yaml les lui fait voir sans rien retélécharger.",
+  "target": "{local}\\Programs\\@comfyorgcomfyui-electron\\ComfyUI.exe",
+  "source": "https://www.comfy.org/download"
+}

@@ -28,7 +28,7 @@ namespace SteamXBox.Tools.Generation;
 public static class OptionsVivantes
 {
     /// <summary>Le port du générateur.</summary>
-    private const int Port = 8188;
+    private static int Port => SteamXBox.Tools.Generation.ComfyServer.Port;
 
     /// <summary>
     /// Résout une volée de manifestes en n'interrogeant le générateur qu'une seule fois.

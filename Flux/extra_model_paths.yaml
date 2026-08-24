@@ -1,0 +1,49 @@
+# Fait voir a ComfyUI Desktop les modeles deja poses par SteamXBox, la ou ils sont.
+#
+# POURQUOI CE FICHIER EXISTE
+#
+# Desktop apporte sa propre arborescence de modeles et, laisse a lui-meme, proposerait de
+# retelecharger ce qui est deja sur ce disque : soixante-six gigaoctets, plusieurs heures, pour
+# obtenir exactement les memes fichiers. ComfyUI sait lire des dossiers exterieurs ; il suffit de
+# les lui nommer. Rien n'est deplace, rien n'est copie, rien n'est retelecharge.
+#
+# OU LE POSER
+#
+# Dans le dossier de donnees de ComfyUI Desktop, a cote de son extra_model_paths.yaml s'il en a
+# deja un — Desktop indique ce dossier dans ses reglages, rubrique « Server config » / dossier de
+# base. En general :
+#
+#   %APPDATA%\ComfyUI\extra_model_paths.yaml
+#
+# Desktop le relit au demarrage : il faut le redemarrer apres l'avoir pose.
+#
+# LE POINT A NE PAS MANQUER : custom_nodes
+#
+# Les flux livres par SteamXBox chargent leurs modeles en GGUF — UnetLoaderGGUF, CLIPLoaderGGUF —
+# et ces noeuds viennent du module ComfyUI-GGUF, installe sous Outils. Sans la ligne custom_nodes
+# ci-dessous, Desktop ne connaitrait pas ces noeuds et TOUS les flux Wan et Flux echoueraient au
+# chargement, sur un message parlant d'un class_type inconnu qui ne dit pas qu'il manque un module.
+
+steamxbox:
+    base_path: C:/Program Files/SteamXbox/Outils/ComfyUI
+
+    # Les modeles, par type. Les chemins sont relatifs a base_path.
+    checkpoints: models/checkpoints
+    unet: models/unet
+    diffusion_models: models/diffusion_models
+    text_encoders: models/text_encoders
+    clip: models/clip
+    clip_vision: models/clip_vision
+    vae: models/vae
+    loras: models/loras
+    controlnet: models/controlnet
+    embeddings: models/embeddings
+    upscale_models: models/upscale_models
+    style_models: models/style_models
+    hypernetworks: models/hypernetworks
+    photomaker: models/photomaker
+    gligen: models/gligen
+    configs: models/configs
+
+    # Les modules tiers, sans lesquels les flux GGUF n'ont pas leurs noeuds.
+    custom_nodes: custom_nodes

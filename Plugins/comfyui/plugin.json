@@ -2,13 +2,13 @@
   "id": "comfyui",
   "name": "Générateur workflow multimédia",
   "category": "tool",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E9D9",
-  "hint": "Ouvre l'interface de flux de travail du générateur, où l'on compose les graphes nœud par nœud. Pour créer, animer ou agrandir sans composer, l'outil « Générateur multimédia » suffit. Le premier démarrage prend une minute ou deux.",
+  "hint": "Ouvre ComfyUI Desktop, où l'on compose les graphes nœud par nœud. Pour créer, animer ou agrandir sans composer, l'outil « Créer une vidéo » suffit. SteamXBox ne fait que l'ouvrir : c'est une application à part, qui vit sa vie et que le produit n'arrête pas.",
   "surface": "tile",
-  "does": "generation",
-  "target": "",
+  "does": "application",
+  "target": "{local}\\Programs\\@comfyorgcomfyui-electron\\ComfyUI.exe",
   "enabled": true
 }
