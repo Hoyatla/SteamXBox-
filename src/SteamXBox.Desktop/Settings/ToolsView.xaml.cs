@@ -162,6 +162,77 @@ public partial class ToolsView : UserControl
     private void ArreterPaquetClic(object sender, RoutedEventArgs e) => _paquetArret?.Cancel();
 
     /// <summary>
+    /// Fait tourner l'installeur d'un programme extérieur dans un dossier qui n'est qu'à lui.
+    /// </summary>
+    /// <remarks>
+    /// Le dossier porte le nom de l'installeur : c'est ce que l'utilisateur reconnaîtra plus tard
+    /// dans <c>Outils</c>, et c'est le seul endroit à supprimer pour que l'outil s'en aille en
+    /// entier — ce que sa propre désinstallation ne fait pas.
+    /// </remarks>
+    private void AccueillirClic(object sender, RoutedEventArgs e)
+    {
+        var boite = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "L'installeur du programme à accueillir",
+            Filter = "Installeur (*.exe;*.msi)|*.exe;*.msi",
+        };
+
+        if (boite.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var nom = Nommer(boite.FileName);
+        var dossier = Path.Combine(AppContext.BaseDirectory, "Outils", nom);
+
+        // Les dossiers témoins sont ceux où un programme se répand quand personne ne l'en empêche.
+        // Les surveiller pendant l'accueil est la seule façon de dire si l'isolement a tenu au lieu
+        // de l'affirmer.
+        string[] temoins =
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        ];
+
+        AccueilEtat.Text = $"Accueil de {nom} dans Outils\\{nom}…";
+
+        Travailler(
+            "Accueil",
+            arret => Raconter(
+                SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, temoins, arret)),
+            "",
+            AccueilEtat);
+    }
+
+    /// <summary>Le nom de dossier tiré de celui de l'installeur.</summary>
+    /// <remarks>
+    /// Les installeurs téléchargés portent des noms qui ne sont pas des noms de dossiers —
+    /// « Comfy-Desktop-Setup-phid1_019ff829-… ». On garde ce qui précède le premier mot de
+    /// remplissage, faute de quoi le dossier d'accueil est illisible.
+    /// </remarks>
+    private static string Nommer(string installeur)
+    {
+        var brut = Path.GetFileNameWithoutExtension(installeur);
+        var coupe = brut.Split(["-Setup", "_Setup", " Setup", "-setup"], StringSplitOptions.None)[0];
+        var propre = new string([.. coupe.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' ')]).Trim();
+
+        return propre.Length == 0 ? "outil-accueilli" : propre;
+    }
+
+    /// <summary>Rend le rapport d'accueil lisible dans la zone d'état.</summary>
+    private static string Raconter(SteamXBox.Plugins.AccueilRapport rapport)
+    {
+        var lignes = new List<string>(rapport.Dits)
+        {
+            rapport.Octets == 0
+                ? "Rien n'a été écrit dans le dossier d'accueil."
+                : $"{rapport.Octets / 1024d / 1024d:0.#} Mio dans {rapport.Dossier}.",
+        };
+
+        return string.Join(Environment.NewLine, lignes);
+    }
+
+    /// <summary>
     /// Fait le travail hors du fil d'affichage, et tient l'écran pendant ce temps.
     /// </summary>
     /// <remarks>
@@ -169,7 +240,7 @@ public partial class ToolsView : UserControl
     /// l'utilisateur qui conclut à un plantage au bout de vingt secondes. Le même raisonnement que
     /// pour les panneaux d'outils, et la même solution.
     /// </remarks>
-    private async void Travailler(string quoi, Func<CancellationToken, string> travail, string succes)
+    private async void Travailler(string quoi, Func<CancellationToken, string> travail, string succes, TextBlock? ou = null)
     {
         _paquetArret?.Dispose();
         _paquetArret = new CancellationTokenSource();
@@ -179,19 +250,19 @@ public partial class ToolsView : UserControl
         ArreterPaquet.Visibility = Visibility.Visible;
         PaquetBarre.Visibility = Visibility.Visible;
         PaquetBarre.Value = 0;
-        PaquetEtat.Text = $"{quoi} en cours…";
+        (ou ?? PaquetEtat).Text = $"{quoi} en cours…";
 
         try
         {
             var arret = _paquetArret.Token;
             var dit = await Task.Run(() => travail(arret));
 
-            PaquetEtat.Text = dit.Length == 0 ? succes : dit;
+            (ou ?? PaquetEtat).Text = dit.Length == 0 ? succes : dit;
         }
         catch (Exception exception)
         {
             UiLog.Failure(quoi.ToLowerInvariant() + " du générateur", exception);
-            PaquetEtat.Text = exception.Message;
+            (ou ?? PaquetEtat).Text = exception.Message;
         }
         finally
         {

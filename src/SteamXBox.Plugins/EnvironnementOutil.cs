@@ -74,6 +74,15 @@ public static class EnvironnementIsole
     /// suivantes sont celles des bibliothèques qui téléchargent : ce sont elles qui décident où
     /// atterrissent des dizaines de gigaoctets de modèles, et les oublier, c'est laisser un outil
     /// remplir le disque de l'utilisateur pendant qu'on croit l'avoir rangé.
+    ///
+    /// <para>
+    /// <b><c>USERPROFILE</c> et <c>HOME</c> n'y sont pas, et c'est une leçon payée.</b> Détournés,
+    /// ils font tomber l'installeur de Comfy Desktop sur une violation d'accès — <c>0xC0000005</c>,
+    /// reproduit deux fois, à deux emplacements différents ; sans eux le même installeur va au bout.
+    /// Windows dérive trop de chemins du profil par ses propres interfaces pour qu'un programme
+    /// survive à un profil incohérent. Un outil qui en a besoin peut toujours les demander par
+    /// <see cref="EnvironnementOutil.Detourne"/>, en connaissance de cause.
+    /// </para>
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> Habituelles =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -82,8 +91,6 @@ public static class EnvironnementIsole
             ["LOCALAPPDATA"] = "local",
             ["TEMP"] = "passage",
             ["TMP"] = "passage",
-            ["USERPROFILE"] = "",
-            ["HOME"] = "",
             ["PYTHONUSERBASE"] = "python",
             ["PIP_CACHE_DIR"] = @"cache\pip",
             ["HF_HOME"] = @"cache\huggingface",

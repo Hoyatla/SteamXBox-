@@ -132,6 +132,24 @@
                 <TextBlock x:Name="PaquetEtat" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap"
                            Foreground="{StaticResource TextSecondaryBrush}"/>
             </StackPanel>
+
+            <!-- Un programme extérieur écrit là où son environnement lui dit d'écrire, et nulle
+                 part ailleurs. SteamXBox lui en compose donc un, et l'installeur du tiers — celui
+                 de l'éditeur, pas une copie faite à la main — s'exécute dedans. Ce qui échappe
+                 malgré tout est mesuré et dit, parce qu'un isolement supposé ne vaut rien. -->
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="{loc:T Text='Accueillir un outil'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"
+                           Text="{loc:T Text='Faire tourner l’installeur d’un programme extérieur dans un dossier qui n’est qu’à lui, à l’intérieur de SteamXBox. Il s’installe normalement, mais ce qu’il croit être votre disque est le dossier qu’on lui donne — et il s’en va tout entier quand on supprime ce dossier.'}"/>
+
+                <Button x:Name="Accueillir" Content="{loc:T Text='Installer un programme ici…'}"
+                        Padding="12,6" HorizontalAlignment="Left" Click="AccueillirClic"/>
+
+                <TextBlock x:Name="AccueilEtat" Margin="0,8,0,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
           </StackPanel>
         </ScrollViewer>
     </DockPanel>

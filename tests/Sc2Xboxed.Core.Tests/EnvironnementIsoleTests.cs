@@ -35,13 +35,42 @@ public class EnvironnementIsoleTests : IDisposable
     [InlineData("APPDATA")]
     [InlineData("LOCALAPPDATA")]
     [InlineData("TEMP")]
-    [InlineData("USERPROFILE")]
     public void WhatTheToolTakesForTheUserFolderIsInsideTheProduct(string variable)
     {
         var (depart, refus) = Preparer();
 
         Assert.Equal("", refus);
         Assert.StartsWith(_bac.FullName, depart.Environment[variable]!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Le profil de l'utilisateur n'est pas détourné d'office.
+    /// </summary>
+    /// <remarks>
+    /// Mesuré, pas supposé : détourner <c>USERPROFILE</c> fait tomber l'installeur de Comfy Desktop
+    /// sur <c>0xC0000005</c> — deux fois, à deux emplacements différents — quand le même installeur
+    /// va au bout sans lui. Windows dérive trop de chemins du profil par ses propres interfaces
+    /// pour qu'un programme survive à un profil qui ne ressemble pas à un profil.
+    /// </remarks>
+    [Theory]
+    [InlineData("USERPROFILE")]
+    [InlineData("HOME")]
+    public void TheUserProfileIsNotDivertedByDefault(string variable)
+    {
+        var pose = Preparer().Depart.Environment[variable];
+
+        Assert.True(
+            pose is null || !pose.StartsWith(_bac.FullName, StringComparison.OrdinalIgnoreCase),
+            $"{variable} ne doit pas être détourné d'office : cela tue les installeurs.");
+    }
+
+    /// <summary>Mais un outil qui le veut peut le demander en connaissance de cause.</summary>
+    [Fact]
+    public void AToolCanStillAskForItKnowingWhatItCosts()
+    {
+        var declare = new EnvironnementOutil { Detourne = { ["USERPROFILE"] = "" } };
+
+        Assert.Equal(_bac.FullName, Preparer(declare).Depart.Environment["USERPROFILE"]);
     }
 
     /// <summary>
