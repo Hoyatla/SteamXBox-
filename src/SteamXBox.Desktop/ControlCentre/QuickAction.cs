@@ -127,7 +127,16 @@ public sealed record QuickAction(
 /// </remarks>
 public static class QuickActions
 {
-    public static IReadOnlyList<QuickAction> All { get; } =
+    public static IReadOnlyList<QuickAction> All => Toutes();
+
+    /// <summary>La liste refaite à l'instant, parce que les dossiers ont pu changer.</summary>
+    /// <remarks>
+    /// C'était un membre statique initialisé une fois par processus. Un outil déposé pendant que
+    /// SteamXBox tourne restait donc invisible jusqu'au redémarrage suivant, ce qui contredit la
+    /// règle du produit : un outil est un dossier, déposé il est installé. La grille redemande
+    /// maintenant la liste quand la veille signale que les dossiers ont bougé.
+    /// </remarks>
+    public static IReadOnlyList<QuickAction> Toutes() =>
     [
         .. ToolRegistry.All.Select(FromTool),
 

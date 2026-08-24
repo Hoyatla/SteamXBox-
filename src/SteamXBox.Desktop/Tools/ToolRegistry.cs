@@ -61,6 +61,17 @@ public static class ToolRegistry
         => Compiled.Any(tool => tool.IsSystem && tool.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<ToolDescriptor>? _all;
+
+    /// <summary>
+    /// Oublie la liste retenue, pour qu'elle soit relue au prochain accès.
+    /// </summary>
+    /// <remarks>
+    /// La liste est gardée parce que la relire à chaque dessin de la grille coûterait un balayage de
+    /// dossier par image. Mais « une fois par processus » voulait dire qu'un outil déposé pendant que
+    /// SteamXBox tourne n'apparaissait qu'au redémarrage suivant — ce qui contredit « un outil est un
+    /// dossier : déposé, il est installé ». La veille appelle ceci quand les dossiers ont bougé.
+    /// </remarks>
+    public static void Oublier() => _all = null;
     private static Action<string>? _log;
 
     /// <summary>Gives the loader somewhere to report, before anything reads <see cref="All"/>.</summary>

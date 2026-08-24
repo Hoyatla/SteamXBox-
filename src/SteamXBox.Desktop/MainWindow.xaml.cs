@@ -31,7 +31,36 @@ public partial class MainWindow : Window
         set => SetValue(SelectedHintProperty, value);
     }
 
-    public IReadOnlyList<QuickAction> Actions { get; } = QuickActions.All;
+    /// <summary>
+    /// Les tuiles, dans une liste que l'écran suit au lieu de la lire une fois.
+    /// </summary>
+    /// <remarks>
+    /// Une liste figée obligeait à redémarrer pour voir un outil qu'on venait de déposer. Celle-ci
+    /// se remplit à nouveau quand la veille dit que les dossiers ont bougé, et l'écran suit parce
+    /// que la collection prévient elle-même de ses changements — sans qu'on remplace la propriété,
+    /// ce qui casserait la liaison.
+    /// </remarks>
+    public System.Collections.ObjectModel.ObservableCollection<QuickAction> Actions { get; }
+        = [.. QuickActions.Toutes()];
+
+    private SteamXBox.Plugins.VeilleOutils? _veille;
+
+    /// <summary>Refait la grille après un changement dans les dossiers d'outils.</summary>
+    /// <remarks>
+    /// Le vidage puis le remplissage passent par la collection existante, jamais par une nouvelle :
+    /// l'écran est lié à celle-ci, et lui en substituer une autre le laisserait afficher l'ancienne.
+    /// </remarks>
+    private void Recharger()
+    {
+        Tools.ToolRegistry.Oublier();
+
+        Actions.Clear();
+
+        foreach (var action in QuickActions.Toutes())
+        {
+            Actions.Add(action);
+        }
+    }
 
     public string VersionText { get; } = SteamXBox.Shell.AppVersionInfo.ProductAndVersion + " Desktop";
 
@@ -47,6 +76,18 @@ public partial class MainWindow : Window
 
         Tools.PluginTools.Annonce += Annoncer;
         Closed += (_, _) => Tools.PluginTools.Annonce -= Annoncer;
+
+        // La veille prévient depuis son propre fil : le passage par le répartiteur n'est pas une
+        // politesse, c'est la seule façon de toucher une collection liée à l'écran sans faire
+        // tomber la fenêtre.
+        _veille = new SteamXBox.Plugins.VeilleOutils(AppContext.BaseDirectory, Sc2Xboxed.Core.Diagnostics.UiLog.Info);
+        _veille.Change += () => Dispatcher.BeginInvoke(Recharger);
+
+        Closed += (_, _) =>
+        {
+            _veille?.Dispose();
+            _veille = null;
+        };
     }
 
     /// <summary>Redemande à chaque tuile ce qu'elle a à compter.</summary>
