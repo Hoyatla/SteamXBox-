@@ -2,13 +2,16 @@
   "id": "comfyui",
   "name": "Générateur workflow multimédia",
   "category": "tool",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E9D9",
-  "hint": "Ouvre Comfy Desktop, où l'on compose les graphes nœud par nœud. Pour créer, animer ou agrandir sans composer, l'outil « Créer une vidéo » suffit. SteamXBox ne fait que l'ouvrir : c'est une application à part, qui vit sa vie et que le produit n'arrête pas.",
+  "hint": "Ouvre Comfy Desktop, où l'on compose les graphes nœud par nœud. Pour créer, animer ou agrandir sans composer, l'outil « Créer une vidéo » suffit. Il vit dans Outils, accueilli par SteamXBox : le supprimer, c'est supprimer son dossier.",
   "surface": "tile",
   "does": "application",
-  "target": "{local}\\Programs\\Comfy Desktop\\Comfy Desktop.exe",
+  "target": "{tools}\\Comfy-Desktop\\Comfy Desktop.exe",
+  "environnement": {
+    "dossier": "{tools}\\Comfy-Desktop"
+  },
   "enabled": true
 }

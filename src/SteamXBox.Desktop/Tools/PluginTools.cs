@@ -249,7 +249,7 @@ public static class PluginTools
 
         return manifeste.Surface.Equals("panel", StringComparison.OrdinalIgnoreCase)
             ? PluginPanelWindow.Open(manifeste, log)
-            : Perform(manifeste.Does, manifeste.Target, log);
+            : Perform(manifeste.Does, manifeste.Target, log, manifeste.Environnement);
     }
 
     /// <summary>Cette dépendance est-elle installée sur cette machine ?</summary>
@@ -284,7 +284,7 @@ public static class PluginTools
             return PluginPanelWindow.Open(manifest, log);
         }
 
-        return Perform(manifest.Does, manifest.Target, log);
+        return Perform(manifest.Does, manifest.Target, log, manifest.Environnement);
     }
 
     /// <summary>
@@ -407,7 +407,11 @@ public static class PluginTools
     /// </remarks>
     public static event Action<string>? Annonce;
 
-    public static string Perform(string does, string target, Action<string>? log)
+    public static string Perform(
+        string does,
+        string target,
+        Action<string>? log,
+        EnvironnementOutil? environnement = null)
     {
         // L'issue passe au journal, et pas seulement au panneau.
         //
@@ -428,7 +432,7 @@ public static class PluginTools
             Annonce?.Invoke(phrase);
         }
 
-        var dit = Faire(does, target, Dire);
+        var dit = Faire(does, target, Dire, environnement);
 
         if (dit.Length > 0)
         {
@@ -438,7 +442,11 @@ public static class PluginTools
         return dit;
     }
 
-    private static string Faire(string does, string target, Action<string>? log)
+    private static string Faire(
+        string does,
+        string target,
+        Action<string>? log,
+        EnvironnementOutil? environnement)
     {
         target = Resoudre(target);
 
@@ -451,8 +459,7 @@ public static class PluginTools
                     return "";
 
                 case PluginActions.Application:
-                    Start(target);
-                    return "";
+                    return Ouvrir(target, environnement);
 
                 case PluginActions.Path:
                     Start(target);
@@ -1043,4 +1050,42 @@ public static class PluginTools
     /// <summary>Hands something to the shell, the way the launcher does.</summary>
     private static void Start(string target)
         => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+
+    /// <summary>
+    /// Ouvre une application, dans son propre environnement si son manifeste en déclare un.
+    /// </summary>
+    /// <remarks>
+    /// Sans déclaration, on passe par le shell comme avant : c'est ce que veut une application du
+    /// système, qui doit hériter de la session de l'utilisateur. Avec déclaration, on compose
+    /// l'environnement, ce que le shell ne permet pas — d'où le lancement direct.
+    ///
+    /// <para>
+    /// Un environnement qu'on ne sait pas construire n'annule pas l'ouverture : l'outil démarre
+    /// quand même, et l'écran dit que son isolement n'a pas pu être posé. L'inverse — refuser
+    /// d'ouvrir — punirait l'utilisateur d'un défaut de manifeste.
+    /// </para>
+    /// </remarks>
+    private static string Ouvrir(string target, EnvironnementOutil? environnement)
+    {
+        if (environnement is null)
+        {
+            Start(target);
+
+            return "";
+        }
+
+        var depart = new ProcessStartInfo(target);
+        var refus = EnvironnementIsole.Preparer(depart, Resoudre(environnement.Dossier), environnement);
+
+        if (refus.Length > 0)
+        {
+            Start(target);
+
+            return refus;
+        }
+
+        Process.Start(depart);
+
+        return "";
+    }
 }
