@@ -30,6 +30,13 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        // Mode diagnostic : il n'indexe rien et n'envoie rien, il decrit un PDF tel que PdfPig le
+        // voit. Place avant tout le reste, parce qu'il ne demande ni racine, ni adresse, ni cle.
+        if (Argument(args, "--diag-pdf") is { } aDecrire)
+        {
+            return PdfDiagnostic.Run(aDecrire);
+        }
+
         var root = Argument(args, "--root");
         var url = Argument(args, "--url");
         var index = Argument(args, "--index") ?? "documents";

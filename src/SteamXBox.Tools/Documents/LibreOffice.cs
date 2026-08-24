@@ -115,7 +115,36 @@ public static class LibreOffice
     /// <param name="Problem">Why nothing was written, or empty on success.</param>
     public readonly record struct Result(string Produced, string Problem)
     {
+        private readonly string? _trace;
+
         public bool Worked => Produced.Length > 0;
+
+        /// <summary>
+        /// Ce que la route a compté en chemin, quand elle a de quoi le dire.
+        /// </summary>
+        /// <remarks>
+        /// <b>Porté par le résultat, et non par une propriété statique.</b> Le compte vivait sur la
+        /// classe qui l'écrit, et n'y était remis à zéro que par la route qui l'écrit : toute autre
+        /// conversion réussie relisait donc celui de la précédente et l'annonçait comme le sien. Une
+        /// conversion .docx vers .odt affichait « 412 morceau(x) dont 19 image(s) », comptés sur un
+        /// PDF converti dix minutes plus tôt.
+        ///
+        /// <para>
+        /// Attaché au résultat, il ne peut plus survivre à ce qu'il décrit. Vide pour les routes qui
+        /// ne comptent rien, ce qui est le cas de toutes sauf une.
+        /// </para>
+        ///
+        /// <para>
+        /// Lu à travers un champ qui accepte le nul : un <c>default(Result)</c> reste une valeur
+        /// légitime pour une structure, et rendre nul depuis une propriété déclarée non nulle
+        /// vaudrait à l'appelant une exception là où il attend une phrase vide.
+        /// </para>
+        /// </remarks>
+        public string Trace
+        {
+            get => _trace ?? "";
+            init => _trace = value;
+        }
     }
 
     /// <summary>

@@ -60,14 +60,31 @@ public static class PdfToDocument
     /// and web. The reading is the hard part and is done once; what differs between those formats is
     /// only how the same paragraphs and pictures are spelled.
     /// </remarks>
+    /// <param name="LeftPt">
+    /// Distance du bord gauche de la page, en points. Zero quand la position n'est pas connue.
+    /// </param>
+    /// <param name="TopPt">
+    /// Distance du HAUT de la page, en points — donc deja retournee. Un PDF compte du bas vers le
+    /// haut, Word compte du haut vers le bas, et confondre les deux pose chaque image a la verticale
+    /// opposee de la sienne. La conversion se fait une seule fois, dans <c>Pictures</c>, ou la
+    /// hauteur de la page est connue.
+    /// </param>
     internal readonly record struct Piece(
         string Text,
         byte[]? Image,
         bool Jpeg,
         double WidthPt,
-        double HeightPt)
+        double HeightPt,
+        double LeftPt = 0,
+        double TopPt = 0,
+        bool PageBreak = false,
+        string FontName = "",
+        double FontSize = 0)
     {
         public bool IsPicture => Image is not null;
+
+        /// <summary>Une image dont on sait ou elle etait posee sur la page.</summary>
+        public bool IsPlaced => IsPicture && (LeftPt > 0 || TopPt > 0);
     }
 
     /// <summary>Reads the PDF and writes the document beside it.</summary>
@@ -75,6 +92,17 @@ public static class PdfToDocument
     {
         try
         {
+            // Le cache d'images appartient au document en cours. Garde d'une conversion a l'autre,
+            // il ferait pointer le second .docx vers des relations du premier — un fichier que Word
+            // refuse d'ouvrir, et dont la cause serait introuvable dans le document lui-meme.
+            Deja.Clear();
+
+            // Le compte aussi appartient au document en cours, et pour la meme raison. Il n'etait
+            // remis a zero que par l'ecriture d'un .docx : une conversion vers txt, odt ou rtf
+            // gardait donc celui du .docx precedent et le rendait comme le sien.
+            Trace = "";
+            Verdict = "";
+
             var pieces = Read(input);
 
             if (!pieces.Any(piece => piece.Text.Length > 0))
@@ -116,7 +144,14 @@ public static class PdfToDocument
                     break;
             }
 
-            return new LibreOffice.Result(output, "");
+            // Le compte remonte avec le resultat : une conversion qui perd ses images doit le dire au
+            // moment ou elle les perd, pas obliger a ouvrir le fichier produit pour s'en apercevoir.
+            //
+            // Dans le resultat, et non plus dans une propriete statique que l'appelant irait relire :
+            // celle-ci survivait a la conversion qu'elle decrivait, et la suivante l'annoncait comme
+            // la sienne. Le champ Problem reste vide — une conversion qui a produit un fichier n'a
+            // pas de probleme, quoi qu'elle ait compte en chemin.
+            return new LibreOffice.Result(output, "") { Trace = Bilan };
         }
         catch (Exception exception)
         {
@@ -167,8 +202,36 @@ public static class PdfToDocument
 
         for (var number = 1; number <= text.Count; number++)
         {
+            // Une page du PDF devient une page du document. Sans cette coupure, les sept pages
+            // s'ecrivent en un seul flux continu — et comme les images sont ancrees « a la page »,
+            // celles des pages suivantes se posent aux bonnes coordonnees de la mauvaise page.
+            if (number > 1)
+            {
+                pieces.Add(new Piece("", null, false, 0, 0, 0, 0, PageBreak: true));
+            }
+
+            var page = pdf.GetPage(number);
             var paragraphs = text[number - 1];
-            var pictures = Pictures(pdf.GetPage(number));
+            var pictures = Pictures(page);
+
+            // Les blocs positionnes l'emportent quand le segmenteur en rend : le texte se pose alors
+            // ou il etait sur la page, au lieu de couler sous les images ancrees. Sinon on garde le
+            // flux, qui reste la seule lecture sure quand la segmentation ne donne rien.
+            var blocs = Blocks(page);
+
+            if (blocs.Count > 0)
+            {
+                pieces.AddRange(blocs);
+
+                foreach (var picture in pictures)
+                {
+                    pieces.Add(new Piece(
+                        "", picture.Bytes, picture.Jpeg, picture.Width, picture.Height,
+                        picture.Left, picture.Top));
+                }
+
+                continue;
+            }
 
             if (pictures.Count == 0)
             {
@@ -183,6 +246,120 @@ public static class PdfToDocument
     }
 
     /// <summary>One page's text, one entry per paragraph.</summary>
+    /// <summary>
+    /// Les blocs de texte de la page, avec leur place.
+    /// </summary>
+    /// <remarks>
+    /// L'autre lecture du texte, a cote de <see cref="Paragraphs"/> qui rend l'ordre de lecture sans
+    /// les coordonnees. Le segmenteur vient de PdfPig et n'a pas eu a etre ecrit : il regroupe les
+    /// mots en blocs — un titre, un paragraphe, une legende — ce qui fait quelques dizaines d'objets
+    /// par page la ou un cadre par mot en ferait des milliers.
+    ///
+    /// <para>
+    /// Le retournement vertical se fait ici, comme pour les images : un PDF compte du bas vers le
+    /// haut, Word du haut vers le bas.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Retire les caracteres qu'un fichier XML ne peut pas porter.
+    /// </summary>
+    /// <remarks>
+    /// Un PDF de production en contient : celui de test porte un 0x11, et l'ecriture s'arretait
+    /// dessus avec « hexadecimal value 0x11, is an invalid character ». Un document ne doit pas etre
+    /// perdu pour un octet de controle invisible — il est retire, le reste du texte passe.
+    ///
+    /// <para>
+    /// La liste autorisee est celle de la norme XML 1.0 : tabulation, saut de ligne, retour chariot,
+    /// puis tout a partir de l'espace, aux zones interdites pres.
+    /// </para>
+    /// </remarks>
+    private static string Propre(string texte)
+    {
+        var propre = new StringBuilder(texte.Length);
+
+        foreach (var lettre in texte)
+        {
+            if (lettre is '\t' or '\n' or '\r'
+                || (lettre >= ' ' && lettre <= '퟿')
+                || (lettre >= '' && lettre <= '�'))
+            {
+                propre.Append(lettre);
+            }
+        }
+
+        return propre.ToString();
+    }
+
+    private static List<Piece> Blocks(Page page)
+    {
+        var blocs = new List<Piece>();
+
+        try
+        {
+            var mots = page.GetWords().ToList();
+
+            if (mots.Count == 0)
+            {
+                return blocs;
+            }
+
+            foreach (var bloc in UglyToad.PdfPig.DocumentLayoutAnalysis.PageSegmenter
+                         .DocstrumBoundingBoxes.Instance.GetBlocks(mots))
+            {
+                var texte = Propre(bloc.Text.Replace("\r\n", " ").Replace('\n', ' ')).Trim();
+
+                if (texte.Length == 0)
+                {
+                    continue;
+                }
+
+                // La police et le corps dominants du bloc. Sans eux, tout sort en Calibri 11 : le
+                // texte d'un bloc de huit points est rendu en onze, deborde de sa case et parait
+                // decale vers le bas. Le mauvais placement vertical et la mauvaise police sont donc
+                // le meme defaut, pas deux.
+                //
+                // Le nom d'une police de PDF porte souvent un prefixe de sous-ensemble — six lettres
+                // et un plus, « ABCDEF+Arial » — que Word ne connait pas. Il est retire.
+                var lettres = bloc.TextLines
+                    .SelectMany(ligne => ligne.Words)
+                    .SelectMany(mot => mot.Letters)
+                    .ToList();
+
+                var police = lettres
+                    .GroupBy(l => l.FontName ?? "")
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.Key)
+                    .FirstOrDefault() ?? "";
+
+                var plus = police.IndexOf('+');
+
+                if (plus is >= 0 and < 8)
+                {
+                    police = police[(plus + 1)..];
+                }
+
+                var corps = lettres.Count > 0
+                    ? lettres.OrderByDescending(l => l.PointSize).ElementAt(lettres.Count / 2).PointSize
+                    : 0;
+
+                // Meme origine que pour les images : le cadre de la page, et non zero.
+                var cadre = page.MediaBox.Bounds;
+
+                blocs.Add(new Piece(
+                    texte, null, false, bloc.BoundingBox.Width, bloc.BoundingBox.Height,
+                    bloc.BoundingBox.Left - cadre.Left, cadre.Top - bloc.BoundingBox.Top,
+                    FontName: police, FontSize: corps));
+            }
+        }
+        catch (Exception)
+        {
+            // Un segmenteur qui echoue rend une page en flux, pas une conversion perdue.
+            return [];
+        }
+
+        return blocs;
+    }
+
     private static List<string> Paragraphs(Page page)
     {
         var paragraphs = new List<string>();
@@ -244,7 +421,18 @@ public static class PdfToDocument
         {
             var bounds = image.BoundingBox;
 
-            if (bounds.Width < 20 || bounds.Height < 20)
+            // Trente-deux points, mesures SUR CETTE PROPRIETE avec l'extracteur qui la rend —
+            // « SteamXBox.Indexer --diag-pdf <fichier> » imprime la distribution complete. Sur le
+            // PDF de test : 37 images posees, cote median 32,9 points, et la population tombe de 24
+            // a 9 entre 28 et 40. C'est la que la decoration se separe de l'illustration ; a 20 il
+            // en restait 27, soit quatre par page inserees en ligne, ce qui hachait le texte.
+            //
+            // Cette valeur ne doit pas etre relevee sur une mesure faite ailleurs. Portee a 64 le
+            // 17 aout d'apres des chiffres de pdfimages — qui donne les pixels de l'image SOURCE
+            // divises par sa resolution, et non la taille a laquelle la page la POSE — elle a vide
+            // le document de toutes ses images. Les deux grandeurs n'ont aucun rapport : un PDF
+            // reduit ses vignettes.
+            if (bounds.Width < 32 || bounds.Height < 32)
             {
                 continue;
             }
@@ -272,7 +460,17 @@ public static class PdfToDocument
             // its place in the text: it is the amount of reading that happens before it.
             var above = words.Count(word => word.BoundingBox.Bottom >= bounds.Top);
 
-            pictures.Add(new Picture(bytes, jpeg, bounds.Width, bounds.Height, above));
+            // Retourne ici, une fois pour toutes : un PDF mesure du bas de la page vers le haut,
+            // Word du haut vers le bas. Le calcul se fait la ou la hauteur de la page est connue,
+            // pour qu'aucun ecrivain n'ait a le refaire ni a se tromper de sens.
+            // Le repere de la page ne commence pas toujours a zero : une page rognee porte un cadre
+            // dont le coin bas-gauche est ailleurs, et toutes les coordonnees s'en trouvent decalees
+            // d'autant. L'origine est donc retiree avant conversion, sur les deux axes.
+            var cadre = page.MediaBox.Bounds;
+            var depuisLeHaut = cadre.Top - bounds.Top;
+
+            pictures.Add(new Picture(
+                bytes, jpeg, bounds.Width, bounds.Height, above, bounds.Left - cadre.Left, depuisLeHaut));
         }
 
         return pictures;
@@ -284,7 +482,9 @@ public static class PdfToDocument
         bool Jpeg,
         double Width,
         double Height,
-        int WordsAbove);
+        int WordsAbove,
+        double Left = 0,
+        double Top = 0);
 
     /// <summary>Whether these bytes open a JPEG file.</summary>
     private static bool IsJpeg(byte[] bytes)
@@ -329,7 +529,9 @@ public static class PdfToDocument
         {
             foreach (var (_, picture) in placed.Where(entry => entry.Index == index))
             {
-                pieces.Add(new Piece("", picture.Bytes, picture.Jpeg, picture.Width, picture.Height));
+                pieces.Add(new Piece(
+                    "", picture.Bytes, picture.Jpeg, picture.Width, picture.Height,
+                    picture.Left, picture.Top));
             }
 
             if (index < paragraphs.Count)
@@ -444,16 +646,159 @@ public static class PdfToDocument
     }
 
     /// <summary>
+    /// Ce que la derniere conversion a vu passer, etage par etage.
+    /// </summary>
+    /// <remarks>
+    /// Pose apres avoir lu quatre fois une chaine dont chaque maillon est correct et dont le
+    /// resultat ne l'est pas : 19 images extraites et mesurees, zero dans le .docx. Quand la lecture
+    /// du code ne suffit plus, on compte a l'execution.
+    /// </remarks>
+    /// <remarks>
+    /// Prive, et c'est le correctif : lu du dehors, il survivait a la conversion qu'il decrit. Ce
+    /// qui sort d'ici sort par le resultat, avec le fichier qu'il commente.
+    /// </remarks>
+    private static string Trace { get; set; } = "";
+
+    /// <summary>Ce que le validateur du SDK reproche a l'ancre, releve une fois par conversion.</summary>
+    /// <inheritdoc cref="Trace" path="/remarks"/>
+    private static string Verdict { get; set; } = "";
+
+    /// <summary>Le compte et le verdict en une phrase, telle qu'elle part vers l'appelant.</summary>
+    /// <remarks>
+    /// Reunis ici plutot que chez l'appelant : les deux decrivent la meme conversion, et les laisser
+    /// se rejoindre plus loin obligeait chaque lecteur a refaire le meme assemblage — et a savoir
+    /// que le second peut etre vide quand le premier ne l'est pas.
+    /// </remarks>
+    private static string Bilan
+        => (Trace.Length, Verdict.Length) switch
+        {
+            (0, 0) => "",
+            (0, _) => Verdict,
+            (_, 0) => Trace,
+            _ => $"{Trace} — {Verdict}",
+        };
+
+    /// <summary>
+    /// Vrai quand le document depasse le plafond d'objets positionnes et repasse au flux.
+    /// </summary>
+    /// <remarks>
+    /// Porte ici plutot que passe en parametre parce que l'ecrivain d'images est appele depuis la
+    /// meme boucle, et qu'un document se decide en entier : melanger des images ancrees et un texte
+    /// en flux donnerait le pire des deux, des illustrations posees sur un texte qui n'est plus la
+    /// ou elles l'attendent.
+    /// </remarks>
+    private static bool Deborde;
+
+    /// <summary>
+    /// La police, le corps et la graisse d'un bloc, tels que Word les attend.
+    /// </summary>
+    /// <remarks>
+    /// Trois corrections que la mesure du 19 aout a rendues necessaires, sur le document de test :
+    ///
+    /// <list type="bullet">
+    ///   <item>
+    ///     <b>Type3 n'est pas une police</b> : c'est une categorie du format PDF, des glyphes
+    ///     dessines dans le fichier lui-meme. Ecrit tel quel, il demande a Word une police qui
+    ///     n'existe nulle part — 223 blocs sur ce document. Mieux vaut ne rien demander et laisser
+    ///     la police du document.
+    ///   </item>
+    ///   <item>
+    ///     <b>Le corps etait deux fois trop petit</b> : 4,5 et 5 points la ou le document en porte
+    ///     9 et 10. PointSize rend deja des demi-points sur ce lecteur, donc le doubler etait de
+    ///     trop.
+    ///   </item>
+    ///   <item>
+    ///     <b>La graisse vit dans le nom</b> — GraphikLCG-Bold, -Semibold. Word attend une famille
+    ///     et un attribut ; le suffixe est retire du nom et devient du gras ou de l'italique.
+    ///   </item>
+    /// </list>
+    /// </remarks>
+    private static RunProperties Apparence(Piece piece)
+    {
+        var nom = piece.FontName;
+        var gras = false;
+        var italique = false;
+
+        var tiret = nom.LastIndexOf('-');
+
+        if (tiret > 0)
+        {
+            var variante = nom[(tiret + 1)..];
+            gras = variante.Contains("Bold", StringComparison.OrdinalIgnoreCase)
+                   || variante.Contains("Semibold", StringComparison.OrdinalIgnoreCase)
+                   || variante.Contains("Black", StringComparison.OrdinalIgnoreCase);
+            italique = variante.Contains("Italic", StringComparison.OrdinalIgnoreCase)
+                       || variante.Contains("Oblique", StringComparison.OrdinalIgnoreCase);
+
+            if (gras || italique || variante.Equals("Regular", StringComparison.OrdinalIgnoreCase))
+            {
+                nom = nom[..tiret];
+            }
+        }
+
+        var proprietes = new RunProperties();
+
+        // Type3 designe des glyphes dessines dans le PDF, pas une famille installable.
+        if (nom.Length > 0 && !nom.Equals("Type3", StringComparison.OrdinalIgnoreCase))
+        {
+            proprietes.AppendChild(new RunFonts { Ascii = nom, HighAnsi = nom });
+        }
+
+        if (gras)
+        {
+            proprietes.AppendChild(new Bold());
+        }
+
+        if (italique)
+        {
+            proprietes.AppendChild(new Italic());
+        }
+
+        proprietes.AppendChild(new FontSize { Val = ((int)Math.Round(piece.FontSize * 2)).ToString() });
+
+        return proprietes;
+    }
+
+    /// <summary>
     /// Writes the pieces as a Word document.
     /// </summary>
     /// <remarks>
-    /// Paragraphs and inline pictures, and nothing else — no frames, no shapes, no anchoring. That is
-    /// still the whole point: the document Word struggled with had ten thousand positioned objects,
-    /// and this has none. A picture here sits in the text like a letter does, so it moves when the
-    /// text above it is edited instead of staying behind at a coordinate.
+    /// Deux ecritures dans une seule, et c'est le compte des objets positionnes qui tranche. Sous le
+    /// plafond, un bloc dont on connait la place devient un cadre pose a ses coordonnees et une
+    /// image ancree a la page ; au-dela, tout coule — paragraphes et images en ligne, une image
+    /// posee dans le texte comme une lettre, qui suit ce qu'on edite au lieu de rester a une
+    /// coordonnee.
+    ///
+    /// <para>
+    /// La seconde forme est celle que ce convertisseur a portee seule pendant longtemps, et elle
+    /// reste le repli : le document Word qui ramait en portait dix mille, d'objets positionnes.
+    /// </para>
     /// </remarks>
     private static void WriteDocx(string output, IReadOnlyList<Piece> pieces)
     {
+        // Compte avant d'ecrire, et repli au-dela du plafond.
+        //
+        // Un objet positionne coute a Word ce qu'un paragraphe en flux ne coute pas. La version
+        // positionnee de ce convertisseur a deja ete abandonnee une fois pour cette raison : dix
+        // mille objets pour quatre cents paragraphes, et le document ramait a chaque coup de molette.
+        // Mesure du 18 aout sur le PDF de test : 314 cadres et 19 ancres pour sept pages, soit
+        // quarante-cinq objets par page — tenable, mais la pente est la meme.
+        //
+        // Mille est le plafond de depart, a confirmer sur une machine modeste : c'est elle qui
+        // decide, pas celle de developpement. Au-dela, le texte coule et les images reprennent le
+        // fil, ce qui donne un document mal place plutot qu'un document qui fige Word.
+        const int PlafondObjets = 1000;
+
+        var positionnes = pieces.Count(p => p.LeftPt > 0 || p.TopPt > 0);
+        var trop = positionnes > PlafondObjets;
+        Deborde = trop;
+
+        Trace = $"{pieces.Count} morceau(x) dont {pieces.Count(p => p.IsPicture)} image(s), "
+                + $"{positionnes} positionne(s)"
+                + (trop ? $" — au-dela de {PlafondObjets}, mise en page abandonnee pour le flux" : "");
+
+        Verdict = "";
+
         using var document = WordprocessingDocument.Create(output, WordprocessingDocumentType.Document);
 
         var main = document.AddMainDocumentPart();
@@ -464,21 +809,76 @@ public static class PdfToDocument
 
         foreach (var piece in pieces)
         {
+            if (piece.PageBreak)
+            {
+                body.AppendChild(new Paragraph(new Run(new Break { Type = BreakValues.Page })));
+                continue;
+            }
+
             if (piece.IsPicture)
             {
                 body.AppendChild(PictureParagraph(main, piece, ++picture));
                 continue;
             }
 
-            body.AppendChild(new Paragraph(
-                new Run(new Text(piece.Text) { Space = SpaceProcessingModeValues.Preserve })));
+            // La police et le corps du bloc, quand ils ont ete releves. Un corps ecrit en demi-points
+            // — la convention de Word — et une police designee par son nom sans le prefixe de
+            // sous-ensemble du PDF.
+            var run = piece.FontSize > 0
+                ? new Run(Apparence(piece), new Text(piece.Text) { Space = SpaceProcessingModeValues.Preserve })
+                : new Run(new Text(piece.Text) { Space = SpaceProcessingModeValues.Preserve });
+
+            if (trop)
+            {
+                body.AppendChild(new Paragraph(run));
+                continue;
+            }
+
+
+            // Un bloc dont on connait la place devient un cadre pose a ses coordonnees ; le reste
+            // coule. Le cadre est le mecanisme de Word lui-meme, en twips — vingt par point — et il
+            // evite les zones de texte DrawingML, bien plus lourdes a construire pour le meme effet.
+            body.AppendChild(piece.LeftPt > 0 || piece.TopPt > 0
+                ? new Paragraph(
+                    new ParagraphProperties(new FrameProperties
+                    {
+                        X = ((int)(piece.LeftPt * 20)).ToString(),
+                        Y = ((int)(piece.TopPt * 20)).ToString(),
+                        Width = ((uint)Math.Max(1, piece.WidthPt * 20)).ToString(),
+                        HorizontalPosition = HorizontalAnchorValues.Page,
+                        VerticalPosition = VerticalAnchorValues.Page,
+                        Wrap = TextWrappingValues.None,
+                    }),
+                    run)
+                : new Paragraph(run));
         }
 
         main.Document.Save();
     }
 
     /// <summary>
-    /// One picture, in the flow, at the size it had on the page.
+    /// Les images déjà écrites, par empreinte de leur contenu.
+    /// </summary>
+    /// <remarks>
+    /// Un PDF pose la même icône des dizaines de fois : mesuré sur le document de test, le même objet
+    /// apparaît quatre fois sur une seule page, et 129 insertions couvrent bien moins d'images
+    /// distinctes. Sans ce cache, chacune est réencodée et stockée à part dans le .docx.
+    ///
+    /// <para>
+    /// La clé est l'empreinte des octets plutôt que le numéro d'objet du PDF, que l'extracteur
+    /// n'expose pas : deux insertions du même objet portent les mêmes octets, donc le résultat est
+    /// identique et ne dépend d'aucun détail de format.
+    /// </para>
+    ///
+    /// <para>
+    /// Vidé au début de chaque conversion : une relation d'image appartient au document qui la porte,
+    /// et réutiliser l'identifiant d'un document précédent produirait un fichier illisible.
+    /// </para>
+    /// </remarks>
+    private static readonly Dictionary<string, string> Deja = [];
+
+    /// <summary>
+    /// One picture, at the size it had on the page — anchored where it stood, or in the flow.
     /// </summary>
     /// <remarks>
     /// Kept at its printed size rather than its pixel size. A PDF often stores a picture far larger
@@ -494,11 +894,20 @@ public static class PdfToDocument
     {
         const long UnitsPerPoint = 12700;
 
-        var part = main.AddImagePart(piece.Jpeg ? ImagePartType.Jpeg : ImagePartType.Png);
+        var empreinte = System.Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(piece.Image!));
 
-        using (var bytes = new MemoryStream(piece.Image!))
+        if (!Deja.TryGetValue(empreinte, out var identifiant))
         {
-            part.FeedData(bytes);
+            var part = main.AddImagePart(piece.Jpeg ? ImagePartType.Jpeg : ImagePartType.Png);
+
+            using (var bytes = new MemoryStream(piece.Image!))
+            {
+                part.FeedData(bytes);
+            }
+
+            identifiant = main.GetIdOfPart(part);
+            Deja[empreinte] = identifiant;
         }
 
         var width = (long)Math.Max(1, piece.WidthPt * UnitsPerPoint);
@@ -516,7 +925,7 @@ public static class PdfToDocument
                         },
                         new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureDrawingProperties()),
                     new DocumentFormat.OpenXml.Drawing.Pictures.BlipFill(
-                        new DocumentFormat.OpenXml.Drawing.Blip { Embed = main.GetIdOfPart(part) },
+                        new DocumentFormat.OpenXml.Drawing.Blip { Embed = identifiant },
                         new DocumentFormat.OpenXml.Drawing.Stretch(
                             new DocumentFormat.OpenXml.Drawing.FillRectangle())),
                     new DocumentFormat.OpenXml.Drawing.Pictures.ShapeProperties(
@@ -552,6 +961,139 @@ public static class PdfToDocument
             DistanceFromRight = 0U,
         };
 
-        return new Paragraph(new Run(new Drawing(inline)));
+        // Ancrage a la page quand la position est connue, flux sinon.
+        //
+        // Premiere tentative le 17 aout : le document est sorti a 23 Ko, texte seul, sans un seul
+        // element de dessin. Lu comme « les images disparaissent », c'etait en fait une ecriture
+        // interrompue — le paquet etait cree, Save() n'etait jamais atteint, et le catch de Convert
+        // avalait le message. Une image qui manque et une exception silencieuse se ressemblent
+        // beaucoup vues du fichier produit ; elles ne se ressemblent plus depuis que le compte et le
+        // message remontent a l'ecran.
+        //
+        // Si l'ecriture echoue encore, la fenetre le dira, et le message nommera la cause.
+        // L'ancre est CONSTRUITE et VALIDEE, mais pas ecrite : le document sort avec ses images en
+        // flux, comme avant, et le validateur du SDK dit ce qu'il reproche a l'ancre dans le message
+        // de retour de la conversion. Deviner l'element fautif a coute deux essais ; le demander a
+        // celui qui connait le schema en coute zero, et ne peut rien casser puisque le resultat de
+        // l'ancre n'est pas utilise.
+        if (piece.IsPlaced && Verdict.Length == 0)
+        {
+            try
+            {
+                var essai = new Paragraph(new Run(new Drawing(
+                    Ancre(piece, width, height, number, name, (DocumentFormat.OpenXml.Drawing.Graphic)graphic.CloneNode(true)))));
+
+                var fautes = new DocumentFormat.OpenXml.Validation.OpenXmlValidator()
+                    .Validate(essai)
+                    .Take(2)
+                    .Select(f => $"{f.Description} [{f.Path?.XPath}]")
+                    .ToList();
+
+                Verdict = fautes.Count == 0
+                    ? "ancre valide selon le SDK"
+                    : "ancre refusee : " + string.Join(" | ", fautes);
+            }
+            catch (Exception exception)
+            {
+                Verdict = $"ancre : {exception.GetType().Name} — {exception.Message}";
+            }
+        }
+
+        // Ancrage a la page quand la position est connue, flux sinon.
+        //
+        // Deux tentatives ont echoue avant celle-ci, chacune en devinant l'element fautif : le .docx
+        // sortait a 23 Ko, texte partiel, aucun dessin — l'ecriture s'interrompait a la premiere
+        // image et Save() n'etait jamais atteint. C'est OpenXmlValidator qui a tranche en une passe
+        // la ou deux relectures n'avaient rien donne : « unexpected child element positionH,
+        // expected simplePos ». SimplePosition est obligatoire en premier enfant meme quand
+        // l'attribut SimplePos vaut faux, et c'est exactement ce que la deuxieme tentative avait
+        // retire.
+        //
+        // La validation reste en place au-dessus : elle ne coute rien, ne bloque pas l'ecriture, et
+        // le verdict part dans le journal a chaque conversion.
+        // Une COPIE du graphique, jamais l'original : il est deja rattache a l'Inline construit
+        // au-dessus, et un element OpenXML n'appartient qu'a un seul parent. Le validateur ne
+        // pouvait pas le voir — il n'a jamais examine qu'une copie —, ce qui explique une ancre
+        // declaree valide et une ecriture qui casse quand meme au meme endroit.
+        return piece.IsPlaced && !Deborde
+            ? new Paragraph(new Run(new Drawing(Ancre(
+                piece, width, height, number, name,
+                (DocumentFormat.OpenXml.Drawing.Graphic)graphic.CloneNode(true)))))
+            : new Paragraph(new Run(new Drawing(inline)));
+    }
+
+    /// <summary>
+    /// L'image posee a ses coordonnees d'origine, sur la page.
+    /// </summary>
+    /// <remarks>
+    /// Ancree a la page et non au paragraphe : c'est la page qui porte le reperage du PDF, et un
+    /// ancrage au paragraphe suivrait le texte au lieu de rester ou l'image etait.
+    ///
+    /// <para>
+    /// <c>BehindDoc</c> est faux et l'habillage nul : l'image se pose par-dessus, sans repousser le
+    /// texte. Tant que le texte reste en flux, les deux se recouvrent forcement par endroits — c'est
+    /// la limite assumee de cette premiere etape, et c'est ce que les cadres de texte regleront.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>AllowOverlap</c> est vrai : sur une page dense, Word deplacerait sinon les images les unes
+    /// pour les autres, ce qui defait exactement ce qu'on vient de calculer.
+    /// </para>
+    /// </remarks>
+    private static DocumentFormat.OpenXml.Drawing.Wordprocessing.Anchor Ancre(
+        Piece piece,
+        long width,
+        long height,
+        uint number,
+        string name,
+        DocumentFormat.OpenXml.Drawing.Graphic graphic)
+    {
+        const long UnitsPerPoint = 12700;
+
+        // SimplePosition est OBLIGATOIRE comme premier enfant, meme quand l'attribut SimplePos vaut
+        // faux. Retire le 18 aout en croyant qu'il se contredisait avec l'attribut, il a fait
+        // echouer l'ecriture ; c'est le validateur du SDK qui a tranche, et pas une relecture de
+        // plus : « unexpected child element positionH, expected simplePos ».
+        return new DocumentFormat.OpenXml.Drawing.Wordprocessing.Anchor(
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.SimplePosition { X = 0L, Y = 0L },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.HorizontalPosition(
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.PositionOffset(
+                    ((long)(piece.LeftPt * UnitsPerPoint)).ToString()))
+            {
+                RelativeFrom = DocumentFormat.OpenXml.Drawing.Wordprocessing
+                    .HorizontalRelativePositionValues.Page,
+            },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.VerticalPosition(
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.PositionOffset(
+                    ((long)(piece.TopPt * UnitsPerPoint)).ToString()))
+            {
+                RelativeFrom = DocumentFormat.OpenXml.Drawing.Wordprocessing
+                    .VerticalRelativePositionValues.Page,
+            },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent { Cx = width, Cy = height },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.EffectExtent
+            {
+                LeftEdge = 0,
+                TopEdge = 0,
+                RightEdge = 0,
+                BottomEdge = 0,
+            },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.WrapNone(),
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties { Id = number, Name = name },
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.NonVisualGraphicFrameDrawingProperties(
+                new DocumentFormat.OpenXml.Drawing.GraphicFrameLocks { NoChangeAspect = true }),
+            graphic)
+        {
+            DistanceFromTop = 0U,
+            DistanceFromBottom = 0U,
+            DistanceFromLeft = 0U,
+            DistanceFromRight = 0U,
+            SimplePos = false,
+            RelativeHeight = number * 10U,
+            BehindDoc = false,
+            Locked = false,
+            LayoutInCell = true,
+            AllowOverlap = true,
+        };
     }
 }
