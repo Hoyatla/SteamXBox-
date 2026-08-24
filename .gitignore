@@ -76,3 +76,13 @@ Library/archive/
 # datee. Le depot en portait soixante-cinq fichiers, dont la seule lecture utile
 # etait le resume — et le protocole, lui, est ecrit dans docs/.
 /mesures/
+
+# Releves du moniteur : un fichier par lancement, nomme a la minute. Vingt-cinq
+# d'entre eux, trente-trois megaoctets, s'etaient accumules a la racine avant
+# d'avoir un dossier a eux.
+/Moniteur/
+
+# Carnets de l'assistant : ce que l'utilisateur et l'assistant local se notent
+# pendant une session. Des donnees personnelles, pas du code — et le produit les
+# efface lui-meme au bout d'un mois sans ouverture.
+/Travaux/

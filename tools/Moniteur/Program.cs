@@ -39,11 +39,49 @@ internal static class Program
     private static StreamWriter _log = StreamWriter.Null;
     private static readonly Queue<string> History = new();
 
+    /// <summary>Où les relevés se posent : un dossier à eux, à côté du produit.</summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> Un relevé par lancement, nommé à la minute, écrit à la
+    /// racine du produit : vingt-cinq fichiers et trente-trois mégaoctets s'y étaient accumulés,
+    /// mêlés aux exécutables et aux scripts. Une sortie d'outil qui encombre l'endroit où l'on vient
+    /// chercher l'outil.
+    ///
+    /// <para>
+    /// « Moniteur » plutôt que « Monitor debug » : ces relevés ne viennent pas que du lanceur de
+    /// débogage — la tuile du moniteur en produit autant — et les dossiers du produit se nomment
+    /// déjà d'un mot français sans espace, comme <c>Outils</c>, <c>Modeles</c> et <c>Travaux</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Le dossier ne se crée pas toujours : le produit peut vivre dans Program Files sans que la
+    /// session ait de quoi y écrire. On le dit et on reste à la racine plutôt que de refuser de
+    /// démarrer — un moniteur qui ne se lance pas est un moniteur qui n'observe rien, et c'est
+    /// précisément quand quelque chose va mal qu'on le lance.
+    /// </para>
+    /// </remarks>
+    private static string Journaux()
+    {
+        var dossier = Path.Combine(AppContext.BaseDirectory, "Moniteur");
+
+        try
+        {
+            Directory.CreateDirectory(dossier);
+
+            return dossier;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine($"Dossier « Moniteur » impossible ({exception.Message}) : relevé à la racine.");
+
+            return AppContext.BaseDirectory;
+        }
+    }
+
     private static void Main()
     {
         Console.OutputEncoding = Encoding.UTF8;
 
-        var path = Path.Combine(AppContext.BaseDirectory, $"moniteur-{DateTime.Now:yyyy-MM-dd-HHmm}.log");
+        var path = Path.Combine(Journaux(), $"moniteur-{DateTime.Now:yyyy-MM-dd-HHmm}.log");
         _log = new StreamWriter(path, append: true) { AutoFlush = true };
 
         Loud($"Moniteur SteamXBox — {Path.GetFileName(path)}");
