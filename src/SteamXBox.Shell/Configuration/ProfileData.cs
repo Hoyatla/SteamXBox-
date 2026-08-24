@@ -32,6 +32,14 @@ public sealed class ProfileData
     public double RightPadSensitivity { get; set; } = 380.0;
 
     /// <summary>
+    /// Percentage of the base right pad speed applied to the cursor. 100 = full base speed,
+    /// 0 = immobile. The base speed (<see cref="RightPadSensitivity"/>) stays fixed; the
+    /// slider controls this multiplier.
+    /// </summary>
+    [JsonPropertyName("rightPadSensitivityPercent")]
+    public double RightPadSensitivityPercent { get; set; } = 100.0;
+
+    /// <summary>
     /// Wheel units per pad unit for left pad scrolling. A full pad swipe spans 2.0 units, so 10
     /// gives about 20 notches per swipe. The old 600 default was roughly 60x too fast.
     /// </summary>

@@ -61,15 +61,47 @@ public static class SteamControllerDefaults
     /// </remarks>
     /// <para>
     /// Une seule instance, figee, pour la meme raison que dans les deux autres fichiers : un
-    /// enregistrement compare ses dictionnaires par reference.
+    /// enregistrement compare ses dictionnaires par reference. Construite au premier acces et non
+    /// par l'initialiseur de type — <c>Deferred</c>, juste en dessous, dit pourquoi.
     /// </para>
-    public static readonly Sc2XboxedProfileSettings Settings = Sc2XboxedProfileSettings.Bare with
-    {
-        HasTrackpads = true,
-        LeftStickMode = StickMotionMode.ArrowKeys,
-        RightStickMode = StickMotionMode.Pointer,
-        XboxButtons = ButtonMap.ToDictionary(Kind),
-    };
+    public static Sc2XboxedProfileSettings Settings => Deferred.Value;
+
+    /// <summary>
+    /// Les memes reglages, construits au premier acces plutot que par l'initialiseur de type.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le defaut que ceci corrige.</b> Un cycle entre deux initialiseurs de type.
+    /// <see cref="Sc2XboxedProfileSettings"/> construit son <c>Bare</c> ; l'initialiseur d'instance
+    /// de cet enregistrement appelle <c>XboxButtonMap.Default</c>, qui lit <see cref="LeftSide"/>
+    /// — donc l'initialiseur de cette classe-ci. Celui-ci relisait <c>Bare</c>, encore a null
+    /// puisque toujours en cours de construction plus bas dans la meme pile. <c>null with { ... }</c>
+    /// leve une NullReferenceException, l'initialiseur de type est marque en echec, et toute lecture
+    /// ulterieure de cette classe releve la meme exception jusqu'a la fin du processus.
+    ///
+    /// <para>
+    /// Lequel des deux initialiseurs commencait decidait de tout, et rien d'autre : entrer par
+    /// <see cref="Settings"/> allait bien, entrer par <c>Bare</c> cassait tout. Invisible tant qu'un
+    /// seul thread ouvre le bal, et une serie de tests sur un thread par coeur tire cet ordre au
+    /// sort a chaque execution — d'ou 68 tests en echec d'un coup, une fois sur vingt, sans qu'aucun
+    /// d'eux ne soit en cause.
+    /// </para>
+    ///
+    /// <para>
+    /// Sortir ces reglages de l'initialiseur de type rend le graphe acyclique : cette classe ne
+    /// depend plus que de ses propres tableaux, et <c>Bare</c> n'est lu qu'une fois celui-ci
+    /// termine. <see cref="Lazy{T}"/> et non un <c>??=</c> : l'instance doit rester unique, deux
+    /// threads arrivant ensemble en fabriqueraient deux et des reglages relus ne seraient plus egaux
+    /// aux premiers.
+    /// </para>
+    /// </remarks>
+    private static readonly Lazy<Sc2XboxedProfileSettings> Deferred = new(()
+        => Sc2XboxedProfileSettings.Bare with
+        {
+            HasTrackpads = true,
+            LeftStickMode = StickMotionMode.ArrowKeys,
+            RightStickMode = StickMotionMode.Pointer,
+            XboxButtons = ButtonMap.ToDictionary(Kind),
+        });
 
     /// <summary>Le reglage manette-native de depart d'une manette Steam.</summary>
     public static XboxTuning Tuning => Settings.XboxTuning;

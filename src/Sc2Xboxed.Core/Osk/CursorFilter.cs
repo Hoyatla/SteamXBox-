@@ -37,6 +37,7 @@ public sealed class CursorFilter
     private const double FallbackDeltaSeconds = 1.0 / 125.0;
 
     private readonly double _smoothingScale;
+    private readonly Func<int> _clock;
 
     private bool _has;
     private int _lastTick;
@@ -48,11 +49,23 @@ public sealed class CursorFilter
     /// The user's cursor smoothing setting, 0 to 1. It scales how hard a resting finger is filtered;
     /// it does not change the behaviour under real movement, which stays responsive either way.
     /// </param>
-    public CursorFilter(double smoothing)
+    /// <param name="clock">
+    /// Where the frame interval comes from, in milliseconds. <see cref="Environment.TickCount"/> en
+    /// production.
+    /// </param>
+    /// <remarks>
+    /// L'horloge est un parametre parce que le comportement teste <i>est</i> une fonction du temps :
+    /// le lissage s'adapte a la vitesse, donc a l'intervalle entre deux echantillons. Les tests
+    /// espacaient les echantillons avec des <c>Thread.Sleep(8)</c> ; sous charge ces huit
+    /// millisecondes en deviennent quarante, l'intervalle mesure change, et le filtre — correct —
+    /// rend un autre resultat. Le test devenait alors une mesure de la charge de la machine.
+    /// </remarks>
+    public CursorFilter(double smoothing, Func<int>? clock = null)
     {
         // A high setting means "smooth a lot", which means a lower cutoff.
         var clamped = Math.Clamp(smoothing, 0.05, 1.0);
         _smoothingScale = 1.0 / clamped;
+        _clock = clock ?? (() => Environment.TickCount);
     }
 
     public double X => _x;
@@ -63,7 +76,7 @@ public sealed class CursorFilter
 
     public void Update(double rawX, double rawY)
     {
-        int tick = Environment.TickCount;
+        int tick = _clock();
 
         if (!_has)
         {

@@ -328,8 +328,10 @@ public partial class ProfileViewModel : ObservableObject
         ActiveEdit.Buttons[key] = value;
         OnPropertyChanged(ButtonPropName(key));
 
-        // Enregistrement automatique retire le 14 aout : il ecrivait a chaque cran de curseur.
-
+        // Comme pour les curseurs : un bouton reassigne puis oublie doit arriver sur le disque,
+        // sinon le noyau continue d'appliquer l'ancien profil sans que rien ne le dise. Le
+        // requetage est reparti dans RequestSave, qui limite a une ecriture par tranche de 600 ms.
+        RequestSave();
     }
     private string GetMotion(string key) =>
         ActiveEdit?.Motions.GetValueOrDefault(key) ?? DefaultMotions.GetValueOrDefault(key) ?? "";
@@ -366,7 +368,6 @@ public partial class ProfileViewModel : ObservableObject
 
     // Movement settings keep absolute ranges with a meaningful zero: 0% dead zone means no dead zone.
     // Centring these on a tuned value made "50%" arbitrary and left no way to actually turn one off.
-    private const double RightPadSensMin = 200.0, RightPadSensMax = 2000.0;
     private const double LeftPadSensMin = 1.0, LeftPadSensMax = 20.0;
     private const double StickDeadZoneMin = 0.0, StickDeadZoneMax = 1.0;
     private const double RightPadDeadZoneMin = 0.0, RightPadDeadZoneMax = 0.005;
@@ -536,33 +537,33 @@ public partial class ProfileViewModel : ObservableObject
         write(ActiveEdit, FromPercent(percent, min, max));
         OnPropertyChanged(percentName);
         OnPropertyChanged(displayName);
-
+        RequestSave();
     }
 
     /// <summary>
     /// Writes the edited profile to disk shortly after the last change.
     /// </summary>
     /// <remarks>
-    /// Every slider and every button box wrote into <see cref="ActiveEdit"/> and stopped there. The
-    /// file was only touched by the Save and Apply buttons, so a user who moved a slider and went
-    /// back to playing lost the change, and nothing anywhere said so — the core then went on
-    /// applying a profile written days earlier, faithfully and to the wrong values.
+    /// Every slider (<see cref="SetPercent"/>) and every button box (<see cref="SetButton"/>) calls
+    /// this, so an adjustment reaches the disk on its own. Before the wiring, the file was only
+    /// touched by the Save and Apply buttons, and a user who moved a slider and went back to playing
+    /// lost the change — the core then went on applying a profile written days earlier, faithfully
+    /// and to the wrong values.
     ///
     /// <para>
-    /// Measured 12 August: the haptic pulse leaving for the controller was 594 µs, exactly the
-    /// 0.99 force stored in "Steam Controller perso" on the 10th, while the day's adjustments had
-    /// never reached the disk. Not one profile file had been written that day.
+    /// The wiring was removed on 14 August 2026 because it appeared to write at every slider tick,
+    /// and restored on 17 August 2026: without it, moving the right pad sensitivity slider changed
+    /// nothing, because the core's live reload only ever sees what reaches the disk.
     /// </para>
     ///
     /// <para>
-    /// The overlay's own settings already saved themselves from their setters; the profile's did
-    /// not. Two opposite behaviours in one window is not a preference the user can learn.
+    /// The throttle below keeps the writes to one per drag interval — first change written at once,
+    /// the rest coalesced — and the core's profile watcher waits for quiet before reloading, so the
+    /// write is not the danger the 14 August removal feared.
     /// </para>
     ///
     /// <para>
-    /// Delayed rather than immediate because a slider raises this on every pixel of the drag, and a
-    /// file rewritten a hundred times per gesture is a file that will one day be caught half
-    /// written. Only the assignment stays manual: saving the values is what the user expects to be
+    /// Only the assignment stays manual: saving the values is what the user expects to be
     /// automatic, binding a profile to a controller is a decision.
     /// </para>
     /// </remarks>
@@ -638,9 +639,15 @@ public partial class ProfileViewModel : ObservableObject
 
     public double RightPadSensitivityPercent
     {
-        get => GetPercent(p => p.RightPadSensitivity, RightPadSensMin, RightPadSensMax);
-        set => SetPercent((p, v) => p.RightPadSensitivity = Math.Round(v), value, RightPadSensMin, RightPadSensMax,
-            nameof(RightPadSensitivityPercent), nameof(RightPadSensitivityDisplay));
+        get => ActiveEdit is null ? 100.0 : ActiveEdit.RightPadSensitivityPercent;
+        set
+        {
+            if (ActiveEdit is null) return;
+            ActiveEdit.RightPadSensitivityPercent = Math.Round(Math.Clamp(value, 0.0, 100.0));
+            OnPropertyChanged(nameof(RightPadSensitivityPercent));
+            OnPropertyChanged(nameof(RightPadSensitivityDisplay));
+            RequestSave();
+        }
     }
     public string RightPadSensitivityDisplay => $"{RightPadSensitivityPercent:0} %";
 

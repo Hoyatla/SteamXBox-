@@ -87,15 +87,25 @@ public static class Ps5ControllerDefaults
     /// <para>
     /// Une seule instance, figee. Recalculee a chaque appel, elle fabriquait un dictionnaire neuf a
     /// chaque fois : deux lectures des memes reglages n'etaient alors jamais egales, parce qu'un
-    /// enregistrement compare ses dictionnaires par reference.
+    /// enregistrement compare ses dictionnaires par reference. Construite au premier acces et non
+    /// par l'initialiseur de type, pour la raison ecrite dans <c>SteamControllerDefaults.Deferred</c>.
     /// </para>
-    public static readonly Sc2XboxedProfileSettings Settings = Sc2XboxedProfileSettings.Bare with
-    {
-        HasTrackpads = false,
-        LeftStickMode = StickMotionMode.None,
-        RightStickMode = StickMotionMode.Pointer,
-        XboxButtons = ButtonMap.ToDictionary(Kind),
-    };
+    public static Sc2XboxedProfileSettings Settings => Deferred.Value;
+
+    /// <inheritdoc cref="Settings"/>
+    /// <remarks>
+    /// Hors de l'initialiseur de type comme chez ses deux jumeaux : lire
+    /// <see cref="Sc2XboxedProfileSettings"/> depuis un initialiseur de type ferme un cycle, et
+    /// selon l'ordre d'entree le <c>Bare</c> lu est encore a null.
+    /// </remarks>
+    private static readonly Lazy<Sc2XboxedProfileSettings> Deferred = new(()
+        => Sc2XboxedProfileSettings.Bare with
+        {
+            HasTrackpads = false,
+            LeftStickMode = StickMotionMode.None,
+            RightStickMode = StickMotionMode.Pointer,
+            XboxButtons = ButtonMap.ToDictionary(Kind),
+        });
 
     /// <summary>Le reglage manette-native de depart d'une DualSense.</summary>
     public static XboxTuning Tuning => Settings.XboxTuning;

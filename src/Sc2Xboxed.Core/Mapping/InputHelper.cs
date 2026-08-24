@@ -436,6 +436,23 @@ public static class InputHelper
 	private static int _oskCheckTick;
 	private static bool _oskRunning;
 
+	[DllImport("user32.dll")]
+	private static extern bool SystemParametersInfo(int action, int param, ref int value, int winIni);
+
+	private const int SPI_GETMOUSESPEED = 0x0070;
+
+	/// <summary>
+	/// Reads the Windows pointer speed setting (1–20, default 10) so the right-pad trackball
+	/// can be calibrated against it.  At 100 % the GUI matches this speed; lower percentages
+	/// slow the cursor proportionally.
+	/// </summary>
+	public static int GetWindowsMouseSpeed()
+	{
+		int speed = 10;
+		SystemParametersInfo(SPI_GETMOUSESPEED, 0, ref speed, 0);
+		return Math.Clamp(speed, 1, 20);
+	}
+
 	public static bool IsOskRunning()
 	{
 		int now = Environment.TickCount;

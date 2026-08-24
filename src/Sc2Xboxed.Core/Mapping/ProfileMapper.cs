@@ -132,7 +132,13 @@ public sealed class ProfileMapper
 			using var doc = JsonDocument.Parse(json);
 			var root = doc.RootElement;
 
-			double sens = ReadDouble(root, "rightPadSensitivity", 900.0, origins);
+			double sensPercent = Math.Clamp(ReadDouble(root, "rightPadSensitivityPercent", 100.0, origins), 0.0, 100.0);
+			// 100 % matches the Windows mouse speed setting (1–20, default 10).  At speed 10 the
+			// trackball produces 380 px/unit — roughly the feel of a 400-DPI mouse on a standard
+			// pad.  Higher Windows speed scales proportionally so the pad stays in sync with the
+			// user's system preference.
+			int windowsSpeed = InputHelper.GetWindowsMouseSpeed();
+			double baseSpeed = 380.0 * (windowsSpeed / 10.0);
 			bool invertY = ReadBool(root, "rightPadInvertY", true, origins);
 			bool invertX = ReadBool(root, "rightPadInvertX", false, origins);
 			// One dead zone per stick, each falling back to the single value profiles carried before.
@@ -218,7 +224,7 @@ public sealed class ProfileMapper
 				RightPadHaptics = new PadHapticSettings { Force = rightHapticForce, Frequency = rightHapticFreq },
 				RightPadTrackball = defaults.RightPadTrackball with
 				{
-					PixelsPerPadUnit = sens,
+					PixelsPerPadUnit = baseSpeed * (sensPercent / 100.0),
 					MotionDeadZone = rightPadDeadZone,
 					InvertY = invertY,
 					InvertX = invertX,

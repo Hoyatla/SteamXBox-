@@ -37,6 +37,7 @@ public sealed class ParallelControllerSource : IMultiControllerSource
     private readonly Action<ControllerIdentity>? _onLeft;
     private readonly Func<IReadOnlyList<(ControllerIdentity Identity, IPhysicalControllerSource Source)>>? _rescan;
     private readonly TimeSpan _rescanInterval;
+    private readonly Func<TimeSpan, CancellationToken, Task> _beat;
     private readonly List<Task> _liveReaders = [];
     private readonly List<Task> _allReaders = [];
     private int _enumerations;
@@ -93,18 +94,32 @@ public sealed class ParallelControllerSource : IMultiControllerSource
     /// unaware of how controllers are discovered; null disables hot-plug entirely.
     /// </param>
     /// <param name="rescanInterval">How often to look. Defaults to three seconds.</param>
+    /// <param name="beat">
+    /// L'attente entre deux rescans. <see cref="Task.Delay(TimeSpan, CancellationToken)"/> quand
+    /// rien n'est donne, ce qui est le cas partout en production.
+    /// </param>
+    /// <remarks>
+    /// <paramref name="beat"/> est la pour les tests, et pour une raison precise. Ce qui se verifie
+    /// ici est qu'un veilleur <i>s'arrete</i> — une propriete negative, qu'aucune attente ne peut
+    /// etablir : un test qui dort trois cents millisecondes puis compte les rescans mesure la charge
+    /// de la machine autant que l'arret, et doit tolerer un battement de trop pour ne pas accuser a
+    /// tort. Cette tolerance est precisement l'espace ou une regression tient. En fournissant le
+    /// battement, le test le pilote : le compte attendu redevient exact, et nul apres l'arret.
+    /// </remarks>
     public ParallelControllerSource(
         IEnumerable<(ControllerIdentity Identity, IPhysicalControllerSource Source)> children,
         Action<string>? log = null,
         Action<ControllerIdentity>? onLeft = null,
         Func<IReadOnlyList<(ControllerIdentity Identity, IPhysicalControllerSource Source)>>? rescan = null,
-        TimeSpan? rescanInterval = null)
+        TimeSpan? rescanInterval = null,
+        Func<TimeSpan, CancellationToken, Task>? beat = null)
     {
         _children = children.ToList();
         _log = log;
         _onLeft = onLeft;
         _rescan = rescan;
         _rescanInterval = rescanInterval ?? TimeSpan.FromSeconds(3);
+        _beat = beat ?? Task.Delay;
     }
 
     /// <summary>
@@ -133,7 +148,7 @@ public sealed class ParallelControllerSource : IMultiControllerSource
 
             try
             {
-                await Task.Delay(_rescanInterval, cancellationToken).ConfigureAwait(false);
+                await _beat(_rescanInterval, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -166,7 +181,12 @@ public sealed class ParallelControllerSource : IMultiControllerSource
                 }
 
                 known.Add(child.Identity.Id);
-                _children.Add(child);
+
+                lock (_children)
+                {
+                    _children.Add(child);
+                }
+
                 var pump = PumpAsync(child.Identity, child.Source, writer, cancellationToken);
                 _liveReaders.Add(pump);
                 _allReaders.Add(pump);
@@ -193,8 +213,22 @@ public sealed class ParallelControllerSource : IMultiControllerSource
         }
     }
 
+    /// <summary>Qui est lu en ce moment.</summary>
+    /// <remarks>
+    /// Sous verrou comme tout le reste : la liste change sous les pieds de qui la parcourt, une
+    /// manette qui arrive ou qui s'eteint la modifiant depuis la tache du veilleur ou celle d'un
+    /// lecteur.
+    /// </remarks>
     public IReadOnlyList<ControllerIdentity> Controllers
-        => _children.Select(c => c.Identity).ToList();
+    {
+        get
+        {
+            lock (_children)
+            {
+                return _children.Select(c => c.Identity).ToList();
+            }
+        }
+    }
 
     /// <summary>
     /// Asks one controller to power itself off.
@@ -262,7 +296,13 @@ public sealed class ParallelControllerSource : IMultiControllerSource
 
         cancellationToken = lifetime.Token;
 
-        var readers = _children
+        List<(ControllerIdentity Identity, IPhysicalControllerSource Source)> starting;
+        lock (_children)
+        {
+            starting = _children.ToList();
+        }
+
+        var readers = starting
             .Select(child => PumpAsync(child.Identity, child.Source, channel.Writer, cancellationToken))
             .ToList();
 
@@ -435,7 +475,22 @@ public sealed class ParallelControllerSource : IMultiControllerSource
             _lifetimes.Clear();
         }
 
-        foreach (var child in _children)
+        // Preleve et vide d'un bloc, puis relache le verrou avant d'attendre quoi que ce soit.
+        //
+        // Ce parcours se faisait a meme la liste, sans verrou. L'annulation ci-dessus est justement
+        // ce qui met fin aux lecteurs, et un lecteur qui se termine retire sa manette de cette liste
+        // depuis sa propre tache : liberer une source pendant qu'une manette s'en va faisait donc
+        // lever « Collection was modified » au beau milieu de la liberation. Les manettes suivantes
+        // n'etaient alors jamais fermees — c'est-a-dire jamais rendues a HidHide, ce que ce fichier
+        // passe son temps a essayer de garantir.
+        List<(ControllerIdentity Identity, IPhysicalControllerSource Source)> leaving;
+        lock (_children)
+        {
+            leaving = _children.ToList();
+            _children.Clear();
+        }
+
+        foreach (var child in leaving)
         {
             try
             {
@@ -446,7 +501,5 @@ public sealed class ParallelControllerSource : IMultiControllerSource
                 _log?.Invoke($"disposing {child.Identity.DisplayName}: {ex.Message}");
             }
         }
-
-        _children.Clear();
     }
 }

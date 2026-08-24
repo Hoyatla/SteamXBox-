@@ -168,6 +168,16 @@ static JsonNode ListerOutils() => new JsonObject
                 ["type"] = "object",
                 ["properties"] = new JsonObject(),
             },
+        },
+        new JsonObject
+        {
+            ["name"] = "manettes_connectees",
+            ["description"] = "Les manettes que SteamXBox tient en ce moment. Demande que le produit soit lance.",
+            ["inputSchema"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject(),
+            },
         }),
 };
 
@@ -181,6 +191,10 @@ static JsonNode Appeler(JsonNode? parametres, string racine)
         "outils_declares" => Texte(OutilsDeclares(racine)),
         "chercher_fichier" => Texte(ChercherFichier(arguments?["motif"]?.GetValue<string>() ?? "")),
         "etat_produit" => Texte(EtatProduit(racine)),
+
+        // La premiere question posee au produit vivant plutot qu'a ses fichiers. Le reste des outils
+        // lit le disque ; celui-ci passe par le tuyau, et dit quand personne n'ecoute.
+        "manettes_connectees" => Texte(SteamXBox.Mcp.Produit.Demander("manettes")),
         _ => Texte($"Outil inconnu : {nom}", erreur: true),
     };
 }

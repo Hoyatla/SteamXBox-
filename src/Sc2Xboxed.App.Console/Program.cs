@@ -1430,6 +1430,23 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
 
             Sc2Xboxed.App.Console.ControllerCloak.Apply(log);
 
+            // Le point d'ecoute du serveur MCP. En lecture seule : il repond ce que le Core tient
+            // deja, et ne peut rien lui faire faire — le pont appelle cette fonction et rien d'autre.
+            //
+            // Demarre ici, apres l'ouverture des manettes, pour que « manettes » ait quelque chose a
+            // dire des la premiere question. Sur son propre fil, en arriere-plan : une question du
+            // modele ne doit jamais retarder une trame.
+            Sc2Xboxed.App.Console.McpBridge.Start(
+                question => question switch
+                {
+                    "manettes" => string.Join(
+                        " | ",
+                        attached.Select(c => $"{c.Identity.Kind} {c.Identity.Id} slot={c.Identity.Slot}")),
+                    "ping" => "SteamXBox.Core",
+                    _ => $"question inconnue: {question}",
+                },
+                message => log.Info(LogCategory.Session, message));
+
             // Every attached controller gets its virtual pad now, whatever mode we are in — not on
             // the first frame it sends in Xbox mode. A pad created at the moment of the switch is a
             // hot-plug into whatever game is already running, and games that enumerate controllers
