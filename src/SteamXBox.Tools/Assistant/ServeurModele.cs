@@ -69,6 +69,18 @@ public static class ServeurModele
     /// <summary>L'adresse du serveur, compatible avec le dialecte OpenAI.</summary>
     public static string Adresse => "http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// La place de travail du modèle, en jetons.
+    /// </summary>
+    /// <remarks>
+    /// Déclarée ici parce que c'est ici qu'elle est imposée au serveur, et lue par l'assistant qui
+    /// doit savoir quand il en approche. Les deux se sont déjà contredits : l'assistant élaguait sa
+    /// conversation pour tenir dans huit mille jetons, commentaire à l'appui, des semaines après
+    /// que le serveur eut été porté à trente-deux mille. Il jetait donc ce qu'il venait
+    /// d'apprendre pour faire de la place dont il disposait déjà.
+    /// </remarks>
+    public const int Contexte = 32768;
+
     /// <summary>Le modèle retenu : le premier <c>.gguf</c> qui n'est pas un projecteur d'images.</summary>
     /// <remarks>
     /// Les fichiers <c>mmproj-</c> accompagnent un modèle pour lui donner la vue ; chargés seuls,
@@ -338,7 +350,7 @@ public static class ServeurModele
                 // seule plafonnait à 8 192 pendant que la machine en réservait 32 768. Mesuré sur
                 // le 4B : 3,18 Go par défaut, 3,81 Go ici. Six cent trente mégaoctets pour
                 // quadrupler ce que l'assistant peut retenir.
-                "-c", "32768",
+                "-c", Contexte.ToString(CultureInfo.InvariantCulture),
                 "--parallel", "1",
 
                 // Sans --jinja, le serveur ignore le gabarit de conversation du modèle et l'appel

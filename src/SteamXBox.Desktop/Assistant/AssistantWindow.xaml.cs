@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -41,6 +42,9 @@ public partial class AssistantWindow : Window
     private AssistantWindow(Action<string>? journal)
     {
         InitializeComponent();
+
+        // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
+        SuiviFenetre.Suivre(this, "assistant");
 
         _journal = journal;
 
@@ -382,17 +386,42 @@ public partial class AssistantWindow : Window
         Saisie.Focus();
     }
 
-    private async void Demander()
+    /// <summary>
+    /// Envoie une demande au modèle, et tient la fenêtre pendant qu'il travaille.
+    /// </summary>
+    /// <param name="dicte">
+    /// Ce qu'un bouton de choix envoie à la place de la saisie. Null pour ce que l'utilisateur a
+    /// tapé, ce qui est le cas ordinaire.
+    /// </param>
+    /// <param name="seul">
+    /// Vrai pour cette demande-ci seulement, quand elle vient du bouton « Fais-le toi-même ». La
+    /// case, elle, vaut pour toutes.
+    /// </param>
+    private async void Demander(string? dicte = null, bool seul = false)
     {
-        var demande = Saisie.Text.Trim();
+        var demande = (dicte ?? Saisie.Text).Trim();
 
         if (_occupe || demande.Length == 0)
         {
             return;
         }
 
+        // Autonome par la case, par le bouton, ou parce qu'un travail est déjà en route.
+        //
+        // Ce dernier cas est le point 4 : un travail commencé se reprend seul. Redemander quel
+        // outil employer au milieu d'un plan que l'utilisateur a accepté reviendrait à lui faire
+        // rejouer un choix qu'il a déjà fait, à chaque étape.
+        var autonome = seul
+            || Seul.IsChecked == true
+            || FichierTravail.Lister(_journal).Any(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+
         _occupe = true;
-        Saisie.Clear();
+
+        if (dicte is null)
+        {
+            Saisie.Clear();
+        }
+
         Dire("vous", demande);
 
         Travail.Visibility = Visibility.Visible;
@@ -411,7 +440,7 @@ public partial class AssistantWindow : Window
             // Le modèle met plusieurs secondes, et davantage s'il doit d'abord charger. Tenir cette
             // attente sur le fil d'affichage figerait la fenêtre — y compris la barre censée dire
             // que ça travaille.
-            var capacites = Capacites(outils, journal);
+            var capacites = Capacites(outils, journal, autonome);
 
             var reponse = await Task.Run(() => _agent.Repondre(
                 demande,
@@ -419,7 +448,8 @@ public partial class AssistantWindow : Window
                 capacites,
                 (manifeste, reglages) => Lancer(manifeste, reglages, journal),
                 message => Dispatcher.Invoke(() => Dire("systeme", message)),
-                _arret.Token));
+                _arret.Token,
+                autonome));
 
             Dire("assistant", reponse);
         }
@@ -589,9 +619,15 @@ public partial class AssistantWindow : Window
     /// tomber l'application.
     /// </para>
     /// </remarks>
+    /// <param name="autonome">
+    /// Vrai quand l'assistant agit seul. <c>proposer_choix</c> n'est alors pas déclarée : une
+    /// capacité offerte est une capacité employée, et un assistant à qui l'on a demandé de faire
+    /// seul qui pose quand même la question n'a pas obéi à moitié — il n'a pas obéi.
+    /// </param>
     private IReadOnlyList<AssistantLocal.Capacite> Capacites(
         IReadOnlyList<PluginManifest> outils,
-        Action<string>? journal)
+        Action<string>? journal,
+        bool autonome = false)
     {
         // Les outils compilés — calculatrice, capture, presse-papiers — n'ont pas de manifeste :
         // ils sont dans le produit. Les omettre revenait à cacher à l'assistant la moitié de ce que
@@ -679,6 +715,38 @@ public partial class AssistantWindow : Window
                 ],
                 reglages => Dispatcher.Invoke(() => Fenetre(Valeur(reglages, "fenetre"), journal))),
         };
+
+        // Le choix, avant d'agir : montrer les routes plutôt que d'en prendre une.
+        //
+        // Une même demande — « une vidéo d'après un texte » — se sert de plusieurs façons, et
+        // laquelle convient n'appartient pas au modèle. Mesuré le 24 août : il a répondu par un
+        // cours en deux étapes là où l'utilisateur attendait qu'on lui montre ses outils, puis a
+        // enchaîné vingt appels sans jamais demander s'il devait le faire lui-même.
+        //
+        // Déclarée seulement quand l'assistant n'est pas autonome : voir le paramètre.
+        if (!autonome)
+        {
+            capacites.Add(new AssistantLocal.Capacite(
+                "proposer_choix",
+                "Montre à l'utilisateur les routes possibles pour sa demande, et attends qu'il "
+                + "choisisse. À appeler AVANT d'agir sur une demande neuve, jamais au milieu d'un "
+                + "travail déjà accepté. N'écris pas toi-même l'option « fais-le toi-même » : "
+                + "l'hôte l'ajoute. Après cet appel, ne dis rien de plus — la main est à "
+                + "l'utilisateur.",
+                [
+                    new AssistantLocal.Parametre(
+                        "question", "Ce qui est à décider, en une phrase courte.", []),
+                    new AssistantLocal.Parametre(
+                        "options",
+                        "Les routes, séparées par un point-virgule. Deux à quatre, chacune nommant "
+                        + "l'outil et ce qu'elle donne — « Créer une image, puis l'animer ».",
+                        []),
+                ],
+                reglages => Dispatcher.Invoke(() => Proposer(
+                    Valeur(reglages, "question"),
+                    Valeur(reglages, "options"))),
+                Interne: true));
+        }
 
         // Le carnet : écrire ailleurs que dans sa tête.
         //
@@ -811,6 +879,35 @@ public partial class AssistantWindow : Window
             // modèle de quatre milliards de paramètres à dépenser un tour entier pour relire ce
             // qu'il venait de lire.
             new AssistantLocal.Capacite(
+                "travail_retenir",
+                "Retiens un fait établi, pour ne pas avoir à le redemander : ce que l'utilisateur "
+                + "a dit une fois, le nom exact d'un nœud que tu as fini par trouver, une valeur "
+                + "choisie. À appeler dès que tu apprends quelque chose que tu regretterais "
+                + "d'oublier — ce qui est retenu survit à ton contexte, le reste non.",
+                [
+                    new AssistantLocal.Parametre("titre", "Le titre du carnet.", []),
+                    new AssistantLocal.Parametre(
+                        "faits", "Les faits à retenir, séparés par un point-virgule.", []),
+                ],
+                reglages =>
+                {
+                    var titre = Valeur(reglages, "titre");
+
+                    var retenu = FichierTravail.Retenir(
+                        titre, Valeur(reglages, "faits").Split(';'), journal);
+
+                    Rafraichir();
+
+                    // L'échec dit quoi faire, comme pour l'accord : « aucun carnet » sans suite
+                    // laissait le modèle retenter le même appel jusqu'à épuiser ses tours.
+                    return retenu is null
+                        ? $"Aucun carnet « {titre} » : ouvre-le d'abord avec travail_noter, "
+                          + "puis retiens."
+                        : Resumer(retenu);
+                },
+                Interne: true),
+
+            new AssistantLocal.Capacite(
                 "travail_cocher",
                 "Marque une étape comme faite, une fois qu'elle l'est réellement — pas quand tu "
                 + "l'as lancée.",
@@ -917,11 +1014,33 @@ public partial class AssistantWindow : Window
         return
         [
             new AssistantLocal.Capacite(
+                "flux_modeles",
+                "Liste TOUS les modèles installés sur cette machine, et le nœud qui charge chacun. "
+                + "À appeler EN PREMIER, avant de composer un flux ou de demander à l'utilisateur "
+                + "quel modèle employer. Les modèles ne se chargent pas tous par le même nœud : "
+                + "chercher « load checkpoint » n'en montre qu'une partie, et te fera conclure à "
+                + "tort qu'il n'y en a qu'un.",
+                [],
+                _ => Modeles(Port, journal),
+                Interne: true),
+
+            new AssistantLocal.Capacite(
+                "flux_prets",
+                "Liste les flux DÉJÀ ÉCRITS et éprouvés sur cette machine, et lesquels peuvent "
+                + "tourner ici. À appeler juste après flux_modeles, et AVANT de composer quoi que "
+                + "ce soit : en lancer un coûte un appel, en composer un en coûte quinze et donne "
+                + "un graphe qui n'est pas taillé pour cette carte.",
+                [],
+                _ => Prets(Port, journal),
+                Interne: true),
+
+            new AssistantLocal.Capacite(
                 "flux_catalogue",
                 "Cherche, parmi les nœuds installés sur CETTE machine, ceux qui répondent à un "
                 + "besoin. À employer avant d'écrire le moindre flux : ce que tu crois savoir des "
                 + "nœuds de ComfyUI vient d'une autre installation. Cherche en anglais, les nœuds "
-                + "sont nommés et décrits ainsi.",
+                + "sont nommés et décrits ainsi. Pour savoir quels MODÈLES existent, c'est "
+                + "flux_modeles et non cette recherche.",
                 [
                     new AssistantLocal.Parametre(
                         "besoin",
@@ -993,6 +1112,87 @@ public partial class AssistantWindow : Window
                 reglages => SteamXBox.Tools.Generation.SequenceAnimee.Deposer(
                     Valeur(reglages, "dossier"), journal)),
         ];
+    }
+
+    /// <summary>Ce que la machine porte réellement comme modèles, et par quel nœud les charger.</summary>
+    /// <remarks>
+    /// Une capacité à elle seule plutôt qu'une recherche de plus. « Quels modèles ai-je » est la
+    /// question que l'assistant pose en premier et à laquelle la recherche de nœuds répond mal :
+    /// elle rend des nœuds, dont l'un porte une liste de fichiers, et il faut déjà savoir lequel
+    /// pour la trouver. Le 24 août, l'assistant a conclu de <c>CheckpointLoader</c> que la machine
+    /// n'avait qu'un modèle — elle en a cinq, dans trois dossiers.
+    /// </remarks>
+    private static string Modeles(int port, Action<string>? journal)
+    {
+        if (SteamXBox.Tools.Generation.ComfyServer.Preparer(journal) is { } absent)
+        {
+            return absent;
+        }
+
+        if (SteamXBox.Tools.Generation.Catalogue.Demander(port, journal) is not { } catalogue)
+        {
+            return "Le générateur n'a pas rendu son catalogue.";
+        }
+
+        journal?.Invoke("assistant: relève les modèles installés");
+
+        return SteamXBox.Tools.Generation.CatalogueLecture.Modeles(catalogue);
+    }
+
+    /// <summary>Les flux déjà écrits, et ceux que cette machine peut lancer.</summary>
+    /// <remarks>
+    /// Le dossier des flux de ComfyUI, et rien d'autre : c'est là que le produit range les graphes
+    /// qu'il a validés, et c'est là que l'utilisateur dépose les siens depuis l'interface du
+    /// générateur. Les sous-dossiers sont écartés — ils servent de brouillons.
+    /// </remarks>
+    private static string Prets(int port, Action<string>? journal)
+    {
+        var dossier = Path.Combine(
+            AppContext.BaseDirectory, "Outils", "ComfyUI", "user", "default", "workflows");
+
+        if (!Directory.Exists(dossier))
+        {
+            return "Aucun dossier de flux sur cette machine.";
+        }
+
+        // Le disque décide de ce qui est lançable, et le catalogue n'est pas nécessaire pour cela :
+        // un poids se constate en regardant les dossiers de modèles, sans réveiller le générateur.
+        var modeles = SteamXBox.Tools.Modeles.JeuxModeles.Racine;
+        var presents = Directory.Exists(modeles)
+            ? Directory.EnumerateFiles(modeles, "*", SearchOption.AllDirectories)
+                .Select(Path.GetFileName)
+                .Where(n => n is { Length: > 0 })
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)!
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var prets = new List<SteamXBox.Tools.Generation.FluxPrets.Pret>();
+
+        foreach (var fichier in Directory.EnumerateFiles(dossier, "*.json"))
+        {
+            try
+            {
+                var examine = SteamXBox.Tools.Generation.FluxPrets.Examiner(
+                    Path.GetFileName(fichier),
+                    File.ReadAllText(fichier),
+
+                    // Le nom seul : un flux nomme « wan_2.1_vae.safetensors », le disque le range
+                    // sous « vae\ », et comparer des chemins ferait manquer tous les fichiers.
+                    nom => presents.Contains(Path.GetFileName(nom)));
+
+                if (examine is not null)
+                {
+                    prets.Add(examine);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                journal?.Invoke($"flux illisible, ignoré : {Path.GetFileName(fichier)}");
+            }
+        }
+
+        journal?.Invoke($"assistant: {prets.Count(p => p.Lancable)} flux prêt(s) et lançable(s)");
+
+        return SteamXBox.Tools.Generation.FluxPrets.Resumer(prets);
     }
 
     private static string Chercher(int port, string besoin, Action<string>? journal)
@@ -1330,6 +1530,89 @@ public partial class AssistantWindow : Window
 
         Echanges.Document.Blocks.Add(paragraphe);
         Echanges.ScrollToEnd();
+    }
+
+    /// <summary>
+    /// Pose un choix devant l'utilisateur : la question, les routes, et de quoi cliquer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Écrit ET cliquable, les deux.</b> Le produit se pilote à la manette, où taper coûte un
+    /// clavier à l'écran et une minute ; un bouton s'atteint à la croix directionnelle. Mais la
+    /// liste numérotée reste dans le texte, parce qu'elle survit à la conversation copiée, se relit
+    /// après coup, et se répond au clavier par ceux qui en ont un.
+    ///
+    /// <para>
+    /// <b>« Fais-le toi-même » est ajouté par l'hôte, jamais par le modèle.</b> C'est une garantie
+    /// et non une commodité : l'option d'abandonner la main doit être présente à chaque choix, et
+    /// formulée pareil, sans dépendre de ce qu'un modèle de neuf milliards de paramètres a pensé à
+    /// écrire ce tour-ci.
+    /// </para>
+    /// </remarks>
+    private string Proposer(string question, string options)
+    {
+        var routes = options
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(4)
+            .ToList();
+
+        if (routes.Count == 0)
+        {
+            return "Aucune option lisible : rends-les separees par des points-virgules.";
+        }
+
+        const string Seule = "Fais-le toi-même";
+
+        var texte = new StringBuilder(question.Trim());
+
+        for (var rang = 0; rang < routes.Count; rang++)
+        {
+            texte.AppendLine().Append(rang + 1).Append(". ").Append(routes[rang]);
+        }
+
+        texte.AppendLine().Append(routes.Count + 1).Append(". ").Append(Seule);
+
+        Dire("assistant", texte.ToString());
+
+        var boutons = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
+
+        foreach (var route in routes)
+        {
+            boutons.Children.Add(Choix(route, route, boutons, seul: false));
+        }
+
+        // Le dernier, et visiblement à part : ce n'est pas une route de plus, c'est la décision de
+        // ne pas choisir.
+        boutons.Children.Add(Choix(Seule, Seule, boutons, seul: true));
+
+        Echanges.Document.Blocks.Add(new BlockUIContainer(boutons));
+        Echanges.ScrollToEnd();
+
+        return "Choix pose devant l'utilisateur. N'ajoute rien : attends sa reponse.";
+    }
+
+    /// <summary>Un bouton de choix, qui s'efface avec ses voisins une fois cliqué.</summary>
+    /// <remarks>
+    /// Les boutons disparaissent au clic — tous, pas seulement celui qu'on a pris. Laissés là, ils
+    /// resteraient cliquables au milieu d'une conversation qui a avancé, et un second clic
+    /// relancerait un choix déjà tranché.
+    /// </remarks>
+    private Button Choix(string libelle, string envoi, Panel rangee, bool seul)
+    {
+        var bouton = new Button
+        {
+            Content = libelle,
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(0, 0, 8, 6),
+            FontWeight = seul ? FontWeights.SemiBold : FontWeights.Normal,
+        };
+
+        bouton.Click += (_, _) =>
+        {
+            rangee.Children.Clear();
+            Demander(envoi, seul);
+        };
+
+        return bouton;
     }
 
     /// <summary>Met toute la conversation dans le presse-papiers.</summary>

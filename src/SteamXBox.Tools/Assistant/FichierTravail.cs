@@ -49,6 +49,25 @@ public sealed class Travail
     [JsonPropertyName("taches")]
     public List<Tache> Taches { get; set; } = [];
 
+    /// <summary>
+    /// Ce qui a été établi en chemin, et qu'il ne faut plus redemander.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> Un carnet portait les étapes, jamais ce qu'on avait
+    /// appris en les faisant. Mesuré le 24 août : l'utilisateur donne le sujet de sa vidéo, le
+    /// contexte se remplit, l'historique s'élague — et à « reprends le travail » l'assistant
+    /// redemande le sujet qu'on venait de lui donner. Les étapes avaient survécu, la matière non.
+    ///
+    /// <para>
+    /// Ce que ça porte : ce que l'utilisateur a dit une fois, ce qu'un outil a répondu et qu'on ne
+    /// veut pas relancer, le nom exact d'un nœud dont le nom se devine mal. Une ligne par fait,
+    /// courte. C'est la moitié du carnet qui rend une reprise possible — les étapes disent quoi
+    /// faire, les acquis disent avec quoi.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("acquis")]
+    public List<string> Acquis { get; set; } = [];
+
     /// <summary>Tout est-il coché ?</summary>
     public bool Fini => Taches.Count > 0 && Taches.TrueForAll(t => t.Faite);
 }
@@ -162,6 +181,11 @@ public static class FichierTravail
             // en cours de route ne doit pas redemander la permission de continuer. Un carnet neuf,
             // lui, attend.
             Accepte = ancien?.Accepte ?? false,
+
+            // Les acquis survivent aussi, et pour une raison plus forte encore : réviser un plan ne
+            // rend pas faux ce qu'on a appris en l'exécutant. Les perdre ici rendrait la reprise
+            // impossible au moment précis où elle sert — quand le plan s'est révélé trop court.
+            Acquis = ancien is null ? [] : [.. ancien.Acquis],
         };
 
         foreach (var texte in taches.Select(t => (t ?? "").Trim()).Where(t => t.Length > 0))
@@ -438,7 +462,50 @@ public static class FichierTravail
             texte.Append(tache.Faite ? "  [x] " : "  [ ] ").AppendLine(tache.Texte);
         }
 
+        // Les acquis apres les etapes, et nommes « ACQUIS » en capitales : c'est la ligne que le
+        // modele doit lire avant de poser une question, et il la lit dans un rappel qui compte
+        // deja plusieurs dizaines de lignes.
+        if (travail.Acquis.Count > 0)
+        {
+            texte.AppendLine("  ACQUIS — deja etabli, ne le redemande pas :");
+
+            foreach (var fait in travail.Acquis)
+            {
+                texte.Append("  · ").AppendLine(fait);
+            }
+        }
+
         return texte.ToString();
+    }
+
+    /// <summary>Retient un fait etabli, pour qu'une reprise n'ait pas a le redemander.</summary>
+    /// <remarks>
+    /// Sans doublon, et sans limite haute : un fait deja retenu n'est pas reecrit — le modele
+    /// repropose volontiers la meme phrase a chaque tour — et rien n'est jamais retire, un acquis
+    /// ne cessant pas d'etre vrai parce que le carnet s'allonge.
+    /// </remarks>
+    /// <returns>Le carnet mis a jour, ou null s'il n'existe pas.</returns>
+    public static Travail? Retenir(string titre, IEnumerable<string> faits, Action<string>? journal)
+    {
+        var travail = Lire(titre, journal);
+
+        if (travail is null)
+        {
+            return null;
+        }
+
+        foreach (var fait in faits.Select(f => (f ?? "").Trim()).Where(f => f.Length > 0))
+        {
+            if (!travail.Acquis.Exists(deja => deja.Equals(fait, StringComparison.OrdinalIgnoreCase)))
+            {
+                travail.Acquis.Add(fait);
+            }
+        }
+
+        travail.Touche = DateTime.UtcNow;
+        Ecrire(travail, journal);
+
+        return travail;
     }
 
     private static void Ecrire(Travail travail, Action<string>? journal)

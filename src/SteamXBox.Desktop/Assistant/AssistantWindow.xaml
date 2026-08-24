@@ -155,6 +155,15 @@
                         Margin="6,0,0,0" Padding="12,8"
                         Click="ChoisirDossierClic"/>
 
+                <!-- Armee, l'assistant ne demande plus quel outil employer : il choisit, et rend
+                     compte. Une case et non un bouton, parce que c'est un etat qu'on doit voir
+                     durer — savoir que l'assistant agit seul est la moitie de l'accord qu'on lui
+                     donne. Le bouton « Fais-le toi-meme » des choix vaut, lui, pour une seule
+                     demande. -->
+                <CheckBox x:Name="Seul" Content="Faire tout seul"
+                          VerticalAlignment="Center" Margin="12,0,0,0"
+                          ToolTip="L'assistant choisit les outils lui-même et enchaîne, au lieu de proposer."/>
+
                 <Button x:Name="Envoyer" Content="Envoyer"
                         Margin="8,0,0,0" Padding="16,8"
                         Click="EnvoyerClic"/>

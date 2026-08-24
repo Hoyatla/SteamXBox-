@@ -49,10 +49,23 @@ public sealed class AssistantLocal
     /// Au-delà, l'historique mange le contexte que le modèle doit garder pour les outils.
     /// </summary>
     /// <remarks>
-    /// Huit mille jetons en tout, dont la déclaration des outils prend déjà une bonne part. Les
-    /// tours les plus anciens sont oubliés en premier ; la consigne, elle, ne s'oublie jamais.
+    /// Les tours les plus anciens sont oubliés en premier ; la consigne, elle, ne s'oublie jamais.
+    ///
+    /// <para>
+    /// <b>Seize, et le commentaire parlait de huit mille jetons.</b> Le serveur en offre trente-deux
+    /// mille depuis des semaines. L'élagage jetait donc ce que le modèle venait d'apprendre pour
+    /// faire de la place dont il disposait déjà : c'est ce qui lui faisait redemander trois fois le
+    /// même nœud, et redemander à l'utilisateur un sujet donné dix messages plus tôt.
+    /// </para>
+    ///
+    /// <para>
+    /// La vraie borne est désormais en jetons — voir <see cref="PartPleine"/>, qui déclenche une
+    /// reprise sur un contexte neuf plutôt qu'un oubli silencieux. Ce compte-ci n'est plus qu'un
+    /// garde-fou contre un fil qui s'allongerait sans jamais peser, et il est fixé assez haut pour
+    /// ne plus jamais couper au milieu d'un travail.
+    /// </para>
     /// </remarks>
-    private const int MessagesGardes = 16;
+    private const int MessagesGardes = 48;
 
     /// <summary>Au-delà, une demande tourne en rond plutôt qu'elle n'aboutit.</summary>
     /// <remarks>
@@ -63,9 +76,15 @@ public sealed class AssistantLocal
     ///
     /// <para>
     /// Huit laisse cette marge sans ouvrir la porte à la boucle : chaque tour coûte une génération
-    /// complète, et le modèle qui n'a rien conclu au huitième ne conclura pas au douzième. La borne
-    /// atteinte, c'est le dernier résultat d'outil qui est rendu — il dit au moins ce qui a
-    /// réellement été fait, et où.
+    /// complète, et le modèle qui n'a rien conclu au huitième ne conclura pas au douzième <i>dans
+    /// ce fil-ci</i>.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Ce n'est plus une fin, c'est une respiration.</b> La borne atteinte, on ne jette plus
+    /// tout en disant « n'a pas abouti en 8 échanges » : le modèle note où il en est, et repart sur
+    /// un contexte neuf — voir <see cref="Consolider"/>. Huit tours bornent donc ce qu'un fil peut
+    /// accumuler avant d'être résumé, et <see cref="ReprisesMaximum"/> borne le tout.
     /// </para>
     /// </remarks>
     private const int ToursMaximum = 8;
@@ -79,6 +98,36 @@ public sealed class AssistantLocal
     /// été coupé.
     /// </remarks>
     private const int JetonsMaximum = 2048;
+
+    /// <summary>
+    /// La part du contexte au-delà de laquelle on renouvelle plutôt que de continuer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Soixante-dix pour cent, et pas quatre-vingt-quinze.</b> Ce qui reste doit suffire à la
+    /// consolidation elle-même : relire le fil, écrire les étapes restantes et les acquis. Attendre
+    /// d'être au bord, c'est découvrir qu'il n'y a plus la place de préparer la reprise — et perdre
+    /// alors tout ce qu'on voulait sauver.
+    ///
+    /// <para>
+    /// La borne est en jetons réellement consommés, rendus par le serveur à chaque réponse, et non
+    /// en nombre de messages : deux tours qui lisent un catalogue de nœuds coûtent plus que vingt
+    /// tours de conversation, et c'est le premier cas qui remplit le contexte.
+    /// </para>
+    /// </remarks>
+    private const double PartPleine = 0.70;
+
+    /// <summary>
+    /// Combien de fois une même demande peut repartir sur un contexte neuf.
+    /// </summary>
+    /// <remarks>
+    /// Trois. Une demande qui n'aboutit pas en trois contextes pleins ne butte pas sur la place
+    /// mais sur autre chose, et continuer coûterait un quart d'heure de carte graphique pour rendre
+    /// la même impasse. Ce qui a été fait reste dans le carnet, et l'utilisateur reprend la main.
+    /// </remarks>
+    private const int ReprisesMaximum = 3;
+
+    /// <summary>Ce que le serveur a compté de jetons au dernier échange.</summary>
+    private int _jetons;
 
     private const string Consigne =
         "Tu assistes l'utilisateur de SteamXBox tout entier, en français — quel que soit le domaine "
@@ -95,11 +144,17 @@ public sealed class AssistantLocal
         + "son message : regarde-la et dis ce que tu y vois. Ne réponds jamais que tu ne sais pas "
         + "lire une image.\n\n"
 
-        + "AGIS, N'ÉNUMÈRE PAS. Une liste d'options numérotées n'est pas une réponse : elle renvoie "
-        + "à l'utilisateur le travail de choisir à ta place. S'il te manque UNE information, pose "
-        + "UNE question courte. Ne repose jamais la même question sous une autre forme, et ne "
-        + "propose pas deux fois la même liste — s'il a déjà répondu, tiens sa réponse pour acquise "
-        + "et sers-toi de l'outil qui convient.\n\n"
+        + "AGIS, N'ÉNUMÈRE PAS. Une liste d'options écrite dans ta réponse n'est pas une réponse : "
+        + "elle renvoie à l'utilisateur le travail de choisir à ta place. S'il te manque UNE "
+        + "information, pose UNE question courte. Ne repose jamais la même question sous une autre "
+        + "forme, et ne propose pas deux fois la même liste — s'il a déjà répondu, tiens sa réponse "
+        + "pour acquise et sers-toi de l'outil qui convient.\n\n"
+
+        + "LA SEULE EXCEPTION est proposer_choix, qui pose de vrais boutons devant l'utilisateur au "
+        + "lieu d'un paragraphe. Un choix offert une fois, avant de commencer, lui épargne un "
+        + "travail entier pris dans la mauvaise direction ; le même choix récrit à la main dans ta "
+        + "réponse ne lui donne rien à cliquer. Choisir entre les deux ne t'appartient pas : le "
+        + "rappel en tête de chaque demande dit lequel des deux modes s'applique.\n\n"
 
         + "FAIS, PLUTÔT QUE DE NOTER. Le cas normal est d'exécuter la demande tout de suite : "
         + "appelle l'outil, réponds, et n'écris aucun carnet. Un carnet coûte un tour d'attente à "
@@ -150,24 +205,75 @@ public sealed class AssistantLocal
     /// travail imaginaire. La phrase « Aucun travail ouvert » est donc dite, et pas seulement sous-
     /// entendue par une absence.
     /// </remarks>
-    public static string RappelTravaux(Action<string>? journal)
+    public static string RappelTravaux(Action<string>? journal, bool autonome = false)
     {
         var carnets = FichierTravail.Lister(journal);
+        var texte = new StringBuilder(MarqueTravaux).Append(' ').AppendLine(Mode(autonome));
 
         if (carnets.Count == 0)
         {
-            return MarqueTravaux + " Aucun travail ouvert.";
+            return texte.AppendLine("Aucun travail ouvert.").ToString();
         }
 
-        var texte = new StringBuilder(MarqueTravaux).AppendLine(" TRAVAUX OUVERTS :");
+        texte.AppendLine("TRAVAUX OUVERTS :");
 
         foreach (var carnet in carnets)
         {
             texte.AppendLine(FichierTravail.Resumer(carnet));
         }
 
+        // Un travail commence se reprend, il ne se recommence pas et il ne se redemande pas.
+        //
+        // Mesure du 24 aout : a « reprends le travail », l'assistant a redemande le sujet de la
+        // video que l'utilisateur venait de donner. Le carnet etait sous ses yeux, ses etapes
+        // aussi ; ce qui manquait, c'etait la consigne de s'en servir plutot que de repartir de la
+        // question.
+        var encours = carnets.FirstOrDefault(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+
+        if (encours is not null)
+        {
+            var suivante = encours.Taches.Find(t => !t.Faite)?.Texte ?? "";
+
+            texte.AppendLine(
+                $"REPRISE : « {encours.Titre} » est commence et accepte. Reprends-le maintenant a "
+                + $"l'etape « {suivante} », sans rien redemander de ce que ses ACQUIS portent deja "
+                + "et sans refaire une etape cochee. Ne repose une question que si la reponse ne "
+                + "figure ni dans les acquis ni dans le fil.");
+        }
+
         return texte.ToString();
     }
+
+    /// <summary>Ce que l'utilisateur attend de l'assistant pour cette demande.</summary>
+    /// <remarks>
+    /// <b>Deux facons de servir, et l'utilisateur choisit laquelle.</b> Guide, l'assistant montre
+    /// les outils qui conviennent et le laisse decider ; autonome, il decide lui-meme et rend
+    /// compte. Ce n'est pas un reglage de confort : la meme demande — « une video d'apres un
+    /// texte » — appelle un panneau ouvert devant quelqu'un qui veut voir, et un enchainement
+    /// silencieux devant quelqu'un qui veut le resultat.
+    ///
+    /// <para>
+    /// Dit a chaque tour, dans le rappel, et non dans la consigne du systeme : celle-ci est
+    /// identique d'un tour a l'autre, et c'est ce qui permet au serveur de garder son cache de
+    /// prefixe. Un mode qui bascule dans le message systeme invaliderait tout le cache a chaque
+    /// changement.
+    /// </para>
+    /// </remarks>
+    private static string Mode(bool autonome)
+        => autonome
+            ? "MODE AUTONOME. L'utilisateur t'a demandé de faire seul : ne lui repose pas la "
+              + "question de l'outil, choisis-le. Avant de commencer, estime l'ampleur — si la "
+              + "demande réclame plus de trois appels d'outil, ou plusieurs fichiers, ou des étapes "
+              + "qui dépendent les unes des autres, écris d'abord le plan avec travail_noter. Tu "
+              + "n'as pas à attendre d'accord dans ce mode : l'utilisateur l'a donné en te confiant "
+              + "le travail. Retiens avec travail_retenir tout ce que tu établis en chemin, sinon "
+              + "tu le redemanderas. N'interromps l'utilisateur que pour un choix que tu lui "
+              + "recommandes, avec proposer_choix."
+            : "MODE GUIDÉ. Devant une demande neuve, ne lance rien tout de suite : appelle "
+              + "proposer_choix pour montrer les routes possibles, et laisse l'utilisateur "
+              + "décider. N'écris pas l'option « fais-le toi-même », l'hôte l'ajoute lui-même à "
+              + "chaque choix. Une fois qu'il a choisi, exécute son choix sans reposer la "
+              + "question.";
 
     /// <summary>
     /// Ce qui marque le rappel des travaux, pour le retrouver et le remplacer.
@@ -213,7 +319,7 @@ public sealed class AssistantLocal
     private static string Ecrit(JsonNode? contenu)
         => contenu is JsonValue valeur && valeur.TryGetValue<string>(out var texte) ? texte : "";
 
-    private void Rappeler(Action<string>? journal)
+    private void Rappeler(Action<string>? journal, bool autonome)
     {
         for (var rang = _messages.Count - 1; rang >= 1; rang--)
         {
@@ -228,7 +334,7 @@ public sealed class AssistantLocal
         _messages.Add(new JsonObject
         {
             ["role"] = "user",
-            ["content"] = RappelTravaux(journal),
+            ["content"] = RappelTravaux(journal, autonome),
         });
     }
 
@@ -281,13 +387,18 @@ public sealed class AssistantLocal
         bool Interne = false);
 
     /// <summary>Répond à une demande, en appelant les outils si besoin.</summary>
+    /// <param name="autonome">
+    /// Vrai quand l'utilisateur a demandé que l'assistant fasse seul : il choisit l'outil au lieu
+    /// de le proposer, et n'attend pas d'accord sur un plan qu'on lui a déjà confié.
+    /// </param>
     public string Repondre(
         string demande,
         IReadOnlyList<PluginManifest> outils,
         IReadOnlyList<Capacite> capacites,
         Executeur executeur,
         Action<string>? journal,
-        CancellationToken arret = default)
+        CancellationToken arret = default,
+        bool autonome = false)
     {
         // Avant le chargement du modèle, et pas après.
         //
@@ -315,7 +426,7 @@ public sealed class AssistantLocal
         // Le rappel dit la même chose au même moment ; il est seulement placé là où il ne détruit
         // rien. L'ancien est retiré avant que le nouveau ne s'ajoute, sinon le modèle lirait l'état
         // des carnets à trois tours d'écart et croirait à trois travaux différents.
-        Rappeler(journal);
+        Rappeler(journal, autonome);
 
         _messages.Add(new JsonObject { ["role"] = "user", ["content"] = Vue.Contenu(demande, journal) });
         Elaguer();
@@ -330,8 +441,33 @@ public sealed class AssistantLocal
         // Une seule relance quand le modèle se tait sans rien avoir produit.
         var relance = false;
 
-        for (var tour = 0; tour < ToursMaximum; tour++)
+        // Les tours de ce fil-ci, et le nombre de fils déjà consommés par cette demande.
+        var tour = 0;
+        var reprises = 0;
+
+        while (true)
         {
+            // Les tours épuisés ou la place presque prise : on note où on en est, et on repart.
+            //
+            // Auparavant la boucle rendait « L'assistant n'a pas abouti en 8 échanges » et jetait
+            // tout — le fil, ce qu'il avait appris, le travail à moitié fait. Il n'avait pas
+            // échoué, il avait manqué de place ; et la place perdue l'était pour rien.
+            if (tour >= ToursMaximum || Plein)
+            {
+                if (reprises >= ReprisesMaximum || !Consolider(journal, arret, autonome))
+                {
+                    break;
+                }
+
+                reprises++;
+                tour = 0;
+                relance = false;
+
+                continue;
+            }
+
+            tour++;
+
             // L'arrêt est vérifié entre les tours, et non pendant.
             //
             // Un tour, c'est une réflexion du modèle puis au plus un outil lancé. Ce qui a déjà été
@@ -457,10 +593,162 @@ public sealed class AssistantLocal
             }
         }
 
+        // Ce qui reste a faire est dans le carnet, et c'est ce qui change tout : la phrase ne dit
+        // plus « je n'y arrive pas », elle dit ou en est le travail et comment le relancer.
+        var ouvert = FichierTravail.Lister(journal)
+            .FirstOrDefault(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+
+        if (ouvert is not null)
+        {
+            var faites = ouvert.Taches.Count(t => t.Faite).ToString(CultureInfo.InvariantCulture);
+            var total = ouvert.Taches.Count.ToString(CultureInfo.InvariantCulture);
+
+            return (dernierResultat.Length > 0 ? dernierResultat + "\n\n" : "")
+                + $"Je m'arrête là pour cette fois : « {ouvert.Titre} » en est à {faites}/{total}. "
+                + "Ce qui reste et ce que j'ai établi sont dans le carnet — dites-moi « reprends le "
+                + "travail » et je repars de la première étape non cochée.";
+        }
+
         return dernierResultat.Length > 0
             ? dernierResultat
             : $"L'assistant n'a pas abouti en {ToursMaximum.ToString(CultureInfo.InvariantCulture)} échanges.";
     }
+
+    /// <summary>Le contexte est-il assez plein pour qu'il faille le renouveler ?</summary>
+    private bool Plein => _jetons > ServeurModele.Contexte * PartPleine;
+
+    /// <summary>
+    /// Écrit ce qui reste à faire, puis repart sur un contexte neuf.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> Une demande qui n'aboutissait pas en huit échanges rendait
+    /// « L'assistant n'a pas abouti en 8 échanges » et jetait tout : le fil, ce qu'il avait appris,
+    /// et le travail à moitié fait. Mesuré le 24 août sur la composition d'un flux vidéo — deux fois
+    /// de suite, après une vingtaine d'appels d'outil corrects. Le modèle n'avait pas échoué, il
+    /// avait manqué de place ; et la place perdue l'était pour rien, puisque tout était à refaire.
+    ///
+    /// <para>
+    /// <b>Ce que la reprise sauve.</b> Le modèle relit son propre fil une dernière fois et en tire
+    /// deux choses : ce qui reste à faire, et ce qui est établi. Les deux vont au carnet, qui
+    /// survit au contexte parce qu'il est sur le disque. Le fil est alors jeté et remplacé par la
+    /// consigne, le carnet, et l'ordre de reprendre — quelques centaines de jetons là où il y en
+    /// avait vingt-cinq mille.
+    /// </para>
+    ///
+    /// <para>
+    /// C'est la seule compression dont un modèle soit réellement capable ici : lui demander de
+    /// résumer sa conversation rendrait un texte, joli et inutilisable ; lui demander l'état de son
+    /// travail rend une liste, qu'on peut cocher.
+    /// </para>
+    ///
+    /// <para>
+    /// Le carnet est accepté d'office. On ne renouvelle un contexte que sur un travail déjà en
+    /// cours : redemander l'accord d'un plan que l'utilisateur a lancé lui-même l'obligerait à
+    /// approuver deux fois la même chose, et arrêterait net une reprise censée être invisible.
+    /// </para>
+    /// </remarks>
+    /// <returns>Vrai si la reprise est préparée et que la boucle peut repartir.</returns>
+    private bool Consolider(Action<string>? journal, CancellationToken arret, bool autonome)
+    {
+        if (arret.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        journal?.Invoke("Contexte plein : l'assistant note où il en est et repart sur un fil neuf.");
+
+        var demande = new JsonArray();
+
+        foreach (var message in _messages)
+        {
+            demande.Add(JsonNode.Parse(message!.ToJsonString())!);
+        }
+
+        demande.Add(new JsonObject
+        {
+            ["role"] = "user",
+            ["content"] =
+                "Ta place de travail est presque pleine et va etre renouvelee. N'appelle aucun "
+                + "outil. Rends exactement trois lignes, et rien d'autre :\n"
+                + "TITRE: le titre du travail en cours, ou un titre court pour ce qui est demande\n"
+                + "RESTE: les etapes qu'il reste a faire, separees par des points-virgules\n"
+                + "ACQUIS: ce qui est deja etabli et qu'il ne faudra pas redemander — ce que "
+                + "l'utilisateur a dit, les noms exacts trouves, les valeurs choisies — separes par "
+                + "des points-virgules",
+        });
+
+        var reponse = Demander(demande, [], arret);
+        var dit = Ecrit((reponse?["choices"]?[0]?["message"] as JsonObject)?["content"]);
+
+        if (dit.Length == 0)
+        {
+            return false;
+        }
+
+        var titre = Ligne(dit, "TITRE:");
+        var reste = Morceaux(Ligne(dit, "RESTE:"));
+        var acquis = Morceaux(Ligne(dit, "ACQUIS:"));
+
+        if (titre.Length == 0 || reste.Count == 0)
+        {
+            // Sans etapes restantes, il n'y a rien a reprendre : mieux vaut rendre la main avec ce
+            // qui a ete fait que repartir sur un fil neuf pour tourner en rond dedans.
+            return false;
+        }
+
+        FichierTravail.Noter(titre, reste, journal);
+        FichierTravail.Accepter(titre, journal);
+
+        if (acquis.Count > 0)
+        {
+            FichierTravail.Retenir(titre, acquis, journal);
+        }
+
+        // Le fil est jete, la consigne gardee : c'est elle qui dit au modele ce qu'il est, et elle
+        // ne depend d'aucun tour.
+        var consigne = _messages[0];
+
+        _messages.Clear();
+        _messages.Add(consigne!);
+        _jetons = 0;
+
+        // Puis le carnet, et l'ordre de reprendre. Sans eux le fil neuf serait muet : le modele
+        // recevrait sa consigne et rien a quoi repondre. C'est le rappel qui porte les etapes
+        // restantes, les acquis et la ligne REPRISE ; le message qui suit ne fait que rendre la
+        // main, parce qu'un tour se termine par une demande et non par un constat.
+        Rappeler(journal, autonome);
+
+        _messages.Add(new JsonObject
+        {
+            ["role"] = "user",
+            ["content"] = "Reprends maintenant, a la premiere etape non cochee. Ne redemande rien "
+                + "de ce que les acquis portent deja, et n'annonce pas que tu reprends : fais-le.",
+        });
+
+        journal?.Invoke($"Reprise sur « {titre} » : {reste.Count} etape(s) restante(s).");
+
+        return true;
+    }
+
+    /// <summary>La suite d'une ligne qui commence par cette etiquette, dans un texte.</summary>
+    private static string Ligne(string texte, string etiquette)
+    {
+        foreach (var ligne in texte.Split('\n'))
+        {
+            var propre = ligne.Trim();
+
+            if (propre.StartsWith(etiquette, StringComparison.OrdinalIgnoreCase))
+            {
+                return propre[etiquette.Length..].Trim();
+            }
+        }
+
+        return "";
+    }
+
+    /// <summary>Une liste separee par des points-virgules, nettoyee de ses vides.</summary>
+    private static IReadOnlyList<string> Morceaux(string ligne)
+        => [.. ligne.Split(';').Select(m => m.Trim()).Where(m => m.Length > 0)];
 
     /// <summary>Ce qu'on rend quand l'utilisateur a demandé l'arrêt.</summary>
     /// <remarks>
@@ -800,7 +1088,12 @@ public sealed class AssistantLocal
     /// <summary>Un identifiant d'outil, en un nom que le dialecte accepte.</summary>
     private static string Nom(string identifiant) => identifiant.Replace('-', '_');
 
-    private static JsonObject? Demander(JsonArray messages, JsonArray outils, CancellationToken arret)
+    /// <remarks>
+    /// Relève au passage ce que l'échange a coûté. Le serveur rend ce compte dans <c>usage</c> :
+    /// c'est la seule mesure exacte de ce qui reste, et l'estimer à la longueur des messages se
+    /// tromperait d'un facteur trois sur un catalogue de nœuds.
+    /// </remarks>
+    private JsonObject? Demander(JsonArray messages, JsonArray outils, CancellationToken arret)
     {
         var corps = new JsonObject
         {
@@ -829,7 +1122,20 @@ public sealed class AssistantLocal
 
             var lu = reponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
-            return JsonNode.Parse(lu) as JsonObject;
+            if (JsonNode.Parse(lu) is not JsonObject rendu)
+            {
+                return null;
+            }
+
+            // Le compte du serveur, quand il le donne. Absent, l'ancien est garde plutot que remis
+            // a zero : croire le contexte vide parce qu'une reponse n'a pas porte son compte
+            // repousserait la consolidation au moment ou elle n'a plus la place de se faire.
+            if (rendu["usage"]?["total_tokens"]?.GetValue<int>() is { } compte and > 0)
+            {
+                _jetons = compte;
+            }
+
+            return rendu;
         }
         catch (HttpRequestException)
         {
