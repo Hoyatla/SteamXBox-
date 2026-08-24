@@ -24,6 +24,11 @@ public static class SearchIndexBuilder
     {
         var items = new List<SearchItem>(4096);
 
+        // En premier, et pas seulement par la note. Le dédoublonnage garde la première occurrence
+        // d'un chemin : ce que le produit héberge l'emporte donc aussi quand le même fichier est
+        // trouvé plus loin par une autre source.
+        OutilsDuProduit(items, log);
+
         StartMenusAndDesktops(items, log);
         ExecutablesOnThePath(items, log);
         items.AddRange(StoreApps.AsSearchItems(log));
@@ -42,6 +47,50 @@ public static class SearchIndexBuilder
         log?.Invoke($"search index: {unique.Count} entries ({items.Count - unique.Count} duplicates dropped).");
 
         return unique;
+    }
+
+    /// <summary>
+    /// Ce que SteamXBox héberge : les programmes accueillis et leurs dossiers.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pourquoi d'abord.</b> Chercher depuis SteamXBox, c'est chercher d'abord dans SteamXBox. Un
+    /// outil accueilli doit sortir avant un homonyme installé ailleurs sur la machine — sans quoi le
+    /// produit connaît moins bien ce qu'il contient que ce qui l'entoure.
+    ///
+    /// <para>
+    /// La reconnaissance décide de ce qui est proposé comme programme : l'exécutable n'est indexé
+    /// que pour ce qui s'ouvre. Le dossier, lui, l'est pour tout — y compris les modèles et les
+    /// bibliothèques, parce que « où sont mes modèles » est une question qu'on pose à une barre de
+    /// recherche, et que la réponse est un dossier.
+    /// </para>
+    /// </remarks>
+    private static void OutilsDuProduit(List<SearchItem> items, Action<string>? log)
+    {
+        var outils = Path.Combine(AppContext.BaseDirectory, "Outils");
+        var vus = 0;
+
+        try
+        {
+            foreach (var programme in SteamXBox.Plugins.Reconnaissance.Lire(outils))
+            {
+                Add(items, programme.Dossier, SearchItemKind.Folder, IndexPlan.OutilsPriority);
+                vus++;
+
+                if (programme is { Forme: SteamXBox.Plugins.FormeProgramme.Application, Executable.Length: > 0 })
+                {
+                    Add(items, programme.Executable, SearchItemKind.Application, IndexPlan.OutilsPriority);
+                    vus++;
+                }
+            }
+
+            log?.Invoke($"search index: {vus} entries from the product's own tools.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Une source indisponible n'empêche pas l'index : les autres suffisent à faire une barre
+            // de recherche utile, et l'échec est dit plutôt que masqué.
+            log?.Invoke($"search index: the product's tools could not be read: {exception.Message}");
+        }
     }
 
     private static void StartMenusAndDesktops(List<SearchItem> items, Action<string>? log)

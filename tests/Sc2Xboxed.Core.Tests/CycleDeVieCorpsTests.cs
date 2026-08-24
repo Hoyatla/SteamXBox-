@@ -15,18 +15,12 @@ namespace Sc2Xboxed.Core.Tests;
 public class CycleDeVieCorpsTests : IDisposable
 {
     private readonly DirectoryInfo _bac = Directory.CreateTempSubdirectory("cycle");
-    private readonly string _storageAvant = Environment.GetEnvironmentVariable(
-        PluginLifecycle.StorageRootVariable) ?? "";
 
-    public CycleDeVieCorpsTests()
-        => Environment.SetEnvironmentVariable(
-            PluginLifecycle.StorageRootVariable, Path.Combine(_bac.FullName, "hote"));
-
+    // La storage de l'hôte est déjà déplacée pour toute la série par TestHostStorage. La déplacer
+    // une seconde fois ici la faisait changer sous les pieds des autres classes, que xUnit exécute
+    // en parallèle : quatre épreuves tombaient, dont aucune n'était fausse.
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable(
-            PluginLifecycle.StorageRootVariable, _storageAvant.Length == 0 ? null : _storageAvant);
-
         _bac.Delete(recursive: true);
         GC.SuppressFinalize(this);
     }

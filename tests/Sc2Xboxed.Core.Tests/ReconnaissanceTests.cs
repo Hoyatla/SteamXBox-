@@ -226,3 +226,31 @@ public class ReconnaissanceTests : IDisposable
         Assert.False(Reconnaissance.Graphique(faux));
     }
 }
+
+/// <summary>
+/// Le rang que la recherche donne à ce que SteamXBox héberge.
+/// </summary>
+/// <remarks>
+/// Chercher depuis SteamXBox, c'est chercher d'abord dans SteamXBox. Cette épreuve tient la règle
+/// par son seul point vérifiable sans lancer d'interface : la note de départ.
+/// </remarks>
+public class RangDesOutilsTests
+{
+    /// <summary>Ce que le produit héberge passe avant tout le reste.</summary>
+    /// <remarks>
+    /// Au-dessus des raccourcis du menu Démarrer, donc au-dessus de la source la mieux notée. Sans
+    /// cela, un outil accueilli sortirait derrière un homonyme installé ailleurs sur la machine.
+    /// </remarks>
+    [Fact]
+    public void WhatTheProductHostsComesBeforeEverythingElse()
+    {
+        Assert.True(
+            SteamXBox.Tools.Search.IndexPlan.OutilsPriority
+                > SteamXBox.Tools.Search.IndexPlan.ShortcutPriority,
+            "le dossier des outils doit primer sur les raccourcis");
+
+        Assert.True(
+            SteamXBox.Tools.Search.IndexPlan.OutilsPriority
+                > SteamXBox.Tools.Search.IndexPlan.StoreApplicationPriority);
+    }
+}

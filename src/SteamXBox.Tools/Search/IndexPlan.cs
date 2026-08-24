@@ -36,6 +36,17 @@ public static class IndexPlan
             ? 10
             : 80;
 
+    /// <summary>
+    /// Ce que SteamXBox héberge lui-même, avant tout le reste.
+    /// </summary>
+    /// <remarks>
+    /// Au-dessus des raccourcis, et c'est délibéré. Quelqu'un qui cherche depuis SteamXBox cherche
+    /// d'abord ce que SteamXBox contient : un outil accueilli dans <c>Outils</c> doit sortir avant
+    /// un programme homonyme installé ailleurs sur la machine. Le produit est le premier endroit où
+    /// regarder, pas le dernier.
+    /// </remarks>
+    public const int OutilsPriority = 200;
+
     /// <summary>Start menus and desktops: shortcuts, swept deep, ranked high.</summary>
     public const int ShortcutPriority = 120;
 
