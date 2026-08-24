@@ -71,3 +71,8 @@ Library/archive/
 /Outils/*
 !/Outils/LISEZ-MOI.txt
 /python-3.11.0-amd64.exe
+
+# Releves du banc DualSense : une sortie d'outil, reecrite a chaque seance et
+# datee. Le depot en portait soixante-cinq fichiers, dont la seule lecture utile
+# etait le resume — et le protocole, lui, est ecrit dans docs/.
+/mesures/
