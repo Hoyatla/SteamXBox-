@@ -162,6 +162,38 @@ public partial class ToolsView : UserControl
     private void ArreterPaquetClic(object sender, RoutedEventArgs e) => _paquetArret?.Cancel();
 
     /// <summary>
+    /// Le corps d'un outil : le dossier que son manifeste déclare, s'il en déclare un.
+    /// </summary>
+    /// <remarks>
+    /// <b>Ce que ceci répare.</b> Archiver compressait <c>Plugins\&lt;id&gt;</c> — le manifeste, un
+    /// kilooctet — et laissait les cinq cents mégaoctets du programme intacts dans <c>Outils</c>. Le
+    /// produit savait donc ranger l'étiquette et oublier le corps ; la place annoncée comme libérée
+    /// ne l'était pas.
+    ///
+    /// <para>
+    /// Un outil livré n'a pas de corps déclaré et rend une chaîne vide : pour lui rien ne change,
+    /// ce qui est voulu — son manifeste <i>est</i> tout ce qu'il est.
+    /// </para>
+    /// </remarks>
+    private static string Corps(string id)
+    {
+        try
+        {
+            var declare = PluginCatalog.Scan(Root).Loaded
+                .FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                ?.Environnement?.Dossier;
+
+            return declare is { Length: > 0 } ou ? PluginTools.Resoudre(ou) : "";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Sans manifeste lisible, on ne sait pas quel corps désigner : mieux vaut n'en toucher
+            // aucun que d'en deviner un.
+            return "";
+        }
+    }
+
+    /// <summary>
     /// Fait tourner l'installeur d'un programme extérieur dans un dossier qui n'est qu'à lui.
     /// </summary>
     /// <remarks>
@@ -361,8 +393,8 @@ public partial class ToolsView : UserControl
         }
 
         var done = PluginLifecycle.HasArchive(Root, id) && !Directory.Exists(Path.Combine(Root, id))
-            ? PluginLifecycle.Restore(Root, id, UiLog.Info)
-            : PluginLifecycle.Archive(Root, id, UiLog.Info);
+            ? PluginLifecycle.Restore(Root, id, UiLog.Info, Corps(id))
+            : PluginLifecycle.Archive(Root, id, UiLog.Info, Corps(id));
 
         Status.Text = done ? "" : "L'opération n'a pas abouti ; le journal en dit la raison.";
         Refresh();
@@ -412,7 +444,7 @@ public partial class ToolsView : UserControl
 
         if (installed)
         {
-            PluginLifecycle.Delete(Root, id, UiLog.Info);
+            PluginLifecycle.Delete(Root, id, UiLog.Info, Corps(id));
         }
         else
         {

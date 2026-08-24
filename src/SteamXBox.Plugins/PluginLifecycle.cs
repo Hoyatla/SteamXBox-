@@ -221,10 +221,20 @@ public static class PluginLifecycle
     /// The archive is written and verified before the folder goes. The other order turns a failed
     /// compression into a deletion, which is the one outcome the user did not ask for.
     /// </remarks>
-    public static bool Archive(string root, string id, Action<string>? log = null)
+    public static bool Archive(string root, string id, Action<string>? log = null, string corps = "")
     {
         var folder = Path.Combine(root, id);
         var archive = ArchivePath(root, id);
+
+        // Le corps d'abord, et ce n'est pas un détail d'ordre. C'est lui qui pèse et lui qui peut
+        // échouer — disque plein, fichier verrouillé par le programme encore ouvert. S'il échoue
+        // après qu'on a rangé le manifeste, l'outil se retrouve sans description et avec ses cinq
+        // cents mégaoctets toujours là : le pire des deux états.
+        if (corps.Length > 0 && Directory.Exists(corps)
+            && !Ranger(corps, ArchiveCorps(corps, id), $"{id} (corps)", log))
+        {
+            return false;
+        }
 
         try
         {
@@ -268,7 +278,7 @@ public static class PluginLifecycle
     }
 
     /// <summary>Unpacks an archive back into a working tool.</summary>
-    public static bool Restore(string root, string id, Action<string>? log = null)
+    public static bool Restore(string root, string id, Action<string>? log = null, string corps = "")
     {
         var folder = Path.Combine(root, id);
         var archive = ArchivePath(root, id);
@@ -282,6 +292,16 @@ public static class PluginLifecycle
 
             ZipFile.ExtractToDirectory(archive, folder);
             File.Delete(archive);
+
+            // Le corps revient après sa description, parce que c'est elle qui dit où il va. Une
+            // archive de corps absente n'est pas une erreur : tous les outils n'en ont pas.
+            if (corps.Length > 0 && File.Exists(ArchiveCorps(corps, id)) && !Directory.Exists(corps))
+            {
+                ZipFile.ExtractToDirectory(ArchiveCorps(corps, id), corps);
+                File.Delete(ArchiveCorps(corps, id));
+
+                log?.Invoke($"plugin {id}: its body is back in {Path.GetFileName(corps)}.");
+            }
 
             log?.Invoke($"plugin {id}: restored.");
 
@@ -302,7 +322,7 @@ public static class PluginLifecycle
     /// they had unpacked still meant to keep the archive — that is what archiving it was for. The
     /// archive is deleted by <see cref="Forget"/>, which is a separate decision.
     /// </remarks>
-    public static bool Delete(string root, string id, Action<string>? log = null)
+    public static bool Delete(string root, string id, Action<string>? log = null, string corps = "")
     {
         try
         {
@@ -311,6 +331,15 @@ public static class PluginLifecycle
             if (Directory.Exists(folder))
             {
                 Directory.Delete(folder, recursive: true);
+            }
+
+            // Éjecter un outil hébergé sans emporter son corps laisserait cinq cents mégaoctets dans
+            // Outils sans plus rien pour dire à qui ils appartiennent : exactement ce que le produit
+            // reproche aux désinstalleurs des autres.
+            if (corps.Length > 0 && Directory.Exists(corps))
+            {
+                Directory.Delete(corps, recursive: true);
+                log?.Invoke($"plugin {id}: its body in {Path.GetFileName(corps)} went with it.");
             }
 
             log?.Invoke($"plugin {id}: removed"
@@ -394,6 +423,64 @@ public static class PluginLifecycle
 
     /// <summary>Whether an archive of this tool exists.</summary>
     public static bool HasArchive(string root, string id) => File.Exists(ArchivePath(root, id));
+
+    /// <summary>
+    /// Où se range l'archive du corps d'un outil hébergé.
+    /// </summary>
+    /// <remarks>
+    /// À côté du corps, pas à côté du manifeste : cinq cents mégaoctets rangés dans le dossier des
+    /// descriptions donneraient un <c>Plugins</c> plus lourd que tout le reste, et une sauvegarde
+    /// du dossier des manifestes emporterait sans le vouloir les programmes.
+    /// </remarks>
+    public static string ArchiveCorps(string corps, string id)
+        => Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(corps.TrimEnd(Path.DirectorySeparatorChar)))!,
+            ArchiveFolderName,
+            Safe(id) + ".zip");
+
+    /// <summary>
+    /// Range un dossier dans une archive, et ne l'efface que si l'archive tient debout.
+    /// </summary>
+    /// <remarks>
+    /// La relecture avant l'effacement est la même précaution que pour un manifeste, et elle compte
+    /// bien plus ici : une archive tronquée d'un kilooctet se refait, une archive tronquée de cinq
+    /// cents mégaoctets se retélécharge — quand la source existe encore.
+    /// </remarks>
+    private static bool Ranger(string dossier, string archive, string quoi, Action<string>? log)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
+
+            if (File.Exists(archive))
+            {
+                File.Delete(archive);
+            }
+
+            ZipFile.CreateFromDirectory(dossier, archive, CompressionLevel.Optimal, includeBaseDirectory: false);
+
+            using (var check = ZipFile.OpenRead(archive))
+            {
+                if (check.Entries.Count == 0)
+                {
+                    log?.Invoke($"plugin {quoi}: the archive came out empty; the folder was kept.");
+
+                    return false;
+                }
+            }
+
+            Directory.Delete(dossier, recursive: true);
+            log?.Invoke($"plugin {quoi}: archived to {Path.GetFileName(archive)}.");
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke($"plugin {quoi}: could not be archived: {exception.Message}");
+
+            return false;
+        }
+    }
 
     private static string ArchivePath(string root, string id)
         => Path.Combine(root, ArchiveFolderName, Safe(id) + ".zip");
