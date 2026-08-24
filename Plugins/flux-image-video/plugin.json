@@ -1,24 +1,26 @@
-{
+﻿{
   "id": "flux-image-video",
   "name": "Animer une image",
   "category": "tool",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E786",
-  "hint": "Fabrique une vidéo de deux secondes à partir d'une image fixe : la caméra bouge, le sujet reste. Compter trois à cinq minutes. Deux secondes est la longueur que le modèle tient — mesuré, au-delà il perd le fil et le sujet se dissout. Pour une séquence plus longue, animez plusieurs images et mettez les clips bout à bout.",
+  "hint": "Fabrique une vidÃ©o Ã  partir d'une image fixe. Deux moteurs selon ce qui est installÃ© : Wan 2.2 suit une description Ã©crite et tient environ trois secondes, SVD anime sans description et tient deux secondes. Compter deux Ã  cinq minutes.",
   "surface": "panel",
   "remembers": [
-    "modele",
+    "moteur",
+    "description",
     "mouvement",
     "rendu",
+    "taille",
     "prefixe"
   ],
   "content": [
     {
       "kind": "file",
       "id": "image",
-      "label": "Image de départ",
+      "label": "Image de dÃ©part",
       "options": [
         "png",
         "jpg",
@@ -29,55 +31,83 @@
     },
     {
       "kind": "choice",
+      "id": "moteur",
+      "label": "Moteur",
+      "hint": "Seuls les moteurs dont les modÃ¨les sont sur cette machine sont proposÃ©s. Wan 2.2 obÃ©it Ã  une description Ã©crite ; SVD n'en lit aucune et se contente d'animer ce qu'il voit.",
+      "recettes": [
+        {
+          "id": "wan22",
+          "label": "Wan 2.2 â€” suit une description",
+          "exige": [
+            "unet/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf",
+            "unet/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf",
+            "text_encoders/umt5-xxl-encoder-Q4_K_M.gguf",
+            "vae/wan_2.1_vae.safetensors",
+            "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+            "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
+          ],
+          "target": "{app}\\Flux\\Wan22_I2V_GGUF.json|!11.image={image}|!8.text={description}|12.width={taille}|12.height={taille}|12.length=49|13.noise_seed={graine}|14.noise_seed={graine}|16.fps=16|17.filename_prefix={prefixe}"
+        },
+        {
+          "id": "svd",
+          "label": "SVD â€” sans description, plus lÃ©ger",
+          "exige": [
+            "checkpoints/svd_xt.safetensors"
+          ],
+          "target": "{app}\\Flux\\SVD_Image_to_Video.json|!2.image={image}|4.video_frames=14|4.motion_bucket_id={mouvement}|4.fps=6|8.fps=6|6.steps={rendu}|6.seed={graine}|9.filename_prefix={prefixe}"
+        }
+      ]
+    },
+    {
+      "kind": "text",
+      "id": "description",
+      "label": "Description â€” Wan seulement",
+      "value": "",
+      "hint": "Ce que la scÃ¨ne doit faire, en anglais de prÃ©fÃ©rence. IgnorÃ© par SVD, qui n'a pas d'encodeur de texte : lui se contente d'animer ce qu'il voit sur l'image."
+    },
+    {
+      "kind": "choice",
+      "id": "taille",
+      "label": "Taille â€” Wan seulement",
+      "value": "640",
+      "options": [
+        "480=480 Ã— 480, le plus sÃ»r",
+        "640=640 Ã— 640, Ã©quilibrÃ©",
+        "768=768 Ã— 768, demande de la marge"
+      ],
+      "hint": "MesurÃ© sur une carte de douze gigaoctets : 640 tient avec sept cents mÃ©gaoctets de marge. Au-dessus, un navigateur ouvert peut suffire Ã  faire dÃ©passer."
+    },
+    {
+      "kind": "choice",
       "id": "mouvement",
-      "label": "Mouvement",
+      "label": "Mouvement â€” SVD seulement",
       "value": "127",
       "options": [
-        "60=Léger",
-        "127=Modéré",
+        "60=LÃ©ger",
+        "127=ModÃ©rÃ©",
         "180=Ample"
       ],
-      "hint": "Combien la scène doit bouger. Le nœud accepte jusqu'à 1023, mais au-delà de 180 l'image se déforme sans plus rien représenter : ces valeurs ne sont pas proposées parce qu'elles ne donnent pas de résultat."
+      "hint": "Combien la scÃ¨ne doit bouger. Le nÅ“ud accepte jusqu'Ã  1023, mais au-delÃ  de 180 l'image se dÃ©forme sans plus rien reprÃ©senter. Wan, lui, tire son mouvement de la description."
     },
     {
       "kind": "choice",
       "id": "rendu",
-      "label": "Rendu",
+      "label": "Rendu â€” SVD seulement",
       "value": "20",
+      "avance": true,
       "options": [
         "14=Rapide",
         "20=Standard",
-        "28=Soigné"
+        "28=SoignÃ©"
       ],
-      "hint": "Le nombre de passes de calcul, et donc l'essentiel du temps d'attente. En dessous de quatorze la vidéo devient granuleuse ; au-delà de vingt-huit elle ne s'améliore plus."
+      "hint": "Le nombre de passes de calcul. Wan n'expose pas ce rÃ©glage : ses accÃ©lÃ©rateurs le figent Ã  quatre passes, et en changer casserait le relais entre ses deux experts."
     },
     {
       "kind": "text",
       "id": "prefixe",
       "label": "Nom du fichier",
       "value": "animation",
-      "hint": "Le début du nom du fichier produit. Le générateur y ajoute un numéro pour ne rien écraser."
-    },
-    {
-      "kind": "choice",
-      "id": "modele",
-      "label": "Modèle",
-      "avance": true,
-      "from": "ImageOnlyCheckpointLoader.ckpt_name",
-      "hint": "Les modèles réellement installés sur cette machine. La liste est relue à chaque ouverture : un modèle ajouté apparaît ici, un modèle retiré disparaît, sans qu'aucun fichier ait à être modifié."
-    },
-    {
-      "kind": "choice",
-      "id": "cadence",
-      "label": "Cadence",
-      "avance": true,
-      "value": "6",
-      "options": [
-        "6=6 images par seconde",
-        "8=8 images par seconde",
-        "10=10 images par seconde"
-      ],
-      "hint": "Le modèle a été entraîné autour de six images par seconde. Monter la cadence raccourcit la vidéo à longueur égale et l'éloigne de ce que le modèle sait faire."
+      "hint": "Le dÃ©but du nom du fichier produit. Le gÃ©nÃ©rateur y ajoute un numÃ©ro pour ne rien Ã©craser."
     },
     {
       "kind": "number",
@@ -87,20 +117,20 @@
       "value": "42",
       "min": 0,
       "max": 999999,
-      "hint": "Le point de départ du hasard. À réglages égaux, deux graines donnent deux animations très différentes — l'une peut tenir là où l'autre se dissout. La même graine redonne exactement la même vidéo, ce qui sert à retrouver un résultat déjà obtenu."
+      "hint": "Le point de dÃ©part du hasard. Ã€ rÃ©glages Ã©gaux, deux graines donnent deux animations trÃ¨s diffÃ©rentes â€” l'une peut tenir lÃ  oÃ¹ l'autre se dissout. La mÃªme graine redonne exactement la mÃªme vidÃ©o."
     },
     {
       "kind": "action",
       "label": "Animer",
       "does": "flux",
-      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\SVD_Image_to_Video.json|1.ckpt_name={modele}|!2.image={image}|4.video_frames=14|4.motion_bucket_id={mouvement}|4.fps={cadence}|8.fps={cadence}|6.steps={rendu}|6.seed={graine}|9.filename_prefix={prefixe}"
+      "target": "{recette:moteur}"
     },
     {
       "kind": "action",
       "label": "Autre proposition",
       "does": "flux",
       "hasard": "graine",
-      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\SVD_Image_to_Video.json|1.ckpt_name={modele}|!2.image={image}|4.video_frames=14|4.motion_bucket_id={mouvement}|4.fps={cadence}|8.fps={cadence}|6.steps={rendu}|6.seed={graine}|9.filename_prefix={prefixe}"
+      "target": "{recette:moteur}"
     }
   ]
 }

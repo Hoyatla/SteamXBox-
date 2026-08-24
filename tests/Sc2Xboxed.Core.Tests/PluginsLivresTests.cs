@@ -157,7 +157,7 @@ public class PluginsLivresTests
     /// <summary>L'outil de flux nomme des nœuds qui existent, avec les types qui vont bien.</summary>
     /// <remarks>
     /// La cible est reconstruite exactement comme le panneau la produira : chaque champ remplacé par
-    /// sa valeur par défaut, le jeton <c>{tools}</c> résolu. Ce qui est éprouvé n'est donc pas une
+    /// sa valeur par défaut, le jeton <c>{app}</c> résolu. Ce qui est éprouvé n'est donc pas une
     /// cible écrite pour l'occasion, mais celle qu'un utilisateur obtiendra en ouvrant le panneau et
     /// en cliquant sans rien changer.
     /// </remarks>
@@ -170,40 +170,59 @@ public class PluginsLivresTests
 
         Assert.True(outil is not null, "l'outil 'flux-image-video' n'a pas été chargé");
 
-        var cible = outil!.Content.First(c => c.Kind == "action").Target;
+        // Chaque recette est éprouvée, pas seulement celle qui se trouve en tête.
+        //
+        // L'outil ne nomme plus un graphe mais plusieurs, un par famille de modèles, et c'est
+        // précisément ce que la vérification doit suivre : une recette dont les numéros de nœuds ne
+        // correspondent plus à son graphe ne se voit qu'au clic, plusieurs minutes après, sur un
+        // message qui ne renvoie pas au manifeste. Ajouter un moteur ajoute donc un cas ici, sans
+        // que personne ait à y penser.
+        var recettes = outil!.Content
+            .SelectMany(c => c.Recettes)
+            .ToList();
 
-        foreach (var champ in outil.Content.Where(c => c.Id.Length > 0))
+        Assert.True(recettes.Count > 0, "l'outil ne déclare aucune recette");
+
+        foreach (var recette in recettes)
         {
-            // Un champ « file » n'a pas de valeur par défaut : l'utilisateur la désigne. N'importe
-            // quel nom fait l'affaire ici, puisque c'est le nœud visé qu'on éprouve, pas le fichier.
-            var valeur = champ.Value.Length > 0 ? champ.Value : "image.png";
+            var cible = recette.Target;
 
-            cible = cible.Replace("{" + champ.Id + "}", valeur, StringComparison.Ordinal);
+            foreach (var champ in outil.Content.Where(c => c.Id.Length > 0))
+            {
+                // Un champ « file » n'a pas de valeur par défaut : l'utilisateur la désigne.
+                // N'importe quel nom fait l'affaire, puisque c'est le nœud visé qu'on éprouve.
+                var valeur = champ.Value.Length > 0 ? champ.Value : "image.png";
+
+                cible = cible.Replace("{" + champ.Id + "}", valeur, StringComparison.Ordinal);
+            }
+
+            cible = cible.Replace(
+                "{app}", racine, StringComparison.OrdinalIgnoreCase);
+
+            var lecture = FluxTravail.Lire(cible);
+
+            Assert.True(lecture.Faute.Length == 0, $"recette « {recette.Id} » : {lecture.Faute}");
+            Assert.True(File.Exists(lecture.Chemin), $"recette « {recette.Id} » : flux absent — {lecture.Chemin}");
+
+            var pose = FluxTravail.Appliquer(
+                File.ReadAllText(lecture.Chemin), lecture.Reglages, out var faute);
+
+            Assert.True(faute is null, $"recette « {recette.Id} » : {faute}");
+
+            // Le nom du fichier produit traverse toutes les recettes : c'est le seul réglage qu'un
+            // moteur ne peut pas ignorer, et le vérifier prouve que la substitution a bien atteint
+            // le graphe de cette recette-là.
+            using var document = JsonDocument.Parse(pose);
+
+            Assert.Contains(
+                "animation",
+                document.RootElement.EnumerateObject()
+                    .Select(n => n.Value.GetProperty("inputs"))
+                    .Where(i => i.TryGetProperty("filename_prefix", out _))
+                    .Select(i => i.GetProperty("filename_prefix").GetString() ?? "")
+                    .ToList());
         }
-
-        cible = cible.Replace(
-            "{tools}", Path.Combine(racine, "Outils"), StringComparison.OrdinalIgnoreCase);
-
-        var lecture = FluxTravail.Lire(cible);
-
-        Assert.Equal("", lecture.Faute);
-        Assert.True(File.Exists(lecture.Chemin), $"flux absent : {lecture.Chemin}");
-
-        var pose = FluxTravail.Appliquer(File.ReadAllText(lecture.Chemin), lecture.Reglages, out var faute);
-
-        Assert.Null(faute);
-
-        using var document = JsonDocument.Parse(pose);
-
-        // Les trois types que le manifeste traverse : un compte, un nom, et une cadence qui atterrit
-        // dans deux nœuds différents.
-        Assert.Equal("20", Entree(document, "6", "steps").GetRawText());
-        Assert.Equal("6", Entree(document, "4", "fps").GetRawText());
-        Assert.Equal("animation", Entree(document, "9", "filename_prefix").GetString());
     }
-
-    private static JsonElement Entree(JsonDocument document, string noeud, string entree)
-        => document.RootElement.GetProperty(noeud).GetProperty("inputs").GetProperty(entree);
 
     /// <summary>
     /// Aucun outil ne laisse un flux geler un nom de fichier.
@@ -236,7 +255,7 @@ public class PluginsLivresTests
         {
             manques.AddRange(FluxGel
                 .Examiner(outil, cible => cible.Replace(
-                    "{tools}", Path.Combine(racine, "Outils"), StringComparison.OrdinalIgnoreCase))
+                    "{app}", racine, StringComparison.OrdinalIgnoreCase))
                 .Select(g => g.ToString()));
         }
 

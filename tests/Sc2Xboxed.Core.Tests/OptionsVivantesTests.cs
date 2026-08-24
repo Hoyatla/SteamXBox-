@@ -155,7 +155,7 @@ public class OptionsVivantesTests
     }
 
     [Theory]
-    [InlineData("", "sans options ni 'from'")]
+    [InlineData("", "sans options, sans 'from' ni recettes")]
     [InlineData("ckpt_name", "NomDuNoeud.nom_de_l_entree")]
     public void AChoiceThatNamesNothingUsableIsRefused(string from, string attendu)
     {

@@ -232,6 +232,19 @@ public static class SequenceAnimee
         var rendu = Lire(morceaux[3], 20);
         var prefixe = morceaux[4].Trim().Length > 0 ? morceaux[4].Trim() : "sequence";
 
+        // Le graphe vient du manifeste, plus du code.
+        //
+        // Il était écrit ici, en dur : « SVD_Image_to_Video.json », avec les numéros de ses nœuds
+        // dans la ligne suivante. Ce fichier contredisait à lui seul la règle que le dépôt répète
+        // partout — le manifeste décrit, l'hôte exécute — et il condamnait la séquence animée à
+        // SVD pour toujours : changer de moteur demandait de recompiler le produit.
+        //
+        // Absent de la cible, l'ancien graphe est repris : un manifeste écrit avant ce changement
+        // continue de fonctionner, il est simplement figé comme il l'était.
+        var flux = morceaux.Count > 5 && morceaux[5].Trim().Length > 0
+            ? morceaux[5].Trim()
+            : Path.Combine(AppContext.BaseDirectory, "Flux", "SVD_Image_to_Video.json");
+
         var images = Ordonner(dossier);
 
         if (images.Count == 0)
@@ -254,7 +267,7 @@ public static class SequenceAnimee
         {
             rang++;
 
-            if (Animer(image, ponts, mouvement, rendu, prefixe, rang, images.Count, journal, clips)
+            if (Animer(image, flux, ponts, mouvement, rendu, prefixe, rang, images.Count, journal, clips)
                 is { } refus)
             {
                 return refus;
@@ -267,6 +280,7 @@ public static class SequenceAnimee
     /// <summary>Anime une image, en un ou deux maillons enchaînés.</summary>
     private static string? Animer(
         string image,
+        string flux,
         int ponts,
         int mouvement,
         int rendu,
@@ -287,9 +301,6 @@ public static class SequenceAnimee
                 + $"/{combien.ToString(CultureInfo.InvariantCulture)}, "
                 + $"maillon {maillon.ToString(CultureInfo.InvariantCulture)} : "
                 + $"{Path.GetFileName(depart)}");
-
-            var flux = Path.Combine(
-                Racine, "user", "default", "workflows", "SVD_Image_to_Video.json");
 
             var reglages = $"{flux}|!2.image={depart}"
                 + $"|4.video_frames=14|4.motion_bucket_id={mouvement.ToString(CultureInfo.InvariantCulture)}"

@@ -1,5 +1,29 @@
 namespace SteamXBox.Plugins;
 
+/// <summary>
+/// Une façon de faire le travail d'un outil : un graphe, ses liaisons, et ce qu'elle réclame.
+/// </summary>
+/// <param name="Id">Ce que le panneau retient, et ce que la cible d'une action nomme.</param>
+/// <param name="Label">Ce que l'utilisateur lit dans le menu.</param>
+/// <param name="Exige">
+/// Les fichiers de modèle, relatifs au dossier des modèles du générateur, sans lesquels la recette
+/// ne peut pas tourner. Vide veut dire « toujours disponible ».
+/// </param>
+/// <param name="Target">
+/// La cible que l'action emploiera si cette recette est choisie : le graphe, puis ses réglages,
+/// exactement comme une cible ordinaire. Elle peut nommer les valeurs du panneau en <c>{id}</c>.
+/// </param>
+public sealed class RecetteOutil
+{
+    public string Id { get; set; } = "";
+
+    public string Label { get; set; } = "";
+
+    public List<string> Exige { get; set; } = [];
+
+    public string Target { get; set; } = "";
+}
+
 /// <summary>One element of what the host draws for a tool.</summary>
 /// <remarks>
 /// A vocabulary, not a layout language. The tool names what it contains; where those things go is
@@ -41,6 +65,35 @@ public sealed class PluginContentItem
     /// </para>
     /// </remarks>
     public string Hint { get; set; } = "";
+
+    /// <summary>
+    /// Les recettes entre lesquelles ce choix arbitre : un graphe et ses liaisons par famille.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige, et il était structurel.</b> Un outil de génération nommait UN
+    /// graphe, avec les numéros de ses nœuds recopiés dans la cible. Ce graphe est propre à une
+    /// famille de modèles — celui de « Animer une image » charge par
+    /// <c>ImageOnlyCheckpointLoader</c> et conditionne par <c>SVD_img2vid_Conditioning</c>, ce qui
+    /// n'a de sens que pour SVD. Le menu « Modèle » à côté ne pouvait donc échanger qu'un SVD
+    /// contre un autre SVD : les soixante gigaoctets de MiniMax et de Wan posés sur ce disque
+    /// n'étaient atteignables par aucun outil de la grille.
+    ///
+    /// <para>
+    /// Une recette déplace le graphe du côté du choix. Choisir « Wan 2.2 » ne change plus un nom de
+    /// fichier dans un graphe SVD : cela change le graphe. C'est la seule forme qui rende le menu
+    /// honnête, et elle ne coûte rien à la propriété qui compte — le manifeste décrit toujours, et
+    /// l'hôte exécute toujours.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Ce que la machine décide, et pas le manifeste.</b> Une recette déclare ce qu'elle exige ;
+    /// l'hôte regarde le disque et n'offre que celles qui peuvent tourner. Un client à douze
+    /// gigaoctets et un client à vingt-quatre ouvrent le même outil et n'y voient pas la même
+    /// liste — sans qu'aucun fichier ait été édité, et sans qu'on lui propose jamais un modèle qui
+    /// échouera au chargement.
+    /// </para>
+    /// </remarks>
+    public List<RecetteOutil> Recettes { get; set; } = [];
 
     public int Min { get; set; }
 
@@ -308,7 +361,7 @@ public static class PluginActions
 
     /// <summary>
     /// Anime chaque image d'un dossier et recolle les clips ; la cible est
-    /// <c>dossier|ponts|mouvement|rendu|prefixe</c>.
+    /// <c>dossier|ponts|mouvement|rendu|prefixe|flux</c>.
     /// </summary>
     /// <remarks>
     /// <b>Le seul verbe qui boucle.</b> Les autres exécutent une chose ; celui-ci en exécute une par

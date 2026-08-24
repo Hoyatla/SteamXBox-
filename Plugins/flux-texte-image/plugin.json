@@ -1,12 +1,12 @@
-{
+﻿{
   "id": "flux-texte-image",
-  "name": "Créer une image",
+  "name": "CrÃ©er une image",
   "category": "tool",
   "version": "2.0.0",
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E8B9",
-  "hint": "Fabrique une image à partir d'une description écrite. Compter une dizaine de secondes. Ce n'est pas l'outil pour agrandir une image existante ni pour en tirer une vidéo — pour animer le résultat, passez-le ensuite à « Animer une image ».",
+  "hint": "Fabrique une image Ã  partir d'une description Ã©crite. Compter une dizaine de secondes. Ce n'est pas l'outil pour agrandir une image existante ni pour en tirer une vidÃ©o â€” pour animer le rÃ©sultat, passez-le ensuite Ã  Â« Animer une image Â».",
   "surface": "panel",
   "remembers": [
     "modele",
@@ -20,7 +20,7 @@
       "id": "description",
       "label": "Description",
       "value": "",
-      "hint": "Ce que l'image doit montrer. L'anglais donne de meilleurs résultats que le français, le modèle ayant été entraîné dessus. Décrivez la scène, le style et la lumière plutôt que d'empiler des mots-clés."
+      "hint": "Ce que l'image doit montrer. L'anglais donne de meilleurs rÃ©sultats que le franÃ§ais, le modÃ¨le ayant Ã©tÃ© entraÃ®nÃ© dessus. DÃ©crivez la scÃ¨ne, le style et la lumiÃ¨re plutÃ´t que d'empiler des mots-clÃ©s."
     },
     {
       "kind": "choice",
@@ -32,7 +32,7 @@
         "1024=Standard",
         "1280=Grand"
       ],
-      "hint": "Flux travaille nativement autour de 1024 pixels. En dessous l'image perd en détail ; au-delà de 1280 elle demande plus de mémoire vidéo que cette carte n'en offre, c'est pourquoi rien de plus grand n'est proposé."
+      "hint": "Flux travaille nativement autour de 1024 pixels. En dessous l'image perd en dÃ©tail ; au-delÃ  de 1280 elle demande plus de mÃ©moire vidÃ©o que cette carte n'en offre, c'est pourquoi rien de plus grand n'est proposÃ©."
     },
     {
       "kind": "choice",
@@ -41,24 +41,24 @@
       "value": "4",
       "options": [
         "4=Rapide",
-        "6=Soigné"
+        "6=SoignÃ©"
       ],
-      "hint": "Le nombre de passes de calcul. Flux schnell est un modèle distillé, conçu pour quatre passes : au-delà de six il coûte plus longtemps sans que l'image change, c'est pourquoi la liste s'arrête là."
+      "hint": "Le nombre de passes de calcul. Flux schnell est un modÃ¨le distillÃ©, conÃ§u pour quatre passes : au-delÃ  de six il coÃ»te plus longtemps sans que l'image change, c'est pourquoi la liste s'arrÃªte lÃ ."
     },
     {
       "kind": "text",
       "id": "prefixe",
       "label": "Nom du fichier",
       "value": "image",
-      "hint": "Le début du nom du fichier produit. Le générateur y ajoute un numéro pour ne rien écraser."
+      "hint": "Le dÃ©but du nom du fichier produit. Le gÃ©nÃ©rateur y ajoute un numÃ©ro pour ne rien Ã©craser."
     },
     {
       "kind": "choice",
       "id": "modele",
-      "label": "Modèle",
+      "label": "ModÃ¨le",
       "avance": true,
       "from": "UnetLoaderGGUF.unet_name",
-      "hint": "Les modèles réellement installés sur cette machine. La liste est relue à chaque ouverture : un modèle ajouté apparaît ici, un modèle retiré disparaît, sans qu'aucun fichier ait à être modifié."
+      "hint": "Les modÃ¨les rÃ©ellement installÃ©s sur cette machine. La liste est relue Ã  chaque ouverture : un modÃ¨le ajoutÃ© apparaÃ®t ici, un modÃ¨le retirÃ© disparaÃ®t, sans qu'aucun fichier ait Ã  Ãªtre modifiÃ©."
     },
     {
       "kind": "choice",
@@ -67,7 +67,7 @@
       "avance": true,
       "value": "t5xxl_fp8_e4m3fn.safetensors",
       "from": "DualCLIPLoader.clip_name1",
-      "hint": "Ce qui traduit votre description pour le modèle. Flux attend le T5-XXL ; un autre encodeur donnerait une image sans rapport avec la demande."
+      "hint": "Ce qui traduit votre description pour le modÃ¨le. Flux attend le T5-XXL ; un autre encodeur donnerait une image sans rapport avec la demande."
     },
     {
       "kind": "choice",
@@ -85,7 +85,7 @@
       "avance": true,
       "value": "ae.safetensors",
       "from": "VAELoader.vae_name",
-      "hint": "Ce qui transforme le calcul en image visible. Celui de Flux s'appelle ae.safetensors ; ceux des autres modèles ne conviennent pas."
+      "hint": "Ce qui transforme le calcul en image visible. Celui de Flux s'appelle ae.safetensors ; ceux des autres modÃ¨les ne conviennent pas."
     },
     {
       "kind": "number",
@@ -95,20 +95,20 @@
       "value": "42",
       "min": 0,
       "max": 999999,
-      "hint": "Le point de départ du hasard. La même graine avec la même description redonne exactement la même image ; en changer est la façon de demander une autre proposition."
+      "hint": "Le point de dÃ©part du hasard. La mÃªme graine avec la mÃªme description redonne exactement la mÃªme image ; en changer est la faÃ§on de demander une autre proposition."
     },
     {
       "kind": "action",
-      "label": "Créer",
+      "label": "CrÃ©er",
       "does": "flux",
-      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\Flux_Texte_Image.json|1.unet_name={modele}|2.clip_name1={encodeur}|2.clip_name2={encodeur2}|3.vae_name={vae}|!4.text={description}|6.width={taille}|6.height={taille}|7.steps={rendu}|7.seed={graine}|9.filename_prefix={prefixe}"
+      "target": "{app}\\Flux\\Flux_Texte_Image.json|1.unet_name={modele}|2.clip_name1={encodeur}|2.clip_name2={encodeur2}|3.vae_name={vae}|!4.text={description}|6.width={taille}|6.height={taille}|7.steps={rendu}|7.seed={graine}|9.filename_prefix={prefixe}"
     },
     {
       "kind": "action",
       "label": "Autre proposition",
       "does": "flux",
       "hasard": "graine",
-      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\Flux_Texte_Image.json|1.unet_name={modele}|2.clip_name1={encodeur}|2.clip_name2={encodeur2}|3.vae_name={vae}|!4.text={description}|6.width={taille}|6.height={taille}|7.steps={rendu}|7.seed={graine}|9.filename_prefix={prefixe}"
+      "target": "{app}\\Flux\\Flux_Texte_Image.json|1.unet_name={modele}|2.clip_name1={encodeur}|2.clip_name2={encodeur2}|3.vae_name={vae}|!4.text={description}|6.width={taille}|6.height={taille}|7.steps={rendu}|7.seed={graine}|9.filename_prefix={prefixe}"
     }
   ]
 }

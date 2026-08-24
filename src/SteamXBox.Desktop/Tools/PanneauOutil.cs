@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -43,6 +44,15 @@ public sealed class PanneauOutil : UserControl
     private readonly PluginManifest _manifeste;
     private readonly Action<string>? _journal;
     private readonly Dictionary<string, Func<string>> _valeurs = [];
+
+    /// <summary>La cible qu'emporte la recette retenue, par identifiant de choix.</summary>
+    /// <remarks>
+    /// Tenue à part de <see cref="_valeurs"/> parce qu'elle n'est pas de même nature : une valeur
+    /// vient de l'utilisateur et s'échappe avant d'entrer dans une cible, une recette EST une cible
+    /// et ses barres verticales sont des séparateurs. Les mélanger reviendrait à échapper les
+    /// séparateurs du manifeste, donc à envoyer un graphe entier comme s'il n'était qu'un mot.
+    /// </remarks>
+    private readonly Dictionary<string, Func<string>> _recettes = [];
     private readonly Dictionary<string, FrameworkElement> _controles = [];
 
     /// <summary>Ce qui est propre à l'utilisateur plutôt qu'à l'outil.</summary>
@@ -418,8 +428,33 @@ public sealed class PanneauOutil : UserControl
     /// installés — n'ont pas de libellé et n'en veulent pas.
     /// </para>
     /// </remarks>
+    /// <summary>Les recettes que cette machine peut réellement exécuter.</summary>
+    /// <remarks>
+    /// <b>Le disque décide, pas le manifeste.</b> Une recette déclare les modèles sans lesquels
+    /// elle ne peut pas tourner ; celles dont il manque un fichier ne sont pas proposées. Proposer
+    /// un moteur absent, c'est promettre un travail qui échouera au chargement, plusieurs minutes
+    /// plus tard, sur un message que personne ne rattache au menu où le choix a été fait.
+    ///
+    /// <para>
+    /// Une recette sans exigence est toujours offerte : c'est ainsi qu'un graphe qui ne dépend
+    /// d'aucun poids particulier reste disponible partout.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<RecetteOutil> Disponibles(PluginContentItem item)
+    {
+        var racine = SteamXBox.Tools.Modeles.JeuxModeles.Racine;
+
+        return [.. item.Recettes.Where(r => r.Exige.All(f =>
+            File.Exists(Path.Combine(racine, f.Replace('/', Path.DirectorySeparatorChar)))))];
+    }
+
     private ComboBox Choix(PluginContentItem item, string valeur)
     {
+        if (item.Recettes.Count > 0)
+        {
+            return Moteur(item, valeur);
+        }
+
         var boite = new ComboBox { Padding = new Thickness(6, 4, 6, 4) };
         var options = OptionsOutil.Lire(item.Options);
 
@@ -437,6 +472,50 @@ public sealed class PanneauOutil : UserControl
             : options.FirstOrDefault();
 
         Retenir(item, () => boite.SelectedItem is OptionOutil choisi ? choisi.Valeur : "");
+
+        return boite;
+    }
+
+    /// <summary>Le menu des recettes, et la cible que chacune emporte avec elle.</summary>
+    /// <remarks>
+    /// Deux choses sont retenues plutôt qu'une : l'identifiant de la recette, pour que
+    /// <c>remembers</c> retrouve le choix d'une session à l'autre, et sa cible, que
+    /// <see cref="Substituer"/> ira chercher sous <c>{recette:id}</c>. La cible n'est pas une valeur
+    /// d'utilisateur — c'est du manifeste — et c'est pourquoi elle ne passe pas par l'échappement
+    /// des barres : ses barres à elle SONT des séparateurs.
+    /// </remarks>
+    private ComboBox Moteur(PluginContentItem item, string valeur)
+    {
+        var boite = new ComboBox { Padding = new Thickness(6, 4, 6, 4) };
+        var pretes = Disponibles(item);
+
+        foreach (var recette in pretes)
+        {
+            boite.Items.Add(new OptionOutil(
+                recette.Id, recette.Label.Length > 0 ? recette.Label : recette.Id));
+        }
+
+        if (pretes.Count == 0)
+        {
+            // Le panneau reste ouvert et le dit : la liste vide sans explication se lit comme une
+            // panne, alors qu'il ne manque que des fichiers, et qu'un écran sait où les prendre.
+            boite.Items.Add(new OptionOutil("", "Aucun moteur installé — ouvrez les jeux de modèles"));
+            boite.IsEnabled = false;
+        }
+
+        // OptionOutil est une structure : FirstOrDefault rend une option vide plutôt que null, et
+        // la retenue se fait donc sur la présence explicite du choix mémorisé.
+        var offertes = boite.Items.OfType<OptionOutil>().ToList();
+
+        boite.SelectedItem = offertes.Any(o => o.Valeur == valeur)
+            ? offertes.First(o => o.Valeur == valeur)
+            : offertes.FirstOrDefault();
+
+        Retenir(item, () => boite.SelectedItem is OptionOutil choisi ? choisi.Valeur : "");
+
+        _recettes[item.Id] = () => boite.SelectedItem is OptionOutil choisi
+            ? pretes.FirstOrDefault(r => r.Id == choisi.Valeur)?.Target ?? ""
+            : "";
 
         return boite;
     }
@@ -557,6 +636,15 @@ public sealed class PanneauOutil : UserControl
         if (!cible.Contains('{'))
         {
             return cible;
+        }
+
+        // La recette d'abord, et sans échappement : elle apporte le graphe et ses liaisons, donc
+        // ses barres verticales sont des séparateurs. Ce qu'elle contient en {id} est substitué
+        // juste après, par la boucle ordinaire — c'est ainsi qu'un graphe déclaré dans le manifeste
+        // reçoit les valeurs que l'utilisateur vient de régler.
+        foreach (var (id, lire) in _recettes)
+        {
+            cible = cible.Replace("{recette:" + id + '}', lire(), StringComparison.OrdinalIgnoreCase);
         }
 
         foreach (var (id, lire) in _valeurs)

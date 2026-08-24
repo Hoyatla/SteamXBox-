@@ -334,11 +334,30 @@ public static class PluginCatalog
                 return "un élément 'file' doit avoir un 'id' pour que l'action puisse le nommer";
             }
 
-            // Un choix tire ses valeurs du manifeste ou du générateur, et il lui faut au moins
-            // l'une des deux sources : sans elles, la liste serait vide quoi qu'il arrive.
-            if (kind == "choice" && item.Options.Count == 0 && item.From.Length == 0)
+            // Un choix tire ses valeurs du manifeste, du générateur ou de ses recettes, et il lui
+            // faut au moins l'une des trois : sans elles, la liste serait vide quoi qu'il arrive.
+            if (kind == "choice"
+                && item.Options.Count == 0
+                && item.From.Length == 0
+                && item.Recettes.Count == 0)
             {
-                return $"l'élément '{item.Id}' est un choix sans options ni 'from'";
+                return $"l'élément '{item.Id}' est un choix sans options, sans 'from' ni recettes";
+            }
+
+            // Une recette se nomme depuis la cible d'une action, en « {recette:id-du-choix} » :
+            // sans identifiant sur le choix, elle serait déclarée et inatteignable.
+            if (item.Recettes.Count > 0 && item.Id.Length == 0)
+            {
+                return "un choix qui porte des recettes doit avoir un 'id' : c'est par lui qu'une "
+                    + "action nomme celle qui a été retenue";
+            }
+
+            foreach (var recette in item.Recettes)
+            {
+                if (recette.Id.Length == 0 || recette.Target.Length == 0)
+                {
+                    return $"une recette de '{item.Id}' n'a pas d'« id » ou pas de « target »";
+                }
             }
 
             if (item.From.Length > 0 && !item.From.Contains('.', StringComparison.Ordinal))

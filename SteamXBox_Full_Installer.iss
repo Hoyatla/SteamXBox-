@@ -131,6 +131,13 @@ Source: "SteamXBox.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; n'affiche aucun outil. Cinq megaoctets de manifestes et d'icones.
 Source: "Plugins\*"; DestDir: "{app}\Plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Les graphes de generation. Du contenu du produit, nomme par les manifestes des outils : sans eux,
+; « Animer une image » pointe sur un fichier absent et l'outil echoue au clic. Ils vivaient sous
+; Outils\ComfyUI\user, un dossier tiers que le depot de ComfyUI ignore et qu'aucun installeur ne
+; copiait — les outils livres dependaient donc de fichiers presents sur la seule machine de leur
+; auteur.
+Source: "Flux\*"; DestDir: "{app}\Flux"; Flags: ignoreversion recursesubdirs createallsubdirs
+
 ; Moteurs d'agrandissement et d'interpolation video. Compiles, autonomes, 70 Mo a eux deux, sous
 ; licences permissives : BSD-3 pour Real-ESRGAN et ncnn, MIT pour RIFE. Ce sont les seuls
 ; composants tiers que le produit a le droit de livrer. Voir THIRD-PARTY-NOTICES.txt.

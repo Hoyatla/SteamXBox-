@@ -1,0 +1,28 @@
+{
+  "1": {
+    "class_type": "LoadAndBatchImagesFromFolder",
+    "inputs": {
+      "folder": "test",
+      "max_size": 1024,
+      "animation": "static",
+      "frames_per_image": 48
+    }
+  },
+  "2": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": ["1", 0],
+      "fps": 24.0,
+      "bit_depth": 8
+    }
+  },
+  "3": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": ["2", 0],
+      "filename_prefix": "sequence",
+      "format": "auto",
+      "codec": "auto"
+    }
+  }
+}

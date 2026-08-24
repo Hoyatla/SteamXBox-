@@ -6,6 +6,18 @@
     "modèles changent au rythme du monde extérieur, pas à celui du produit, et un client doit",
     "pouvoir proposer les siens.",
     "",
+    "RÈGLE : aucun modèle n'est figé. L'utilisateur doit pouvoir en changer quand il veut, pendant",
+    "qu'il se sert du produit — pas seulement à l'installation. Un outil de génération ne nomme donc",
+    "jamais un modèle en dur : il déclare des RECETTES, et l'hôte n'offre que celles dont les",
+    "fichiers sont sur ce disque. Choisir une autre recette change le graphe employé, pas seulement",
+    "un nom de fichier — deux familles de modèles ne se câblent pas pareil, et un menu qui prétend",
+    "le contraire ment. Voir RecetteOutil dans SteamXBox.Plugins.",
+    "",
+    "Les paliers servent la même idée à l'installation : un jeu atterrit dans Bureau, Jeu ou Expert",
+    "selon la mémoire qu'il réclame, et la machine décide de ce qu'on lui propose. C'est pourquoi le",
+    "catalogue garde des jeux qui ne tiennent pas sur la carte de son auteur : il n'est pas écrit",
+    "pour une machine, il est écrit pour toutes.",
+    "",
     "« octets » est la taille exacte du fichier. Elle sert à constater qu'un téléchargement est",
     "entier : un modèle tronqué ne se plaint pas à l'installation, il échoue au premier usage sur",
     "un message qui parle de format invalide et qu'on va chercher partout sauf dans le réseau.",
@@ -145,6 +157,76 @@
           "url": "https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safetensors",
           "vers": "checkpoints/svd_xt.safetensors",
           "octets": 9559625980
+        }
+      ]
+    },
+    {
+      "id": "minimax-h3",
+      "role": "image-video",
+      "nom": "MiniMax H3 — vidéo et son",
+      "pour": "Animer une première et une dernière image en vidéo, avec le son. Le plus capable, et de loin le plus lourd : vingt gigaoctets pour le modèle seul. Ne tient pas sur une carte de douze gigaoctets — proposé aux machines qui ont largement au-delà.",
+      "licence": "MiniMax Model License",
+      "modules": [],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "vers": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "octets": 20970379616
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+          "vers": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+          "octets": 15687142551
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors",
+          "vers": "vae/minimax_h3_video_vae_fp16.safetensors",
+          "octets": 5207808496
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors",
+          "vers": "vae/minimax_h3_audio_vae_fp32.safetensors",
+          "octets": 605254808
+        }
+      ]
+    },
+    {
+      "id": "wan-2.2-i2v-12go",
+      "role": "image-video",
+      "nom": "Wan 2.2 — image vers vidéo",
+      "pour": "Animer une image en vidéo. Taillé pour une carte de douze gigaoctets : les deux experts sont comprimés en Q4 et ne sont jamais chargés ensemble, donc le pic tient sous neuf gigaoctets. Les deux accélérateurs ramènent le rendu à quatre passes au lieu d'une vingtaine.",
+      "licence": "Apache-2.0",
+      "modules": ["ComfyUI-GGUF"],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf",
+          "vers": "unet/Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf",
+          "octets": 9651728896
+        },
+        {
+          "url": "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf",
+          "vers": "unet/Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf",
+          "octets": 9651728896
+        },
+        {
+          "url": "https://huggingface.co/city96/umt5-xxl-encoder-gguf/resolve/main/umt5-xxl-encoder-Q4_K_M.gguf",
+          "vers": "text_encoders/umt5-xxl-encoder-Q4_K_M.gguf",
+          "octets": 3655145312
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors",
+          "vers": "vae/wan_2.1_vae.safetensors",
+          "octets": 253815318
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "vers": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+          "octets": 1226977424
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "vers": "loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+          "octets": 1226977424
         }
       ]
     }
