@@ -199,7 +199,7 @@ public partial class ToolsView : UserControl
         Travailler(
             "Accueil",
             arret => Raconter(
-                SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, temoins, arret)),
+                SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, temoins, PluginTools.Folder, arret)),
             "",
             AccueilEtat);
     }

@@ -108,6 +108,7 @@ public static class AccueilOutil
         string dossier,
         EnvironnementOutil? declare = null,
         IReadOnlyList<string>? temoins = null,
+        string? plugins = null,
         CancellationToken arret = default)
     {
         var dits = new List<string>();
@@ -179,7 +180,150 @@ public static class AccueilOutil
             dits.Add($"Échappé au détournement : {echappe}");
         }
 
+        // La tuile vient de ce qu'on trouve après coup, pas de ce qu'on espérait installer : c'est
+        // le dossier qui dit ce qu'il est devenu, et un installeur qui a échoué n'en laisse pas de
+        // quoi en faire une.
+        if (plugins is { Length: > 0 } && code == 0 && Reconnaissance.Regarder(dossier) is { } trouve)
+        {
+            dits.Add(Declarer(trouve, plugins));
+        }
+
         return new AccueilRapport(code, dossier, Poids(dossier), dits);
+    }
+
+    /// <summary>
+    /// Écrit le manifeste qui donne sa tuile à un programme accueilli.
+    /// </summary>
+    /// <param name="programme">Ce que la reconnaissance a trouvé dans le dossier.</param>
+    /// <param name="plugins">Le dossier des manifestes.</param>
+    /// <returns>Ce qui s'est passé, en une phrase.</returns>
+    /// <remarks>
+    /// <b>Pourquoi un manifeste, et pas une tuile posée en mémoire.</b> Une tuile qui n'existe que
+    /// dans le programme disparaîtrait au redémarrage, et rien ne dirait à l'écran des outils quoi
+    /// archiver ni quoi éteindre. Le manifeste est ce qui rend l'outil visible <i>et</i> gouvernable
+    /// — c'est le même fichier que pour un outil livré, écrit par nous au lieu de l'être à la main.
+    ///
+    /// <para>
+    /// Il nomme son corps, et c'est le point : <c>environnement.dossier</c> dit où vit le programme,
+    /// de sorte qu'archiver, éteindre ou éjecter agissent sur les cinq cents mégaoctets et non sur
+    /// le kilooctet de description.
+    /// </para>
+    ///
+    /// <para>
+    /// Une bibliothèque n'en reçoit pas. Python et ffmpeg sont des programmes, l'assistant doit les
+    /// connaître, mais une tuile qui ouvre une console n'a rien à faire sur la grille.
+    /// </para>
+    /// </remarks>
+    public static string Declarer(ProgrammeReconnu programme, string plugins)
+    {
+        if (programme.Forme != FormeProgramme.Application)
+        {
+            return $"{programme.Nom} : pas de tuile — {programme.Pourquoi}.";
+        }
+
+        if (programme.Executable.Length == 0)
+        {
+            return $"{programme.Nom} : pas de tuile — rien à ouvrir dans ce dossier.";
+        }
+
+        var id = Identifiant(programme.Id);
+
+        // Un outil déjà déclaré ne l'est pas deux fois. Sans cela, accueillir à nouveau un programme
+        // pour le mettre à jour poserait une seconde tuile à côté de la première, et l'utilisateur
+        // aurait deux boutons pour la même chose sans savoir lequel meurt en premier.
+        if (Deja(plugins, programme.Dossier) is { Length: > 0 } tenu)
+        {
+            return $"{programme.Nom} : déjà déclaré par {tenu}, sa tuile est laissée telle quelle.";
+        }
+
+        var dossier = Path.Combine(plugins, id);
+        var relatif = Path.GetFileName(programme.Dossier.TrimEnd(Path.DirectorySeparatorChar));
+
+        var manifeste = new PluginManifest
+        {
+            Id = id,
+            Name = programme.Nom,
+            Category = "tool",
+            Version = "1.0.0",
+            Author = "accueilli par SteamXBox",
+            Licence = "celle de son éditeur",
+            Glyph = "EA86",
+            Hint = $"{programme.Nom}, accueilli dans Outils\\{relatif}. "
+                + "Il vit dans le produit : le supprimer, c'est supprimer son dossier.",
+            Surface = "tile",
+            Does = PluginActions.Application,
+            Target = $"{{tools}}\\{relatif}\\{Path.GetFileName(programme.Executable)}",
+            Environnement = new EnvironnementOutil { Dossier = $"{{tools}}\\{relatif}" },
+            Enabled = true,
+        };
+
+        try
+        {
+            Directory.CreateDirectory(dossier);
+
+            // Sans guillemets échappés sur les accents, et sans marque d'ordre d'octets : un
+            // manifeste illisible est un outil perdu, et ce fichier a déjà été abîmé une fois par
+            // un outil d'édition trop serviable.
+            File.WriteAllText(
+                Path.Combine(dossier, "plugin.json"),
+                System.Text.Json.JsonSerializer.Serialize(manifeste, Ecriture),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            return $"{programme.Nom} : tuile posée, elle ouvrira {Path.GetFileName(programme.Executable)}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return $"{programme.Nom} : tuile impossible — {exception.Message}";
+        }
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions Ecriture = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Un identifiant tenable : minuscules, sans espace ni accent.</summary>
+    private static string Identifiant(string brut)
+    {
+        var propre = new string([.. brut.ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) && c < 128 ? c : '-')]);
+
+        while (propre.Contains("--", StringComparison.Ordinal))
+        {
+            propre = propre.Replace("--", "-", StringComparison.Ordinal);
+        }
+
+        return propre.Trim('-') is { Length: > 0 } net ? net : "outil-accueilli";
+    }
+
+    /// <summary>Le manifeste qui désigne déjà ce dossier, s'il y en a un.</summary>
+    private static string Deja(string plugins, string corps)
+    {
+        var nom = Path.GetFileName(corps.TrimEnd(Path.DirectorySeparatorChar));
+
+        if (!Directory.Exists(plugins))
+        {
+            return "";
+        }
+
+        foreach (var fichier in Directory.EnumerateFiles(plugins, "plugin.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                if (File.ReadAllText(fichier).Contains($"\\\\{nom}\\\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.GetFileName(Path.GetDirectoryName(fichier)!);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Un manifeste illisible ne prouve pas qu'il désigne ce dossier : on continue.
+            }
+        }
+
+        return "";
     }
 
     /// <summary>Ce que contiennent les dossiers témoins avant l'accueil.</summary>
