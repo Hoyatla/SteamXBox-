@@ -82,6 +82,44 @@ public static class ComfyServer
 
     private static string Racine => Path.Combine(AppContext.BaseDirectory, "Outils", "ComfyUI");
 
+    private static bool _fluxLivres;
+
+    /// <summary>
+    /// Met les flux livrés dans le dossier où le générateur va chercher ceux de l'utilisateur.
+    /// </summary>
+    /// <remarks>
+    /// Les graphes du produit vivent dans <c>Flux\</c>, sous leur forme exécutable, parce que c'est
+    /// celle-là que le moteur consomme et qu'elle se relit dans un diff. L'interface, elle, ne sait
+    /// ouvrir que l'autre forme, depuis son propre dossier. La publication réconcilie les deux sans
+    /// dupliquer la source : le fichier versionné reste l'unique original.
+    ///
+    /// <para>
+    /// Tant que le générateur n'a pas répondu, la conversion se fait sans son catalogue — juste,
+    /// mais incapable de deviner un réglage que le graphe laisse à sa valeur par défaut. On ne
+    /// retient donc l'affaire comme faite que lorsque le catalogue a pu être lu, de sorte que le
+    /// premier passage rende quelque chose d'utilisable et le suivant quelque chose de complet.
+    /// </para>
+    /// </remarks>
+    private static void Livrer(Action<string>? journal)
+    {
+        if (_fluxLivres)
+        {
+            return;
+        }
+
+        var catalogue = Repond() ? Catalogue.Demander(Port, journal) : null;
+
+        foreach (var dit in WorkflowsLivres.Publier(AppContext.BaseDirectory, Racine, catalogue))
+        {
+            if (!dit.EndsWith("publié.", StringComparison.Ordinal))
+            {
+                journal?.Invoke(dit);
+            }
+        }
+
+        _fluxLivres = catalogue is not null;
+    }
+
     private static string Script => Path.Combine(Racine, "main.py");
 
     private static string Interpreteur
@@ -219,6 +257,8 @@ public static class ComfyServer
     /// <returns>Null quand le serveur répond, sinon la raison pour laquelle il ne répondra pas.</returns>
     public static string? Preparer(Action<string>? journal)
     {
+        Livrer(journal);
+
         if (Repond())
         {
             return null;
