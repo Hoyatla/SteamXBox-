@@ -322,7 +322,12 @@ public static class PluginLifecycle
     /// they had unpacked still meant to keep the archive — that is what archiving it was for. The
     /// archive is deleted by <see cref="Forget"/>, which is a separate decision.
     /// </remarks>
-    public static bool Delete(string root, string id, Action<string>? log = null, string corps = "")
+    public static bool Delete(
+        string root,
+        string id,
+        Action<string>? log = null,
+        string corps = "",
+        string desinstallation = "")
     {
         try
         {
@@ -331,6 +336,16 @@ public static class PluginLifecycle
             if (Directory.Exists(folder))
             {
                 Directory.Delete(folder, recursive: true);
+            }
+
+            // La désinstallation officielle d'abord, quand l'outil en a une. Effacer les fichiers
+            // d'un programme installé dans le dos de son installeur laisse la base de Windows
+            // convaincue qu'il est là — et la réinstallation suivante ne réinstalle alors rien.
+            // Constaté sur LibreOffice, huit cents mégaoctets a moitié effacés et un produit
+            // toujours enregistré.
+            if (desinstallation.Length > 0)
+            {
+                log?.Invoke(Desinstaller(desinstallation, id, log));
             }
 
             // Éjecter un outil hébergé sans emporter son corps laisserait cinq cents mégaoctets dans
@@ -446,6 +461,68 @@ public static class PluginLifecycle
     /// bien plus ici : une archive tronquée d'un kilooctet se refait, une archive tronquée de cinq
     /// cents mégaoctets se retélécharge — quand la source existe encore.
     /// </remarks>
+    /// <summary>
+    /// Lance la désinstallation qu'un installeur a lui-même déclarée, en silence.
+    /// </summary>
+    /// <remarks>
+    /// La ligne du registre est écrite pour l'écran des programmes installés, donc elle ouvre une
+    /// fenêtre. On y ajoute de quoi la faire taire selon la famille : <c>/qn</c> pour Windows
+    /// Installer, <c>/S</c> pour le reste. Un désinstalleur qui refuse n'empêche pas d'éjecter — on
+    /// le dit, et l'on ramasse les fichiers : l'utilisateur a demandé que l'outil parte.
+    /// </remarks>
+    /// <summary>
+    /// La commande de désinstallation du registre, rendue silencieuse.
+    /// </summary>
+    /// <remarks>
+    /// La ligne du registre est écrite pour l'écran des programmes installés : elle ouvre une
+    /// fenêtre et attend un clic. On la reprend telle quelle et l'on ajoute de quoi la faire taire,
+    /// selon la famille — <c>/qn</c> pour Windows Installer, <c>/S</c> pour le reste.
+    ///
+    /// <para>
+    /// Le <c>/I</c> devient <c>/X</c> parce que Windows Installer écrit sa ligne en mode
+    /// « modifier » : la lancer telle quelle rouvrirait l'installation au lieu de la retirer.
+    /// </para>
+    /// </remarks>
+    public static System.Diagnostics.ProcessStartInfo Ordre(string commande)
+    {
+        var msi = commande.Contains("msiexec", StringComparison.OrdinalIgnoreCase);
+
+        // Un chemin entre guillemets se termine au guillemet fermant, pas au premier espace : les
+        // désinstalleurs vivent dans « Program Files » à peu près toujours.
+        var programme = commande.StartsWith('"')
+            ? commande[1..commande.IndexOf('"', 1)]
+            : commande.Split(' ', 2)[0];
+
+        var reste = commande[(commande.IndexOf(programme, StringComparison.Ordinal)
+            + programme.Length)..].Trim('"', ' ');
+
+        return new System.Diagnostics.ProcessStartInfo(programme)
+        {
+            Arguments = msi
+                ? $"{reste.Replace("/I", "/X", StringComparison.OrdinalIgnoreCase)} /qn /norestart".Trim()
+                : $"{reste} /S".Trim(),
+            UseShellExecute = false,
+        };
+    }
+
+    private static string Desinstaller(string commande, string id, Action<string>? log)
+    {
+        try
+        {
+            using var parti = System.Diagnostics.Process.Start(Ordre(commande));
+
+            parti?.WaitForExit();
+
+            return $"plugin {id}: uninstalled through its own uninstaller (code {parti?.ExitCode}).";
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke($"plugin {id}: its uninstaller failed ({exception.Message}).");
+
+            return $"plugin {id}: removed without its uninstaller.";
+        }
+    }
+
     private static bool Ranger(string dossier, string archive, string quoi, Action<string>? log)
     {
         try

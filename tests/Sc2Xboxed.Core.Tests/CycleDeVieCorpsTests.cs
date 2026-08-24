@@ -125,3 +125,64 @@ public class CycleDeVieCorpsTests : IDisposable
         Assert.True(PluginLifecycle.HasArchive(Plugins, "comfy-desktop"));
     }
 }
+
+/// <summary>
+/// La commande de désinstallation qu'on reprend au registre.
+/// </summary>
+/// <remarks>
+/// <b>Le défaut que ceci ferme, payé sur LibreOffice.</b> Éjecter effaçait le dossier sans rien dire
+/// à l'installeur. Windows Installer gardait le produit enregistré avec notre dossier comme
+/// emplacement, donc la réinstallation suivante ne réinstallait rien — elle voyait un produit déjà
+/// présent. Et l'effacement s'était arrêté sur un fichier verrouillé : huit cents mégaoctets sans
+/// exécutable principal, ni installé ni absent.
+/// </remarks>
+public class OrdreDesinstallationTests
+{
+    /// <summary>
+    /// Le « modifier » de Windows Installer devient un « retirer ».
+    /// </summary>
+    /// <remarks>
+    /// La ligne du registre est écrite en mode modification : la lancer telle quelle rouvrirait
+    /// l'installation au lieu de la retirer.
+    /// </remarks>
+    [Fact]
+    public void TheInstallerModifyLineBecomesARemoval()
+    {
+        var ordre = PluginLifecycle.Ordre("MsiExec.exe /I{3B467719-C25B-478C-8F4C-8E2EDA0E2093}");
+
+        Assert.Contains("/X{3B467719", ordre.Arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("/I{", ordre.Arguments, StringComparison.Ordinal);
+    }
+
+    /// <summary>Et elle se tait, sinon elle attend un clic que personne ne donnera.</summary>
+    [Fact]
+    public void AndItGoesQuietOrItWaitsForAClickNobodyWillGive()
+        => Assert.Contains(
+            "/qn",
+            PluginLifecycle.Ordre("MsiExec.exe /I{ABC}").Arguments,
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// Un chemin entre guillemets se termine au guillemet, pas au premier espace.
+    /// </summary>
+    /// <remarks>
+    /// Les désinstalleurs vivent dans des dossiers à espaces à peu près toujours. Couper au premier
+    /// espace lancerait « C:\Program » — la même faute qui a déjà créé un dossier à la racine du
+    /// disque.
+    /// </remarks>
+    [Fact]
+    public void AQuotedPathEndsAtTheQuoteAndNotAtTheFirstSpace()
+    {
+        var ordre = PluginLifecycle.Ordre(@"""C:\Program Files\Truc\Uninstall Truc.exe"" /keep");
+
+        Assert.Equal(@"C:\Program Files\Truc\Uninstall Truc.exe", ordre.FileName);
+        Assert.Equal("/keep /S", ordre.Arguments);
+    }
+
+    /// <summary>Un désinstalleur ordinaire reçoit la mise en silence de sa famille.</summary>
+    [Fact]
+    public void AnOrdinaryUninstallerGetsItsOwnFamilysSilence()
+        => Assert.Equal(
+            "/S",
+            PluginLifecycle.Ordre(@"C:\Outils\X\uninstall.exe").Arguments);
+}

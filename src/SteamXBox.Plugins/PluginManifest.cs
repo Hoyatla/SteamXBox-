@@ -125,6 +125,18 @@ public sealed class PluginManifest
     /// </remarks>
     public EnvironnementOutil? Environnement { get; set; }
 
+    /// <summary>
+    /// La ligne que Windows lancerait pour désinstaller cet outil, telle que son installeur l'a
+    /// écrite.
+    /// </summary>
+    /// <remarks>
+    /// Éjecter en effaçant le dossier laisse la base de Windows Installer convaincue que le produit
+    /// est là : la réinstallation suivante ne réinstalle alors rien, elle voit un produit déjà
+    /// présent. Constaté sur LibreOffice. On retient donc la commande officielle plutôt que de la
+    /// deviner, et l'éjection passe par elle avant de ramasser ce qui reste.
+    /// </remarks>
+    public string Desinstallation { get; set; } = "";
+
     /// <summary>What the host draws when the surface is a panel.</summary>
     public List<PluginContentItem> Content { get; set; } = [];
 

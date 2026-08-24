@@ -194,6 +194,29 @@ public partial class ToolsView : UserControl
     }
 
     /// <summary>
+    /// La ligne de désinstallation que l'outil a déclarée, s'il en a une.
+    /// </summary>
+    /// <remarks>
+    /// Sans elle, éjecter efface les fichiers dans le dos de l'installeur : la base de Windows garde
+    /// le produit enregistré et la réinstallation suivante ne réinstalle rien, puisqu'elle voit un
+    /// produit déjà présent. Constaté sur LibreOffice, avec en prime un effacement arrêté en chemin
+    /// sur un fichier verrouillé — huit cents mégaoctets sans exécutable principal.
+    /// </remarks>
+    private static string Desinstallation(string id)
+    {
+        try
+        {
+            return PluginCatalog.Scan(Root).Loaded
+                .FirstOrDefault(m => m.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                ?.Desinstallation ?? "";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return "";
+        }
+    }
+
+    /// <summary>
     /// Fait tourner l'installeur d'un programme extérieur dans un dossier qui n'est qu'à lui.
     /// </summary>
     /// <remarks>
@@ -507,7 +530,7 @@ public partial class ToolsView : UserControl
 
         if (installed)
         {
-            PluginLifecycle.Delete(Root, id, UiLog.Info, Corps(id));
+            PluginLifecycle.Delete(Root, id, UiLog.Info, Corps(id), Desinstallation(id));
         }
         else
         {

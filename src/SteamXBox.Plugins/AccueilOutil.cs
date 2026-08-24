@@ -296,6 +296,7 @@ public static class AccueilOutil
             // LibreOffice — et ne garder que le nom donnerait une cible qui n'existe pas.
             Target = $"{{tools}}\\{relatif}\\{Path.GetRelativePath(programme.Dossier, ouvre)}",
             Environnement = new EnvironnementOutil { Dossier = $"{{tools}}\\{relatif}" },
+            Desinstallation = Desinstalleur(programme.Dossier),
             Enabled = true,
         };
 
@@ -375,6 +376,78 @@ public static class AccueilOutil
         }
 
         return "";
+    }
+
+    /// <summary>
+    /// Ce que Windows lancerait pour désinstaller le programme qui vit dans ce dossier.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci ferme, mesuré sur LibreOffice.</b> Éjecter effaçait le dossier avec
+    /// <c>Directory.Delete</c>. Windows Installer, lui, gardait le produit enregistré avec notre
+    /// dossier comme emplacement — donc la réinstallation suivante ne réinstallait rien : elle voyait
+    /// un produit déjà présent. Et l'effacement s'était arrêté en chemin sur un fichier verrouillé,
+    /// laissant huit cents mégaoctets d'un programme sans son exécutable principal. Le pire état
+    /// possible : ni installé, ni absent.
+    ///
+    /// <para>
+    /// <b>On ne devine pas la commande, on la lit.</b> Tout installeur digne du nom écrit sa propre
+    /// ligne de désinstallation dans le registre, et c'est celle que Windows lance depuis son écran
+    /// des programmes installés. La reprendre telle quelle marche pour Windows Installer comme pour
+    /// NSIS, sans que le produit ait à connaître l'un ou l'autre.
+    /// </para>
+    ///
+    /// <para>
+    /// La correspondance se fait sur l'emplacement, jamais sur le nom : deux versions d'un même
+    /// programme portent le même nom, et c'est celui qui vit <i>dans notre dossier</i> qu'il faut
+    /// retirer — pas celui que l'utilisateur a installé ailleurs pour son compte.
+    /// </para>
+    /// </remarks>
+    public static string Desinstalleur(string dossier)
+    {
+        // Le registre n'existe que sur Windows. Rendre « rien » ailleurs plutot que d'annoter toute
+        // la chaine d'appel : l'accueil d'un programme Windows n'a de sens que sur Windows.
+        if (!OperatingSystem.IsWindows())
+        {
+            return "";
+        }
+
+        var vise = Path.GetFullPath(dossier).TrimEnd(Path.DirectorySeparatorChar);
+
+        foreach (var (racine, chemin) in Registres())
+        {
+            using var cle = racine.OpenSubKey(chemin);
+
+            foreach (var nom in cle?.GetSubKeyNames() ?? [])
+            {
+                using var entree = cle!.OpenSubKey(nom);
+
+                if (entree?.GetValue("UninstallString") is not string commande || commande.Length == 0)
+                {
+                    continue;
+                }
+
+                var ou = (entree.GetValue("InstallLocation") as string ?? "")
+                    .Trim('"').TrimEnd(Path.DirectorySeparatorChar);
+
+                if (ou.Length > 0 && ou.Equals(vise, StringComparison.OrdinalIgnoreCase))
+                {
+                    return commande;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static IEnumerable<(Microsoft.Win32.RegistryKey Racine, string Chemin)> Registres()
+    {
+        const string uninstall = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+
+        yield return (Microsoft.Win32.Registry.CurrentUser, uninstall);
+        yield return (Microsoft.Win32.Registry.LocalMachine, uninstall);
+        yield return (Microsoft.Win32.Registry.LocalMachine,
+            @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall");
     }
 
     /// <summary>Ce que contiennent les dossiers témoins avant l'accueil.</summary>
