@@ -115,6 +115,16 @@ public sealed class PluginManifest
     /// <summary>What the action applies to: a settings page, an application, a path.</summary>
     public string Target { get; set; } = "";
 
+    /// <summary>
+    /// L'environnement propre que l'hôte compose pour cet outil, s'il en demande un.
+    /// </summary>
+    /// <remarks>
+    /// Un outil extérieur écrit là où son environnement lui dit d'écrire. Déclarer ceci fait
+    /// tomber dans le produit tout ce qu'il produirait sinon dans le dossier de l'utilisateur —
+    /// y compris ce qu'il télécharge, qui est le gros du volume.
+    /// </remarks>
+    public EnvironnementOutil? Environnement { get; set; }
+
     /// <summary>What the host draws when the surface is a panel.</summary>
     public List<PluginContentItem> Content { get; set; } = [];
 
