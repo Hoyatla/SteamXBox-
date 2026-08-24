@@ -319,10 +319,19 @@ public static class AccueilOutil
         }
     }
 
+    /// <summary>
+    /// Comment le manifeste écrit est mis en forme.
+    /// </summary>
+    /// <remarks>
+    /// Il doit ressembler à ceux qu'on écrit à la main, parce qu'on le lira à côté d'eux : mêmes
+    /// noms de champs en minuscules, et rien de ce qui vaut sa valeur par défaut. Un fichier qui
+    /// aligne quinze champs vides oblige à chercher les trois qui disent quelque chose.
+    /// </remarks>
     private static readonly System.Text.Json.JsonSerializerOptions Ecriture = new()
     {
         WriteIndented = true,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
