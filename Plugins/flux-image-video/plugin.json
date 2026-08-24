@@ -1,0 +1,106 @@
+{
+  "id": "flux-image-video",
+  "name": "Animer une image",
+  "category": "tool",
+  "version": "3.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E786",
+  "hint": "Fabrique une vidéo de deux secondes à partir d'une image fixe : la caméra bouge, le sujet reste. Compter trois à cinq minutes. Deux secondes est la longueur que le modèle tient — mesuré, au-delà il perd le fil et le sujet se dissout. Pour une séquence plus longue, animez plusieurs images et mettez les clips bout à bout.",
+  "surface": "panel",
+  "remembers": [
+    "modele",
+    "mouvement",
+    "rendu",
+    "prefixe"
+  ],
+  "content": [
+    {
+      "kind": "file",
+      "id": "image",
+      "label": "Image de départ",
+      "options": [
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "bmp"
+      ]
+    },
+    {
+      "kind": "choice",
+      "id": "mouvement",
+      "label": "Mouvement",
+      "value": "127",
+      "options": [
+        "60=Léger",
+        "127=Modéré",
+        "180=Ample"
+      ],
+      "hint": "Combien la scène doit bouger. Le nœud accepte jusqu'à 1023, mais au-delà de 180 l'image se déforme sans plus rien représenter : ces valeurs ne sont pas proposées parce qu'elles ne donnent pas de résultat."
+    },
+    {
+      "kind": "choice",
+      "id": "rendu",
+      "label": "Rendu",
+      "value": "20",
+      "options": [
+        "14=Rapide",
+        "20=Standard",
+        "28=Soigné"
+      ],
+      "hint": "Le nombre de passes de calcul, et donc l'essentiel du temps d'attente. En dessous de quatorze la vidéo devient granuleuse ; au-delà de vingt-huit elle ne s'améliore plus."
+    },
+    {
+      "kind": "text",
+      "id": "prefixe",
+      "label": "Nom du fichier",
+      "value": "animation",
+      "hint": "Le début du nom du fichier produit. Le générateur y ajoute un numéro pour ne rien écraser."
+    },
+    {
+      "kind": "choice",
+      "id": "modele",
+      "label": "Modèle",
+      "avance": true,
+      "from": "ImageOnlyCheckpointLoader.ckpt_name",
+      "hint": "Les modèles réellement installés sur cette machine. La liste est relue à chaque ouverture : un modèle ajouté apparaît ici, un modèle retiré disparaît, sans qu'aucun fichier ait à être modifié."
+    },
+    {
+      "kind": "choice",
+      "id": "cadence",
+      "label": "Cadence",
+      "avance": true,
+      "value": "6",
+      "options": [
+        "6=6 images par seconde",
+        "8=8 images par seconde",
+        "10=10 images par seconde"
+      ],
+      "hint": "Le modèle a été entraîné autour de six images par seconde. Monter la cadence raccourcit la vidéo à longueur égale et l'éloigne de ce que le modèle sait faire."
+    },
+    {
+      "kind": "number",
+      "id": "graine",
+      "label": "Graine",
+      "avance": true,
+      "value": "42",
+      "min": 0,
+      "max": 999999,
+      "hint": "Le point de départ du hasard. À réglages égaux, deux graines donnent deux animations très différentes — l'une peut tenir là où l'autre se dissout. La même graine redonne exactement la même vidéo, ce qui sert à retrouver un résultat déjà obtenu."
+    },
+    {
+      "kind": "action",
+      "label": "Animer",
+      "does": "flux",
+      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\SVD_Image_to_Video.json|1.ckpt_name={modele}|!2.image={image}|4.video_frames=14|4.motion_bucket_id={mouvement}|4.fps={cadence}|8.fps={cadence}|6.steps={rendu}|6.seed={graine}|9.filename_prefix={prefixe}"
+    },
+    {
+      "kind": "action",
+      "label": "Autre proposition",
+      "does": "flux",
+      "hasard": "graine",
+      "target": "{tools}\\ComfyUI\\user\\default\\workflows\\SVD_Image_to_Video.json|1.ckpt_name={modele}|!2.image={image}|4.video_frames=14|4.motion_bucket_id={mouvement}|4.fps={cadence}|8.fps={cadence}|6.steps={rendu}|6.seed={graine}|9.filename_prefix={prefixe}"
+    }
+  ]
+}

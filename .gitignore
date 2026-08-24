@@ -49,6 +49,7 @@ Library/Exclusif/
 /Sc2XboxedPS5.Osk.exe
 /Sc2XboxedXbox.Osk.exe
 /SteamXBox.Debug.exe
+/SteamXBox.Mcp.exe
 /Banc-DualSense.exe
 /publish/
 /artifacts/
@@ -63,3 +64,10 @@ steamxbox-diag.txt
 
 # Backups locaux
 Library/archive/
+/python-manager-26.3.msix
+
+# Outils externes : pres de dix gigaoctets (Python, PyTorch, modeles). Jamais
+# dans le depot. Seuls les scripts que nous ecrivons nous-memes y sont versionnes.
+/Outils/*
+!/Outils/LISEZ-MOI.txt
+/python-3.11.0-amd64.exe

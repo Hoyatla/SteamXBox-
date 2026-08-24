@@ -1,0 +1,14 @@
+{
+  "id": "comfyui",
+  "name": "Générateur workflow multimédia",
+  "category": "tool",
+  "version": "2.1.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E9D9",
+  "hint": "Ouvre l'interface de flux de travail du générateur, où l'on compose les graphes nœud par nœud. Pour créer, animer ou agrandir sans composer, l'outil « Générateur multimédia » suffit. Le premier démarrage prend une minute ou deux.",
+  "surface": "tile",
+  "does": "generation",
+  "target": "",
+  "enabled": true
+}

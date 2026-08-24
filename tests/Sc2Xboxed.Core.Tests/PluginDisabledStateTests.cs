@@ -89,4 +89,60 @@ public class PluginDisabledStateTests
 
         Assert.False(PluginLifecycle.IsEnabled(id, byDefault: true));
     }
+
+    /// <summary>
+    /// Deux decisions prises en meme temps tiennent toutes les deux.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le defaut que ceci corrige.</b> Enregistrer une decision lit le fichier entier, y ajoute
+    /// une entree et le reecrit. Deux appels simultanes lisaient donc le meme etat d'avant, et le
+    /// second effacait la decision du premier. Rien n'echouait : l'entree manquait, l'outil
+    /// reprenait son defaut, et le test qui venait de l'allumer le trouvait eteint.
+    ///
+    /// <para>
+    /// C'est ce qui faisait tomber un test au hasard dans cette classe environ une execution sur
+    /// cinq — jamais le meme, parce que le perdant est celui que l'ordonnanceur a servi en premier.
+    /// Les identifiants uniques par test, deja en place, ne pouvaient rien y faire : ce qui etait
+    /// partage n'etait pas le nom, c'etait le fichier.
+    /// </para>
+    ///
+    /// <para>
+    /// Ecrit en tache et non avec des attentes : la course est gagnee ou perdue en quelques
+    /// microsecondes, donc le test ne l'attend pas, il la provoque — trente-deux ecrivains relaches
+    /// ensemble, et les trente-deux decisions doivent se retrouver.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ConcurrentDecisionsDoNotOverwriteEachOther()
+    {
+        const int Writers = 32;
+
+        var ids = Enumerable.Range(0, Writers).Select(i => Fresh($"race-{i}")).ToArray();
+
+        // Ce que la classe dit quand elle n'arrive pas a enregistrer. Sans ca, une decision perdue
+        // parce que le fichier n'a pas pu etre ecrit et une decision perdue parce qu'une autre l'a
+        // ecrasee donnent exactement le meme echec, et ce sont deux defauts differents.
+        var complaints = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+        using var start = new ManualResetEventSlim(false);
+
+        var writes = ids.Select(id => Task.Run(() =>
+        {
+            start.Wait();
+            PluginLifecycle.SetEnabled(id, enabled: true, log: complaints.Add);
+        })).ToArray();
+
+        start.Set();
+        await Task.WhenAll(writes);
+
+        var lost = ids.Where(id => !PluginLifecycle.IsEnabled(id, byDefault: false)).ToArray();
+        var refused = complaints.Where(c => c.Contains("could not", StringComparison.Ordinal)).ToArray();
+
+        Assert.True(
+            lost.Length == 0,
+            $"{lost.Length} decision(s) sur {Writers} perdues. "
+            + (refused.Length == 0
+                ? "Aucune n'a ete refusee a l'ecriture : elles se sont donc ecrasees entre elles."
+                : $"{refused.Length} refusee(s) a l'ecriture : {string.Join(" | ", refused.Distinct().Take(3))}"));
+    }
 }

@@ -1,0 +1,11 @@
+{
+  "id": "dependance-poppler",
+  "name": "Poppler",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "Poppler contributors",
+  "licence": "GPL — jamais livré avec le produit",
+  "hint": "Rendu des pages PDF en images, avant reconnaissance de texte. Sa licence GPL interdit de le livrer : il doit être installé séparément.",
+  "target": "pdftoppm.exe",
+  "source": "https://poppler.freedesktop.org/"
+}

@@ -1,0 +1,152 @@
+{
+  "_lisez-moi": [
+    "Les jeux de modèles proposés à l'installation, et plus tard depuis les réglages.",
+    "",
+    "Ajouter un jeu se fait ici, en quelques lignes : personne ne recompile. C'est voulu — les",
+    "modèles changent au rythme du monde extérieur, pas à celui du produit, et un client doit",
+    "pouvoir proposer les siens.",
+    "",
+    "« octets » est la taille exacte du fichier. Elle sert à constater qu'un téléchargement est",
+    "entier : un modèle tronqué ne se plaint pas à l'installation, il échoue au premier usage sur",
+    "un message qui parle de format invalide et qu'on va chercher partout sauf dans le réseau.",
+    "",
+    "La mémoire vidéo réclamée n'est pas déclarée : elle est déduite du plus gros fichier, parce",
+    "que ComfyUI charge l'encodeur, s'en sert, le libère, puis charge le modèle — les deux ne sont",
+    "jamais sur la carte ensemble. Un chiffre écrit à la main ment : ce produit a déclaré pendant",
+    "des semaines un pic de 20 000 Mio sur une carte qui en a 12 282, et un modèle de 16 Go a été",
+    "installé sur cette foi. « memoireVideoMo » n'existe que pour les cas où la déduction serait",
+    "fausse, et doit alors être justifié ici même."
+  ],
+  "jeux": [
+    {
+      "id": "flux-schnell-q5",
+      "role": "texte-image",
+      "nom": "Flux schnell — qualité",
+      "pour": "Créer une image à partir d'une description écrite, en quelques secondes.",
+      "licence": "Apache-2.0",
+      "modules": ["ComfyUI-GGUF"],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q5_K_S.gguf",
+          "vers": "unet/flux1-schnell-Q5_K_S.gguf",
+          "octets": 8263222304
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors",
+          "vers": "text_encoders/t5xxl_fp8_e4m3fn.safetensors",
+          "octets": 4893934904
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+          "vers": "text_encoders/clip_l.safetensors",
+          "octets": 246144152
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors",
+          "vers": "vae/ae.safetensors",
+          "octets": 335304388
+        }
+      ]
+    },
+    {
+      "id": "flux-schnell-q8",
+      "role": "texte-image",
+      "nom": "Flux schnell — fidèle",
+      "pour": "Le même modèle, à peine comprimé : la qualité la plus proche de l'original. Demande une carte de seize gigaoctets ou plus.",
+      "licence": "Apache-2.0",
+      "modules": ["ComfyUI-GGUF"],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q8_0.gguf",
+          "vers": "unet/flux1-schnell-Q8_0.gguf",
+          "octets": 12687821728
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors",
+          "vers": "text_encoders/t5xxl_fp16.safetensors",
+          "octets": 9787841024
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+          "vers": "text_encoders/clip_l.safetensors",
+          "octets": 246144152
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors",
+          "vers": "vae/ae.safetensors",
+          "octets": 335304388
+        }
+      ]
+    },
+    {
+      "id": "flux-schnell-q4",
+      "role": "texte-image",
+      "nom": "Flux schnell — léger",
+      "pour": "Le même modèle, plus comprimé : pour une carte modeste ou qui travaille déjà.",
+      "licence": "Apache-2.0",
+      "modules": ["ComfyUI-GGUF"],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q4_K_S.gguf",
+          "vers": "unet/flux1-schnell-Q4_K_S.gguf",
+          "octets": 6783943712
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors",
+          "vers": "text_encoders/t5xxl_fp8_e4m3fn.safetensors",
+          "octets": 4893934904
+        },
+        {
+          "url": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+          "vers": "text_encoders/clip_l.safetensors",
+          "octets": 246144152
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors",
+          "vers": "vae/ae.safetensors",
+          "octets": 335304388
+        }
+      ]
+    },
+    {
+      "id": "lumina-2",
+      "role": "texte-image",
+      "nom": "Lumina Image 2.0",
+      "pour": "Créer une image, sans aucun module à installer. Suit moins bien une description longue que Flux.",
+      "licence": "Apache-2.0",
+      "modules": [],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/diffusion_models/lumina_2_model_bf16.safetensors",
+          "vers": "diffusion_models/lumina_2_model_bf16.safetensors",
+          "octets": 5219585680
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/text_encoders/gemma_2_2b_fp16.safetensors",
+          "vers": "text_encoders/gemma_2_2b_fp16.safetensors",
+          "octets": 5232958283
+        },
+        {
+          "url": "https://huggingface.co/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors",
+          "vers": "vae/ae.safetensors",
+          "octets": 335304388
+        }
+      ]
+    },
+    {
+      "id": "svd-xt",
+      "role": "image-video",
+      "nom": "Stable Video Diffusion XT",
+      "pour": "Animer une image fixe en une courte vidéo. ATTENTION : licence non commerciale — utilisable pour essayer et pour un usage personnel, pas dans un produit vendu.",
+      "licence": "Stability AI Non-Commercial",
+      "modules": [],
+      "fichiers": [
+        {
+          "url": "https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt/resolve/main/svd_xt.safetensors",
+          "vers": "checkpoints/svd_xt.safetensors",
+          "octets": 9559625980
+        }
+      ]
+    }
+  ]
+}

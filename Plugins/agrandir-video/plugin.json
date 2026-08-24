@@ -1,0 +1,105 @@
+{
+  "id": "agrandir-video",
+  "name": "Agrandir une vidéo",
+  "category": "tool",
+  "version": "3.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E714",
+  "hint": "Agrandit une vidéo. Compter environ trente-cinq minutes par quart d'heure de film en 720p.",
+  "surface": "panel",
+  "remembers": [
+    "modele",
+    "echelle",
+    "fps",
+    "qualite",
+    "format"
+  ],
+  "content": [
+    {
+      "kind": "file",
+      "id": "video",
+      "label": "Vidéo",
+      "options": [
+        "mp4",
+        "mkv",
+        "avi",
+        "mov",
+        "webm",
+        "m4v",
+        "flv",
+        "wmv",
+        "mpg",
+        "mpeg",
+        "ts",
+        "m2ts",
+        "3gp",
+        "ogv"
+      ]
+    },
+    {
+      "kind": "choice",
+      "id": "modele",
+      "label": "Modèle",
+      "value": "realesr-animevideov3",
+      "options": [
+        "realesr-animevideov3",
+        "realesrgan-x4plus",
+        "realesrgan-x4plus-anime"
+      ],
+      "hint": "animevideov3 est fait pour la vidéo et existe en deux, trois et quatre fois. Les deux autres sont des modèles photo, plus fins mais nettement plus lents, et uniquement en quatre fois."
+    },
+    {
+      "kind": "choice",
+      "id": "echelle",
+      "label": "Agrandissement",
+      "value": "2",
+      "options": [
+        "2",
+        "3",
+        "4"
+      ],
+      "hint": "Avec animevideov3 l'agrandissement est calculé directement à la taille demandée, sans passer par quatre fois puis réduire."
+    },
+    {
+      "kind": "number",
+      "id": "fps",
+      "label": "Cadence (images/s)",
+      "value": "0",
+      "min": 0,
+      "max": 60,
+      "hint": "0 conserve la cadence du film. En dessous de la cadence d'origine, les images en trop sont jetées avant tout calcul : moins d'images, moins de temps. Au-dessus, les images manquantes sont fabriquées par interpolation avant l'agrandissement ; le mouvement devient fluide, mais passer de 24 à 60 triple environ la durée. Le minimum utile est 16."
+    },
+    {
+      "kind": "choice",
+      "id": "qualite",
+      "label": "Qualité",
+      "value": "23",
+      "options": [
+        "18",
+        "23",
+        "28"
+      ],
+      "hint": "18 très haute et fichier lourd, 23 équilibrée, 28 légère. Du simple au triple sur le poids du fichier."
+    },
+    {
+      "kind": "choice",
+      "id": "format",
+      "label": "Format de sortie",
+      "value": "mp4",
+      "options": [
+        "mp4",
+        "mkv",
+        "mov",
+        "avi"
+      ],
+      "hint": "Le conteneur du fichier produit. L'image n'est jamais réencodée pour en changer : ces quatre formats portent tous du H.264."
+    },
+    {
+      "kind": "action",
+      "label": "Lancer",
+      "does": "video",
+      "target": "{video}|{modele}|{echelle}|{fps}|{qualite}|{format}"
+    }
+  ]
+}

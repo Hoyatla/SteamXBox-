@@ -1,0 +1,11 @@
+{
+  "id": "dependance-tesseract",
+  "name": "Tesseract OCR",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "Tesseract contributors",
+  "licence": "Apache License 2.0",
+  "hint": "Reconnaissance de caractères sur les PDF dont les pages sont des images. Utilisé par « Convertir un document ».",
+  "target": "C:/Program Files/Tesseract-OCR/tesseract.exe",
+  "source": "https://github.com/UB-Mannheim/tesseract/wiki"
+}

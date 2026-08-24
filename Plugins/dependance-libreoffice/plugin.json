@@ -1,0 +1,11 @@
+{
+  "id": "dependance-libreoffice",
+  "name": "LibreOffice",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "The Document Foundation",
+  "licence": "Mozilla Public License 2.0",
+  "hint": "Conversion de documents, et lecture des anciens formats Office et OpenDocument pour l'indexeur.",
+  "target": "C:/Program Files/LibreOffice/program/soffice.exe",
+  "source": "https://www.libreoffice.org/download/download-libreoffice/"
+}

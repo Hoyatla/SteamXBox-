@@ -6,7 +6,7 @@
   "author": "SteamXBox",
   "licence": "Proprietary",
   "glyph": "E8B5",
-  "icon": "Library/Icons/fluent/scan-text-32-filled.svg",
+  "icon": "IconScanText",
   "hint": "PDF, Word, Excel, PowerPoint, OpenDocument, e-mail",
   "surface": "panel",
   "remembers": ["format"],
@@ -22,7 +22,7 @@
       "id": "format",
       "label": "Convertir en",
       "value": "docx",
-      "options": ["docx", "odt", "rtf", "html", "txt", "pptx", "odp", "xlsx", "ods", "csv", "pdf", "ocr"]
+      "options": ["docx", "docx-image", "odt", "rtf", "html", "txt", "pptx", "odp", "xlsx", "ods", "csv", "pdf", "ocr"]
     },
     {
       "kind": "action",

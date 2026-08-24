@@ -1,0 +1,14 @@
+{
+  "id": "activite",
+  "name": "Activité",
+  "category": "tool",
+  "version": "1.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E9D9",
+  "hint": "Ce qui tourne au nom de SteamXBox : le produit, ses outils et leurs dépendances. Le chiffre sous l'icône est le nombre d'événements en cours.",
+  "surface": "tile",
+  "does": "activite",
+  "target": "",
+  "enabled": true
+}

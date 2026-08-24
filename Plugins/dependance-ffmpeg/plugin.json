@@ -1,0 +1,11 @@
+{
+  "id": "dependance-ffmpeg",
+  "name": "ffmpeg",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "FFmpeg",
+  "licence": "LGPL 2.1, ou GPL selon la compilation",
+  "hint": "Décodage et encodage vidéo. Utilisé par « Agrandir une vidéo », et par « Agrandir une image » quand une conversion de format est demandée.",
+  "target": "{tools}/ffmpeg/bin/ffmpeg.exe",
+  "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+}

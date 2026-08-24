@@ -1,0 +1,12 @@
+{
+  "id": "modeles",
+  "name": "Jeux de modèles",
+  "category": "tool",
+  "version": "1.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E896",
+  "hint": "Montre les jeux de modèles disponibles, ce que chacun réclame de la carte graphique, sa licence et son poids, et installe celui qui convient à cette machine.",
+  "surface": "tile",
+  "does": "modeles"
+}

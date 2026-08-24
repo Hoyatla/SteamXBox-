@@ -1,0 +1,14 @@
+{
+  "id": "assistant",
+  "name": "Assistant",
+  "category": "tool",
+  "version": "1.0.0",
+  "author": "SteamXBox",
+  "licence": "Proprietary",
+  "glyph": "E99A",
+  "hint": "Dites ce que vous voulez faire ; l'assistant lance les outils à votre place. Le modèle tourne sur cette machine, rien ne sort d'ici.",
+  "surface": "tile",
+  "does": "assistant",
+  "target": "",
+  "enabled": true
+}

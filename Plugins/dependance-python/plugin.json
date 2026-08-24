@@ -1,0 +1,11 @@
+{
+  "id": "dependance-python",
+  "name": "Python",
+  "category": "dependency",
+  "version": "1.0.0",
+  "author": "Python Software Foundation",
+  "licence": "PSF License",
+  "hint": "Interpréteur nécessaire à ComfyUI. Les outils d'agrandissement d'images et de vidéos n'en ont plus besoin : ils passent par des moteurs compilés.",
+  "target": "{tools}/Python/python.exe",
+  "source": "https://www.python.org/downloads/windows/"
+}

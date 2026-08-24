@@ -1,0 +1,54 @@
+Outils tiers
+============
+
+Les programmes deposes ici sont trouves par les outils de SteamXBox, ou qu'aille le
+produit : cle USB, autre poste, autre lettre de lecteur. Les manifestes ecrivent
+{tools} et non un chemin absolu, et c'est l'environnement qui le resout.
+
+
+LIVRES AVEC LE PRODUIT
+----------------------
+
+  Outils\Real-ESRGAN-ncnn\    agrandissement d'images et de videos   BSD 3-Clause
+  Outils\rife-ncnn-vulkan\    interpolation d'images (cadence)       MIT
+
+Compiles, autonomes, 70 Mo a eux deux. Ils ne demandent ni Python ni PyTorch.
+
+
+ATTENDU, JAMAIS LIVRE
+---------------------
+
+  Outils\ffmpeg\bin\ffmpeg.exe    decodage et encodage video
+  Outils\ffmpeg\bin\ffprobe.exe
+
+Cherche ici EN PREMIER, puis dans le PATH. Poser ffmpeg dans ce dossier evite donc
+de toucher aux reglages de Windows, et fige une version connue.
+
+Il n'est pas livre avec le produit, et c'est une question de licence : les
+compilations courantes pour Windows activent --enable-gpl (c'est ce qui apporte
+libx264, l'encodeur H.264 dont la chaine video se sert). Une compilation LGPL
+serait livrable, mais elle n'a justement pas libx264 : il faudrait alors encoder
+par le materiel, ce qui exclut les machines sans carte compatible. Le detecter
+regle la question sans rien imposer.
+
+  Telechargement : https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+Absent, l'outil video le dit et s'arrete. L'outil image continue de fonctionner
+tant qu'aucune conversion de format n'est demandee.
+
+
+DETECTES POUR D'AUTRES OUTILS
+-----------------------------
+
+  Outils\ComfyUI\main.py      generation d'images, demande un Python
+
+ComfyUI est sous GPL et ne doit jamais etre inclus dans une distribution du
+produit. Il reste appele, jamais livre.
+
+Outils\Python ne sert plus qu'a ComfyUI : les outils image et video passent
+desormais par les moteurs compiles ci-dessus, qui n'exigent aucun interpreteur.
+
+La version PyTorch de Real-ESRGAN a ete retiree du dossier. Elle n'etait plus
+appelee par aucun outil, et ComfyUI n'en a pas besoin. Le script
+reparer-dependances.py est parti avec elle : il ne corrigeait qu'une chose,
+l'import casse de basicsr, et basicsr n'etait la que pour ce projet.

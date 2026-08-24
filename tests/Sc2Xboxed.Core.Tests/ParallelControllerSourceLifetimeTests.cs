@@ -26,9 +26,91 @@ namespace Sc2Xboxed.Core.Tests;
 /// nothing crashes, nothing is lost, the machine simply does the same work several times over and
 /// says so in a file nobody reads to the end.
 /// </para>
+///
+/// <para>
+/// <b>Le battement est donne, pas attendu.</b> Ces tests ont d'abord dormi trois cents millisecondes
+/// et compte les rescans de part et d'autre, en tolerant un battement de trop apres l'arret — parce
+/// que sous charge la machine en glisse un. Cette tolerance est exactement l'espace ou une
+/// regression tient, et le reste du test mesurait l'occupation de la machine autant que le veilleur.
+/// Le battement du veilleur est desormais fourni par le test, qui le pilote coup par coup : les
+/// comptes sont exacts, l'arret est constate et non suppose, et rien ne dort.
+/// </para>
 /// </remarks>
 public class ParallelControllerSourceLifetimeTests
 {
+    /// <summary>
+    /// De quoi echouer plutot que de rester pendu, si quelque chose ne repond jamais.
+    /// </summary>
+    /// <remarks>
+    /// Ce n'est pas une hypothese de duree : rien ici n'attend ces dix secondes en marche normale.
+    /// C'est la difference entre un test qui echoue en le disant et une serie qui se fige.
+    /// </remarks>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
+    /// <summary>Le battement du veilleur, tenu par le test.</summary>
+    /// <remarks>
+    /// Le veilleur boucle sur « relever ce qui est connu, attendre un battement, rescanner ». En
+    /// remplacant l'attente, le test sait ou le veilleur se trouve : arrete au rendez-vous, ou en
+    /// train de faire son tour. Il peut donc lui accorder un tour et rendre la main quand ce tour
+    /// est fini — au lieu de dormir et d'esperer.
+    /// </remarks>
+    private sealed class Beat
+    {
+        /// <summary>Le veilleur signale qu'il est arrive au rendez-vous.</summary>
+        private readonly SemaphoreSlim _arrived = new(0);
+
+        /// <summary>Le test le laisse repartir.</summary>
+        private readonly SemaphoreSlim _released = new(0);
+
+        private readonly TaskCompletionSource _stopped =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Se termine quand le veilleur a quitte le rendez-vous pour de bon.</summary>
+        /// <remarks>
+        /// C'est ce qui remplace « dormir puis constater que le compte n'a pas bouge ». Le veilleur
+        /// attend son battement sur le jeton de la source ; quand celui-ci est annule, l'attente
+        /// leve, la boucle sort, et cette promesse se resout. Un compte releve apres ca est
+        /// definitif, pas un instantane.
+        /// </remarks>
+        public Task Stopped => _stopped.Task;
+
+        /// <summary>A passer en <c>beat</c> a la source.</summary>
+        public async Task Wait(TimeSpan _, CancellationToken cancellationToken)
+        {
+            _arrived.Release();
+
+            try
+            {
+                await _released.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                _stopped.TrySetResult();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Accorde un tour au veilleur et rend la main quand ce tour est termine.
+        /// </summary>
+        /// <remarks>
+        /// Le retour au rendez-vous suivant est la preuve que le tour precedent est alle jusqu'au
+        /// bout, rescan compris. C'est ce qui permet d'affirmer « exactement deux rescans » plutot
+        /// que « au moins un, probablement ».
+        /// </remarks>
+        public async Task GrantOneRoundAsync()
+        {
+            using var deadline = new CancellationTokenSource(Patience);
+
+            await _arrived.WaitAsync(deadline.Token);
+            _released.Release();
+
+            // Il revient : son tour est fini. Le jeton est repose pour l'appel suivant.
+            await _arrived.WaitAsync(deadline.Token);
+            _arrived.Release();
+        }
+    }
+
     /// <summary>A controller that never sends anything and never ends by itself.</summary>
     private sealed class SilentSource : IPhysicalControllerSource
     {
@@ -63,26 +145,84 @@ public class ParallelControllerSourceLifetimeTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Une manette dont c'est le test qui decide quand elle s'en va.
+    /// </summary>
+    /// <remarks>
+    /// Le jeton d'annulation est ignore volontairement. Une source qui s'arrete a l'annulation
+    /// s'arrete quand la liberation commence, c'est-a-dire a un moment que le test ne choisit pas ;
+    /// celle-ci s'arrete sur ordre, ce qui permet de placer un depart exactement au milieu d'une
+    /// liberation.
+    /// </remarks>
+    private sealed class SourceOnCommand(bool speaks) : IPhysicalControllerSource
+    {
+        private readonly TaskCompletionSource _end = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool Disposed { get; private set; }
+
+        /// <summary>Ce que cette source fait pendant qu'on la libere.</summary>
+        public Func<Task>? WhileDisposing { get; set; }
+
+        /// <summary>Termine le flux, comme une manette qu'on eteint.</summary>
+        public void End() => _end.TrySetResult();
+
+        public async IAsyncEnumerable<ControllerState> ReadFramesAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            // Une trame pour celle qui parle : c'est ce qui dit au test que la lecture a commence.
+            if (speaks)
+            {
+                yield return new ControllerState();
+            }
+
+            await _end.Task.ConfigureAwait(false);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            Disposed = true;
+
+            if (WhileDisposing is { } hook)
+            {
+                await hook().ConfigureAwait(false);
+            }
+        }
+    }
+
     private static (ControllerIdentity, IPhysicalControllerSource) Pad(string id)
         => (new ControllerIdentity(ControllerKind.XInput, id, id, Slot: 0), new SilentSource());
 
     private static (ControllerIdentity, IPhysicalControllerSource) Talking(string id)
         => (new ControllerIdentity(ControllerKind.XInput, id, id, Slot: 0), new OneFrameSource());
 
-    // The heart of it: after DisposeAsync, the rescan must stop being called.
-    [Fact]
-    public async Task DisposingStopsTheArrivalsWatcher()
+    /// <summary>Une source dont on tient le battement et dont on compte les rescans.</summary>
+    private static (ParallelControllerSource Source, Beat Beat, Func<int> Rescans) Watched(
+        (ControllerIdentity, IPhysicalControllerSource) child)
     {
+        var beat = new Beat();
         var rescans = 0;
 
         var source = new ParallelControllerSource(
-            [Pad("one")],
+            [child],
             rescan: () =>
             {
                 Interlocked.Increment(ref rescans);
                 return [Pad("one")];
             },
-            rescanInterval: TimeSpan.FromMilliseconds(40));
+            rescanInterval: TimeSpan.FromMilliseconds(40),
+            beat: beat.Wait);
+
+        return (source, beat, () => Volatile.Read(ref rescans));
+    }
+
+    /// <summary>Deux tours accordes, deux rescans : ni plus, ni moins.</summary>
+    private const int Rounds = 2;
+
+    // The heart of it: after DisposeAsync, the rescan must stop being called.
+    [Fact]
+    public async Task DisposingStopsTheArrivalsWatcher()
+    {
+        var (source, beat, rescans) = Watched(Pad("one"));
 
         using var session = new CancellationTokenSource();
 
@@ -94,23 +234,22 @@ public class ParallelControllerSourceLifetimeTests
             }
         });
 
-        await Task.Delay(300);
-        var whileAlive = Volatile.Read(ref rescans);
+        for (var round = 0; round < Rounds; round++)
+        {
+            await beat.GrantOneRoundAsync();
+        }
+
+        Assert.Equal(Rounds, rescans());
 
         await source.DisposeAsync();
 
-        // Long enough for several more beats, had anything still been beating.
-        await Task.Delay(300);
-        var afterDisposal = Volatile.Read(ref rescans);
+        // Constate, et non suppose : le veilleur a quitte son rendez-vous.
+        await beat.Stopped.WaitAsync(Patience);
+
+        Assert.Equal(Rounds, rescans());
 
         session.Cancel();
-
-        Assert.True(whileAlive > 0, "the watcher never ran, so this proves nothing");
-        Assert.True(
-            afterDisposal - whileAlive <= 1,
-            $"the watcher kept rescanning after disposal: {whileAlive} before, {afterDisposal} after");
-
-        await Task.WhenAny(reading, Task.Delay(2000));
+        await Settle(reading);
     }
 
     /// <summary>
@@ -133,16 +272,7 @@ public class ParallelControllerSourceLifetimeTests
     [Fact]
     public async Task StoppingTheEnumerationThenDisposingAlsoStopsTheWatcher()
     {
-        var rescans = 0;
-
-        var source = new ParallelControllerSource(
-            [Talking("one")],
-            rescan: () =>
-            {
-                Interlocked.Increment(ref rescans);
-                return [Pad("one")];
-            },
-            rescanInterval: TimeSpan.FromMilliseconds(40));
+        var (source, beat, rescans) = Watched(Talking("one"));
 
         using var session = new CancellationTokenSource();
 
@@ -152,35 +282,26 @@ public class ParallelControllerSourceLifetimeTests
             break;
         }
 
-        await Task.Delay(300);
-        var whileAlive = Volatile.Read(ref rescans);
+        for (var round = 0; round < Rounds; round++)
+        {
+            await beat.GrantOneRoundAsync();
+        }
+
+        Assert.Equal(Rounds, rescans());
 
         await source.DisposeAsync();
+        await beat.Stopped.WaitAsync(Patience);
 
-        await Task.Delay(300);
-        var afterDisposal = Volatile.Read(ref rescans);
-
-        Assert.True(whileAlive > 0, "the watcher never ran, so this proves nothing");
-        Assert.True(
-            afterDisposal - whileAlive <= 1,
-            $"the watcher kept rescanning after the enumeration ended and the source was disposed: "
-            + $"{whileAlive} before, {afterDisposal} after");
+        Assert.Equal(Rounds, rescans());
     }
 
     // The caller's token must still work on its own: disposal is an addition, not a replacement.
     [Fact]
     public async Task CancellingTheCallerStopsTheWatcherToo()
     {
-        var rescans = 0;
+        var (source, beat, rescans) = Watched(Pad("one"));
 
-        await using var source = new ParallelControllerSource(
-            [Pad("one")],
-            rescan: () =>
-            {
-                Interlocked.Increment(ref rescans);
-                return [Pad("one")];
-            },
-            rescanInterval: TimeSpan.FromMilliseconds(40));
+        await using var owned = source;
 
         using var session = new CancellationTokenSource();
 
@@ -191,17 +312,114 @@ public class ParallelControllerSourceLifetimeTests
             }
         });
 
-        await Task.Delay(300);
-        var whileAlive = Volatile.Read(ref rescans);
+        for (var round = 0; round < Rounds; round++)
+        {
+            await beat.GrantOneRoundAsync();
+        }
+
+        Assert.Equal(Rounds, rescans());
 
         session.Cancel();
-        await Task.Delay(300);
+        await beat.Stopped.WaitAsync(Patience);
 
-        Assert.True(whileAlive > 0, "the watcher never ran, so this proves nothing");
-        Assert.True(
-            Volatile.Read(ref rescans) - whileAlive <= 1,
-            "the watcher kept rescanning after the caller cancelled");
+        Assert.Equal(Rounds, rescans());
 
-        await Task.WhenAny(reading, Task.Delay(2000));
+        await Settle(reading);
+    }
+
+    /// <summary>
+    /// Une manette qui s'en va pendant la liberation ne doit pas interrompre celle-ci.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le defaut que ceci corrige.</b> <c>DisposeAsync</c> annule d'abord, ce qui met fin aux
+    /// lecteurs ; un lecteur qui se termine retire sa manette de la liste depuis sa propre tache.
+    /// Puis <c>DisposeAsync</c> parcourait cette meme liste sans verrou. Une manette qui s'eteint au
+    /// mauvais dixieme de seconde faisait donc lever « Collection was modified » au milieu de la
+    /// liberation, et les manettes suivantes n'etaient jamais fermees — jamais rendues a HidHide,
+    /// c'est-a-dire invisibles pour Steam, ce que tout ce fichier existe pour empecher.
+    ///
+    /// <para>
+    /// Attrape par hasard, une fois sur soixante executions, une fois les tests ci-dessus rendus
+    /// deterministes : leur ancienne version dormait trois cents millisecondes apres la liberation
+    /// et le depart avait le temps d'avoir eu lieu avant. Rendu certain ici plutot que laisse au
+    /// hasard : c'est la liberation de la premiere manette qui declenche le depart de la seconde et
+    /// qui attend qu'il soit enregistre, donc la collision a lieu a chaque fois.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AControllerLeavingDuringDisposalDoesNotInterruptIt()
+    {
+        var departed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // La premiere ne s'en va jamais d'elle-meme : elle doit encore etre dans la liste au moment
+        // ou celle-ci est parcourue.
+        var staying = new SourceOnCommand(speaks: false);
+        var leaving = new SourceOnCommand(speaks: true);
+
+        await using var source = new ParallelControllerSource(
+            [
+                (new ControllerIdentity(ControllerKind.XInput, "premiere", "premiere", Slot: 0), staying),
+                (new ControllerIdentity(ControllerKind.XInput, "seconde", "seconde", Slot: 0), leaving),
+            ],
+            log: line =>
+            {
+                if (line.Contains("controller left", StringComparison.Ordinal)
+                    && line.Contains("seconde", StringComparison.Ordinal))
+                {
+                    departed.TrySetResult();
+                }
+            });
+
+        staying.WhileDisposing = async () =>
+        {
+            leaving.End();
+            await departed.Task.WaitAsync(Patience);
+        };
+
+        using var session = new CancellationTokenSource();
+
+        var reachedTheStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var reading = Task.Run(async () =>
+        {
+            await foreach (var _ in source.ReadAllAsync(session.Token).ConfigureAwait(false))
+            {
+                reachedTheStream.TrySetResult();
+            }
+        });
+
+        // La trame de la seconde manette prouve que les lecteurs tournent. Sans ca, la liberation
+        // pourrait arriver avant eux et le depart n'aurait rien a interrompre.
+        await reachedTheStream.Task.WaitAsync(Patience);
+
+        // L'assertion est qu'elle se termine. Avant, elle levait.
+        await source.DisposeAsync();
+
+        Assert.True(departed.Task.IsCompletedSuccessfully, "la seconde manette n'est pas partie, le test ne prouve rien");
+        Assert.True(staying.Disposed, "la premiere manette n'a pas ete liberee");
+        Assert.True(leaving.Disposed, "la seconde manette n'a pas ete liberee");
+
+        staying.End();
+        session.Cancel();
+        await Settle(reading);
+    }
+
+    /// <summary>
+    /// Attend la fin de la lecture, dont l'annulation est la fin normale.
+    /// </summary>
+    /// <remarks>
+    /// Le delai n'est pas une tolerance : c'est de quoi echouer si la lecture ne s'arrete jamais,
+    /// au lieu de figer la serie sur un <c>await</c> sans fin.
+    /// </remarks>
+    private static async Task Settle(Task reading)
+    {
+        try
+        {
+            await reading.WaitAsync(Patience);
+        }
+        catch (OperationCanceledException)
+        {
+            // C'est la facon dont une enumeration annulee se termine.
+        }
     }
 }
