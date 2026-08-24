@@ -49,11 +49,37 @@ public static class PluginLifecycle
     /// </remarks>
     public const string ArchiveFolderName = "_archives";
 
+    /// <summary>
+    /// Variable d'environnement qui deplace la storage de l'hote, pour un harnais de test.
+    /// </summary>
+    /// <remarks>
+    /// Sans elle, une serie de tests ecrit dans le fichier de reglages de la personne qui la lance :
+    /// on en a retrouve onze identifiants <c>test-steamxbox-…</c> dans le vrai fichier. Un test qui
+    /// modifie l'installation de son auteur est un defaut a lui seul, avant meme d'etre instable.
+    /// </remarks>
+    public const string StorageRootVariable = "STEAMXBOX_HOST_STORAGE";
+
+    /// <summary>
+    /// Un seul ecrivain a la fois dans ce processus.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SetEnabled"/> lit le fichier, ajoute une entree et le reecrit en entier. Deux
+    /// appels simultanes lisaient donc tous deux l'etat d'avant, et le second effacait la decision
+    /// du premier — une entree perdue, sans erreur nulle part. La lecture est prise sous le meme
+    /// verrou : c'est ce qui garantit que personne ne lit pendant qu'on remplace le fichier.
+    /// </remarks>
+    private static readonly object Gate = new();
+
     /// <summary>What the user has decided about each tool, in the host's storage.</summary>
-    private static string ChoicesPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SteamXBox",
-        "plugins-choices.json");
+    private static string ChoicesPath => Path.Combine(HostStorage, "plugins-choices.json");
+
+    /// <inheritdoc cref="StorageRootVariable"/>
+    private static string HostStorage
+        => Environment.GetEnvironmentVariable(StorageRootVariable) is { Length: > 0 } elsewhere
+            ? elsewhere
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SteamXBox");
 
     /// <summary>
     /// The tools the user has switched on or off by hand.
@@ -65,23 +91,24 @@ public static class PluginLifecycle
     /// </remarks>
     public static IReadOnlyDictionary<string, bool> Choices()
     {
-        try
+        lock (Gate)
         {
-            if (!File.Exists(ChoicesPath))
+            try
             {
-                return new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                if (!File.Exists(ChoicesPath))
+                {
+                    return Empty();
+                }
+
+                using var file = Open(FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                return ReadFrom(file);
             }
-
-            var stored = JsonSerializer.Deserialize<Dictionary<string, bool>>(File.ReadAllText(ChoicesPath));
-
-            return stored is null
-                ? new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, bool>(stored, StringComparer.OrdinalIgnoreCase);
-        }
-        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
-        {
-            // An unreadable file means nothing was decided, so every tool takes its own default.
-            return new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+            {
+                // An unreadable file means nothing was decided, so every tool takes its own default.
+                return Empty();
+            }
         }
     }
 
@@ -90,23 +117,100 @@ public static class PluginLifecycle
         => Choices().TryGetValue(id, out var chosen) ? chosen : byDefault;
 
     /// <summary>Records the user's decision, without touching the tool's folder.</summary>
+    /// <remarks>
+    /// <b>Le defaut que ceci corrige.</b> C'etait « lire le fichier, ajouter une entree, le
+    /// reecrire », sans rien pour tenir les deux moities ensemble. Deux appels simultanes lisaient
+    /// donc le meme etat d'avant et le second effacait la decision du premier. Rien n'echouait :
+    /// l'entree manquait, l'outil reprenait son defaut, et personne n'avait de quoi le rattacher a
+    /// autre chose qu'a de la malchance.
+    ///
+    /// <para>
+    /// Relecture, fusion et reecriture se font maintenant sur un seul descripteur ouvert en
+    /// exclusif, donc l'intervalle ou un autre ecrivain pouvait lire l'etat d'avant n'existe plus.
+    /// <see cref="Gate"/> en dispense les threads de ce processus ; le descripteur couvre les autres
+    /// processus, ce qui compte parce que le produit en fait tourner plusieurs — l'environnement et
+    /// la fenetre de configuration montrent tous deux cette liste d'outils.
+    /// </para>
+    /// </remarks>
     public static void SetEnabled(string id, bool enabled, Action<string>? log = null)
     {
-        try
+        lock (Gate)
         {
-            var choices = new Dictionary<string, bool>(Choices(), StringComparer.OrdinalIgnoreCase)
+            try
             {
-                [id] = enabled,
-            };
+                Directory.CreateDirectory(HostStorage);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(ChoicesPath)!);
-            File.WriteAllText(ChoicesPath, JsonSerializer.Serialize(choices));
+                using var file = Open(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
-            log?.Invoke($"plugin {id}: {(enabled ? "enabled" : "disabled")}.");
+                var choices = ReadFrom(file);
+                choices[id] = enabled;
+
+                // Repositionne et tronque : le fichier est reecrit en entier, et une entree retiree
+                // ne doit pas laisser derriere elle la queue de la version precedente.
+                file.Position = 0;
+                file.SetLength(0);
+
+                JsonSerializer.Serialize(file, choices);
+
+                log?.Invoke($"plugin {id}: {(enabled ? "enabled" : "disabled")}.");
+            }
+            catch (Exception exception)
+            {
+                log?.Invoke($"plugin {id}: could not be switched: {exception.Message}");
+            }
         }
-        catch (Exception exception)
+    }
+
+    private static Dictionary<string, bool> Empty()
+        => new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Lit le fichier deja ouvert, en repartant de son debut.</summary>
+    /// <remarks>
+    /// Prend un descripteur plutot qu'un chemin, pour que <see cref="SetEnabled"/> relise
+    /// exactement le fichier qu'il s'apprete a reecrire et non un autre ouvert entre-temps.
+    /// </remarks>
+    private static Dictionary<string, bool> ReadFrom(FileStream file)
+    {
+        if (file.Length == 0)
         {
-            log?.Invoke($"plugin {id}: could not be switched: {exception.Message}");
+            return Empty();
+        }
+
+        file.Position = 0;
+
+        var stored = JsonSerializer.Deserialize<Dictionary<string, bool>>(file);
+
+        return stored is null ? Empty() : new Dictionary<string, bool>(stored, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Ouvre le fichier des decisions, en reessayant tant qu'un autre processus le tient.
+    /// </summary>
+    /// <remarks>
+    /// Un partage refuse est passager par construction : celui qui tient le fichier fait une
+    /// lecture ou une ecriture de quelques centaines d'octets. Abandonner a la premiere tentative
+    /// rendrait la valeur par defaut sur une lecture — « rien n'a jamais ete decide » — ou perdrait
+    /// la decision sur une ecriture, dans les deux cas sans que l'utilisateur voie autre chose
+    /// qu'un reglage qui ne tient pas.
+    /// </remarks>
+    private static FileStream Open(FileMode mode, FileAccess access, FileShare share)
+    {
+        const int Attempts = 20;
+        const int PauseMs = 5;
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(ChoicesPath, mode, access, share);
+            }
+            // Un fichier absent n'est pas un partage refuse : c'est la reponse definitive « rien
+            // n'a jamais ete decide », et la reessayer ne ferait que retarder de cent millisecondes
+            // une lecture parfaitement concluante.
+            catch (IOException exception) when (attempt < Attempts && exception is not FileNotFoundException)
+            {
+                Thread.Sleep(PauseMs);
+            }
         }
     }
 

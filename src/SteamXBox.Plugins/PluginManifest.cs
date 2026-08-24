@@ -38,6 +38,29 @@ public enum PluginCategory
     /// </para>
     /// </remarks>
     Tool,
+
+    /// <summary>
+    /// Un programme extérieur dont un outil a besoin, décrit pour que l'utilisateur le voie.
+    /// </summary>
+    /// <remarks>
+    /// Ce n'est pas un outil : il n'a ni tuile, ni panneau, ni action. Il existe parce que la moitié
+    /// de ce qui peut manquer à SteamXBox n'est pas dans SteamXBox — ffmpeg, LibreOffice, un Python.
+    /// Sans description, leur absence se manifestait par un outil qui refuse de fonctionner, et
+    /// l'utilisateur devait deviner lequel installer.
+    ///
+    /// <para>
+    /// Une dépendance déclare où on la cherche (<c>target</c>) et où on l'obtient (<c>source</c>).
+    /// L'hôte vérifie et le dit dans les réglages : présent, ou absent avec l'adresse. C'est la même
+    /// règle que partout ailleurs — le manifeste décrit, l'hôte constate.
+    /// </para>
+    ///
+    /// <para>
+    /// Rien n'est installé automatiquement, et c'est délibéré : ces programmes ont leurs licences,
+    /// leurs versions et leur entretien propres. Certains, comme poppler, ne pourraient même pas
+    /// être livrés sans exposer le code du produit.
+    /// </para>
+    /// </remarks>
+    Dependency,
 }
 
 /// <summary>A plugin's <c>plugin.json</c>, as written on disk.</summary>
@@ -66,6 +89,16 @@ public sealed class PluginManifest
 
     /// <summary>Segoe Fluent Icons code point, as the compiled tools already use.</summary>
     public string Glyph { get; set; } = "";
+
+    /// <summary>
+    /// La clé d'une géométrie du dictionnaire d'icônes, à dessiner au lieu du glyphe.
+    /// </summary>
+    /// <remarks>
+    /// Une clé, jamais un chemin de fichier : WPF ne lit pas le SVG, et les tracés sont convertis une
+    /// fois pour toutes dans le dictionnaire de l'environnement. Vide, la tuile garde son glyphe de
+    /// police — une icône absente ne coûte pas l'outil.
+    /// </remarks>
+    public string Icon { get; set; } = "";
 
     /// <summary>One line under the title when the tile has the focus.</summary>
     public string Hint { get; set; } = "";
@@ -115,6 +148,7 @@ public sealed class PluginManifest
         "tile" => PluginCategory.Tile,
         "widget" => PluginCategory.Widget,
         "tool" => PluginCategory.Tool,
+        "dependency" => PluginCategory.Dependency,
         _ => PluginCategory.Unknown,
     };
 
@@ -232,6 +266,14 @@ public static class PluginCatalog
             return $"point d'entrée introuvable : {manifest.Entry}";
         }
 
+        // Une dépendance qui ne dit pas où on la cherche ne peut être ni constatée ni réclamée :
+        // elle ne rendrait service à personne, et la liste des réglages afficherait une ligne
+        // dont l'état serait toujours inconnu.
+        if (manifest.Kind == PluginCategory.Dependency && manifest.Target.Length == 0)
+        {
+            return "une dépendance doit déclarer un 'target' : où le programme est cherché";
+        }
+
         return manifest.Kind == PluginCategory.Tool ? ValidateTool(manifest) : null;
     }
 
@@ -292,14 +334,31 @@ public static class PluginCatalog
                 return "un élément 'file' doit avoir un 'id' pour que l'action puisse le nommer";
             }
 
-            if (kind == "choice" && item.Options.Count == 0)
+            // Un choix tire ses valeurs du manifeste ou du générateur, et il lui faut au moins
+            // l'une des deux sources : sans elles, la liste serait vide quoi qu'il arrive.
+            if (kind == "choice" && item.Options.Count == 0 && item.From.Length == 0)
             {
-                return $"l'élément '{item.Id}' est un choix sans options";
+                return $"l'élément '{item.Id}' est un choix sans options ni 'from'";
+            }
+
+            if (item.From.Length > 0 && !item.From.Contains('.', StringComparison.Ordinal))
+            {
+                return $"le 'from' de '{item.Id}' s'écrit NomDuNoeud.nom_de_l_entree";
             }
 
             if (kind == "action" && Action(item.Does, item.Target, $"l'élément '{item.Id}'") is { } problem)
             {
                 return problem;
+            }
+
+            // Un bouton qui tire au sort un réglage absent ne tirerait rien et se contenterait de
+            // relancer à l'identique — « Autre proposition » rendrait deux fois la même chose, et
+            // rien ne dirait pourquoi.
+            if (item.Hasard.Length > 0
+                && !manifest.Content.Exists(c =>
+                    c.Id.Equals(item.Hasard, StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"'{item.Label}' tire au sort '{item.Hasard}', qui n'est pas un réglage de cet outil";
             }
         }
 
