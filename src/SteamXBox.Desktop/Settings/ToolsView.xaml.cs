@@ -214,7 +214,10 @@ public partial class ToolsView : UserControl
     {
         var brut = Path.GetFileNameWithoutExtension(installeur);
         var coupe = brut.Split(["-Setup", "_Setup", " Setup", "-setup"], StringSplitOptions.None)[0];
-        var propre = new string([.. coupe.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' ')]).Trim();
+        // Pas d'espace dans le nom : les installeurs coupent leur directive au premier, et rien ne
+        // garantit que Windows donnera une forme courte à un dossier créé aujourd'hui.
+        var propre = new string([.. coupe.Select(c =>
+            char.IsLetterOrDigit(c) || c is '-' or '_' ? c : ' ')]).Trim().Replace(' ', '-');
 
         return propre.Length == 0 ? "outil-accueilli" : propre;
     }

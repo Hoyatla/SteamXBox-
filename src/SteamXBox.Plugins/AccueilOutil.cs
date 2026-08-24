@@ -54,12 +54,43 @@ public static class AccueilOutil
     ///
     /// <para>
     /// <c>/D=</c> est la porte d'entrée officielle de NSIS, donc d'Electron et de la plupart des
-    /// programmes livrés ainsi. Elle doit venir en dernier, sans guillemets, et prend tout ce qui
-    /// suit jusqu'à la fin de la ligne — un chemin qui contient des espaces passe donc tel quel.
-    /// C'est le premier vrai membre du protocole : on demande, on ne détourne pas.
+    /// programmes livrés ainsi. Elle doit venir en dernier et sans guillemets.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Et le chemin doit être court, au sens de Windows.</b> La documentation de NSIS promet que
+    /// <c>/D=</c> prend tout jusqu'à la fin de la ligne, espaces compris. À l'essai, non : donné
+    /// <c>C:\Program Files\SteamXbox\Outils\Comfy-Desktop</c>, l'installeur a coupé au premier
+    /// espace et créé <c>C:\Program</c> à la racine du disque — quatre cent quatre-vingt-huit
+    /// mégaoctets au mauvais endroit, sans la moindre erreur signalée. On passe donc la forme
+    /// courte, celle qui n'a jamais d'espaces, et le produit vit sous <c>Program Files</c> : ce
+    /// n'est pas un cas rare, c'est le cas normal.
     /// </para>
     /// </remarks>
-    public static string Ou(string dossier) => $"/D={dossier}";
+    public static string Ou(string dossier) => $"/D={Court(dossier)}";
+
+    /// <summary>Le nom court du dossier, celui qui ne porte pas d'espaces.</summary>
+    /// <remarks>
+    /// Windows ne donne un nom court qu'à ce qui existe : le dossier est donc créé d'abord. Si la
+    /// forme courte est désactivée sur le volume — cela se règle, et certains l'éteignent — on rend
+    /// le chemin tel quel plutôt que rien, en sachant qu'un espace le fera échouer. Mieux vaut un
+    /// échec visible qu'un silence.
+    /// </remarks>
+    public static string Court(string dossier)
+    {
+        Directory.CreateDirectory(dossier);
+
+        var tampon = new System.Text.StringBuilder(512);
+        var taille = GetShortPathName(dossier, tampon, tampon.Capacity);
+
+        return taille > 0 && taille < tampon.Capacity ? tampon.ToString() : dossier;
+    }
+
+    [System.Runtime.InteropServices.DllImport(
+        "kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet =
+            System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern int GetShortPathName(
+        string lpszLongPath, System.Text.StringBuilder lpszShortPath, int cchBuffer);
 
     /// <summary>
     /// Installe un programme extérieur dans un dossier qui n'est qu'à lui.
@@ -87,8 +118,23 @@ public static class AccueilOutil
         }
 
         var avant = Empreinte(temoins);
+        // Un espace qui survit à la forme courte est une impasse, et une impasse silencieuse : la
+        // directive serait tronquée et l'installeur s'installerait ailleurs en annonçant une
+        // réussite. On refuse ici plutôt que de le découvrir en trouvant un dossier inconnu à la
+        // racine du disque.
+        if (Court(dossier).Contains(' ', StringComparison.Ordinal))
+        {
+            return new AccueilRapport(-1, dossier, 0,
+            [
+                $"Accueil impossible dans « {dossier} » : le chemin contient un espace et Windows "
+                + "ne lui donne pas de forme courte sur ce disque. Les installeurs coupent leur "
+                + "directive au premier espace et s'installent ailleurs sans le dire. Choisissez un "
+                + "dossier sans espace.",
+            ]);
+        }
+
         // L'ordre compte : /D prend tout ce qui suit jusqu'à la fin de la ligne, donc il vient en
-        // dernier, et sans guillemets même quand le chemin porte des espaces.
+        // dernier, et sans guillemets.
         var depart = new ProcessStartInfo(setup)
         {
             Arguments = $"{Silence} {Ou(dossier)}",

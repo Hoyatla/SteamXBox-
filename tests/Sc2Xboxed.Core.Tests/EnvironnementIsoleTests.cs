@@ -162,3 +162,73 @@ public class EnvironnementIsoleTests : IDisposable
     public void AManifestThatAsksForNothingGetsNoImposedEnvironment()
         => Assert.Null(new PluginManifest().Environnement);
 }
+
+/// <summary>
+/// La directive qui dit à un installeur où s'installer.
+/// </summary>
+/// <remarks>
+/// Une seule chose est éprouvée ici, et elle a coûté quatre cent quatre-vingt-huit mégaoctets au
+/// mauvais endroit : la documentation de NSIS promet que <c>/D=</c> prend tout jusqu'à la fin de la
+/// ligne, espaces compris ; à l'essai il coupe au premier espace. Donné le dossier d'accueil normal
+/// du produit — qui vit sous « Program Files » — l'installeur a créé <c>C:\Program</c> à la racine
+/// du disque sans signaler la moindre erreur.
+/// </remarks>
+public class AccueilOutilTests : IDisposable
+{
+    private readonly DirectoryInfo _bac =
+        Directory.CreateTempSubdirectory("accueil avec espaces");
+
+    public void Dispose()
+    {
+        _bac.Delete(recursive: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Un dossier dont l'espace survit à la forme courte est refusé, pas tenté.
+    /// </summary>
+    /// <remarks>
+    /// <c>PROGRA~1</c> existe parce que c'est un nom court hérité ; un dossier créé aujourd'hui n'en
+    /// reçoit pas si la génération des noms courts est désactivée sur le disque, ce qui est courant.
+    /// La conversion ne peut donc pas être garantie, et l'échec doit être bruyant : sans ce refus,
+    /// l'installeur annonce une réussite et s'installe ailleurs.
+    /// </remarks>
+    [Fact]
+    public void AFolderWhoseSpaceSurvivesTheShortFormIsRefusedRatherThanAttempted()
+    {
+        var dossier = Path.Combine(_bac.FullName, "un outil");
+        var court = SteamXBox.Plugins.AccueilOutil.Court(dossier);
+
+        if (!court.Contains(' ', StringComparison.Ordinal))
+        {
+            // Ce disque sait donner des noms courts : la directive est utilisable telle quelle.
+            Assert.DoesNotContain(' ', SteamXBox.Plugins.AccueilOutil.Ou(dossier));
+
+            return;
+        }
+
+        var rapport = SteamXBox.Plugins.AccueilOutil.Installer(
+            Environment.ProcessPath!, dossier);
+
+        Assert.Equal(-1, rapport.Code);
+        Assert.Contains("contient un espace", rapport.Dits[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>Et elle désigne bien le dossier demandé, pas un autre.</summary>
+    /// <remarks>
+    /// Un chemin court reste le même dossier : la vérification passe par le système de fichiers
+    /// plutôt que par la forme du texte, sinon l'épreuve ne dirait rien de ce qui compte.
+    /// </remarks>
+    [Fact]
+    public void AndItStillPointsAtTheFolderThatWasAsked()
+    {
+        var dossier = Path.Combine(_bac.FullName, "un outil");
+        var court = SteamXBox.Plugins.AccueilOutil.Court(dossier);
+        var temoin = Path.Combine(dossier, "temoin.txt");
+
+        File.WriteAllText(temoin, "ici");
+
+        Assert.True(File.Exists(Path.Combine(court, "temoin.txt")),
+            $"« {court} » doit désigner « {dossier} »");
+    }
+}
