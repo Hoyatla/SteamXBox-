@@ -1,0 +1,21 @@
+<!--
+    Les icônes vectorielles des tuiles, converties une fois depuis Library/Icons/fluent.
+
+    Pourquoi du XAML et non le SVG : WPF ne lit pas le SVG. Convertir le tracé une fois ici évite
+    d'embarquer un lecteur SVG pour dessiner une icône, et le résultat se met à l'échelle sans perte
+    comme un glyphe de police.
+
+    Le viewBox d'origine est 0 0 32 32 : un Path qui utilise ces géométries doit donc porter
+    Stretch="Uniform" et une taille, sinon il se dessine à sa taille naturelle.
+
+    Source : Fluent UI System Icons, licence MIT, déjà présents dans Library/Icons/fluent avec leur
+    fichier de licence. Aucune dépendance ajoutée.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- scan-text-32-filled : un cadre de numérisation avec des lignes de texte. Lire le texte d'une
+         image, c'est-à-dire ce que fait l'option « ocr » de l'outil de conversion. -->
+    <Geometry x:Key="IconScanText">M3.25 21c.69 0 1.25.56 1.25 1.25v3.25a2 2 0 0 0 2 2h3.25a1.25 1.25 0 1 1 0 2.5H6.5A4.5 4.5 0 0 1 2 25.5v-3.25c0-.69.56-1.25 1.25-1.25m25.5 0c.69 0 1.25.56 1.25 1.25v3.25a4.5 4.5 0 0 1-4.5 4.5h-3.25a1.25 1.25 0 1 1 0-2.5h3.25a2 2 0 0 0 2-2v-3.25c0-.69.56-1.25 1.25-1.25m-12 0a1.25 1.25 0 1 1 0 2.5h-6.5a1.25 1.25 0 1 1 0-2.5zm5-6a1.25 1.25 0 1 1 0 2.5h-11.5a1.25 1.25 0 1 1 0-2.5zm0-6a1.25 1.25 0 1 1 0 2.5h-11.5a1.25 1.25 0 1 1 0-2.5zm-12-7a1.25 1.25 0 1 1 0 2.5H6.5a2 2 0 0 0-2 2v3.25a1.25 1.25 0 1 1-2.5 0V6.5A4.5 4.5 0 0 1 6.5 2zM25.5 2A4.5 4.5 0 0 1 30 6.5v3.25a1.25 1.25 0 1 1-2.5 0V6.5a2 2 0 0 0-2-2h-3.25a1.25 1.25 0 1 1 0-2.5z</Geometry>
+
+</ResourceDictionary>

@@ -70,6 +70,13 @@ public partial class ToolsView : UserControl
 
         Tools.ItemsSource = rows;
 
+        // Le bloc reste invisible tant qu'aucune dépendance n'est déclarée : un titre suivi du vide
+        // fait croire à une panne.
+        var dependances = Settings.Dependances.Lister(Root);
+
+        Dependances.ItemsSource = dependances;
+        BlocDependances.Visibility = dependances.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         Status.Text = $"{rows.Length} outil(s). Les changements prennent effet au prochain démarrage "
             + "de l'environnement. Les outils livrés avec SteamXBox ne s'effacent pas d'ici : "
             + "supprimez leur dossier dans Plugins si vous y tenez."

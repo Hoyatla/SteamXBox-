@@ -93,6 +93,19 @@
                     <CheckBox Content="{loc:T Text='Minimiser dans la barre des tâches'}"
                               IsChecked="{Binding MinimizeToTray}"
                               Style="{StaticResource ToggleSwitch}"/>
+
+                    <!-- Eteint par defaut : le generateur est le plus gros consommateur du produit,
+                         et l'allumer sans qu'on l'ait demande, c'est un processus Python et sa
+                         memoire des le demarrage sur une machine qui n'ouvrira peut-etre jamais cet
+                         outil de la journee. -->
+                    <CheckBox Content="{loc:T Text='Préchauffer le générateur au démarrage'}"
+                              IsChecked="{Binding PrechaufferGenerateur}"
+                              Margin="0,10,0,0"
+                              Style="{StaticResource ToggleSwitch}"/>
+
+                    <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextDimBrush}"
+                               Text="{loc:T Text='Le premier démarrage du générateur coûte environ deux minutes, les suivants une quinzaine de secondes. Préchauffé, ce temps se paie pendant que vous faites autre chose — au prix d\'un processus et de sa mémoire dès le lancement. Prend effet au prochain démarrage.'}"/>
     
                     <!-- Le thème a rejoint la carte « Thème Windows » : il habille l'environnement
                          et la machine ensemble, sa place n'était plus parmi les préférences. -->

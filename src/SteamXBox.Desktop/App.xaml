@@ -6,6 +6,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <!-- Le meme theme que le GUI, depuis la meme bibliotheque. -->
                 <ResourceDictionary Source="pack://application:,,,/SteamXBox.Shell;component/Themes/DarkTheme.xaml"/>
+                <!-- Les icones vectorielles des tuiles, converties une fois depuis Library/Icons. -->
+                <ResourceDictionary Source="ControlCentre/PluginIcons.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

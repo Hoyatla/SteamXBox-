@@ -39,6 +39,61 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Loaded += OnLoaded;
+
+        // Les comptes des tuiles sont redemandés chaque fois que la fenêtre revient devant
+        // l'utilisateur : c'est le moment où il les lit, et celui où ils ont pu changer pendant
+        // qu'il regardait ailleurs.
+        Activated += (_, _) => RafraichirComptes();
+
+        Tools.PluginTools.Annonce += Annoncer;
+        Closed += (_, _) => Tools.PluginTools.Annonce -= Annoncer;
+    }
+
+    /// <summary>Redemande à chaque tuile ce qu'elle a à compter.</summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> Le compte était calculé dans l'initialiseur de
+    /// <c>QuickActions.All</c>, un membre statique : une fois par processus, au démarrage, quand
+    /// rien ne tourne encore. La tuile du moniteur d'activité restait donc muette pour le reste de
+    /// la session, y compris avec deux serveurs sur la carte.
+    /// </remarks>
+    private void RafraichirComptes()
+    {
+        foreach (var action in Actions)
+        {
+            action.Rafraichir();
+        }
+    }
+
+    /// <summary>
+    /// Jusqu'à quand le message d'une action garde la ligne.
+    /// </summary>
+    /// <remarks>
+    /// Sans cette retenue, survoler une tuile effaçait ce qu'une action venait de dire — et c'est
+    /// exactement ce qui s'est produit : « Démarrage du serveur, une minute ou deux » a disparu au
+    /// premier mouvement de souris, l'utilisateur n'a plus rien vu pendant vingt-neuf secondes et a
+    /// quitté en concluant que l'outil était cassé.
+    /// </remarks>
+    private DateTime _annonceJusqua;
+
+    /// <summary>Montre ce qu'une action est en train de faire.</summary>
+    /// <remarks>
+    /// Appelé depuis le fil de l'action, jamais celui de l'affichage : un verbe qui attend un
+    /// serveur tourne à part, et c'est tout l'intérêt.
+    /// </remarks>
+    private void Annoncer(string message)
+    {
+        if (message.Length == 0)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            SelectedHint = message;
+
+            // Renouvelé à chaque avancement : tant que l'action parle, la ligne lui appartient.
+            _annonceJusqua = DateTime.UtcNow.AddSeconds(45);
+        });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -381,8 +436,22 @@ public partial class MainWindow : Window
             // hide-and-restore, so the overlay is never left off screen waiting for a signal.
             if (action.WithEnvironment is not null)
             {
-                SelectedHint = action.WithEnvironment(this);
-                UiLog.Action(action.Label, $"completed with the environment: {SelectedHint}");
+                var dit = action.WithEnvironment(this);
+
+                // Ce que l'action rend garde la ligne, même si la souris passe ailleurs. Une action
+                // qui continue en fond renouvellera d'elle-même par ses annonces.
+                if (dit.Length > 0)
+                {
+                    SelectedHint = dit;
+                    _annonceJusqua = DateTime.UtcNow.AddSeconds(45);
+                }
+
+                UiLog.Action(action.Label, $"completed with the environment: {dit}");
+
+                // Une action vient de lancer — ou d'arrêter — quelque chose : les comptes des
+                // tuiles ont pu changer sans que la fenêtre ait quitté le premier plan.
+                RafraichirComptes();
+
                 return;
             }
 
@@ -422,6 +491,17 @@ public partial class MainWindow : Window
 
     private void ShowHint(object sender)
     {
+        // Ce qu'une action dit passe avant la description d'une tuile qu'on survole.
+        //
+        // L'inverse a coûté une session : le message « Démarrage du serveur, une minute ou deux »
+        // s'effaçait au premier mouvement de souris, et l'utilisateur, sans plus aucun signe, a
+        // conclu que l'outil ne démarrait pas. Il chargeait. Une description de tuile se retrouve
+        // en survolant de nouveau ; un avancement perdu ne se retrouve pas.
+        if (DateTime.UtcNow < _annonceJusqua)
+        {
+            return;
+        }
+
         if (sender is FrameworkElement { Tag: QuickAction action })
         {
             SelectedHint = Strings.Current[action.Hint];

@@ -11,6 +11,25 @@ public sealed partial class AppSettings
     [JsonPropertyName("minimizeToTray")]
     public bool MinimizeToTray { get; set; } = true;
 
+    /// <summary>
+    /// Démarrer le générateur d'images dès le lancement, pour qu'il soit prêt au premier clic.
+    /// </summary>
+    /// <remarks>
+    /// <b>Éteint par défaut, et ce n'est pas de la prudence.</b> Le générateur est le plus gros
+    /// consommateur du produit ; l'allumer sans qu'on l'ait demandé, c'est un processus Python et
+    /// sa mémoire dès le démarrage, sur une machine qui n'ouvrira peut-être jamais cet outil de la
+    /// journée. Le registre des ressources existe précisément pour que rien ne tourne sans raison.
+    ///
+    /// <para>
+    /// Ce que ce réglage achète : le produit vit sur un disque externe, et le premier démarrage du
+    /// générateur d'une session coûte deux minutes — le temps d'ouvrir un par un les
+    /// soixante-douze mille fichiers de Python. Les suivants coûtent quinze secondes, Windows les
+    /// gardant en mémoire. Allumé, ces deux minutes se paient pendant qu'on fait autre chose.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("prechaufferGenerateur")]
+    public bool PrechaufferGenerateur { get; set; }
+
     [JsonPropertyName("devicePollInterval")]
     public int DevicePollIntervalMs { get; set; } = 3000;
 

@@ -16,13 +16,97 @@ namespace SteamXBox.Desktop.ControlCentre;
 /// the capture has to hide and restore it. Typed rather than left as an empty Invoke that some
 /// other file secretly intercepts. Returns a line for the status area.
 /// </param>
+/// <param name="Icon">
+/// Une géométrie à dessiner au lieu du glyphe, pour les tuiles dont l'icône vient de
+/// <c>PluginIcons.xaml</c> plutôt que de la police. Les deux ne cohabitent pas sur une même tuile :
+/// la géométrie l'emporte quand elle est là.
+/// </param>
 public sealed record QuickAction(
     string Glyph,
     string Label,
     string Hint,
     Action Invoke,
     bool YieldsForeground = false,
-    Func<System.Windows.Window, string>? WithEnvironment = null);
+    Func<System.Windows.Window, string>? WithEnvironment = null,
+    System.Windows.Media.Geometry? Icon = null)
+    : System.ComponentModel.INotifyPropertyChanged
+{
+    /// <inheritdoc/>
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Visible quand la tuile porte une géométrie.</summary>
+    /// <remarks>
+    /// Calculé ici plutôt que par un convertisseur : deux propriétés lues directement par le gabarit
+    /// évitent d'ajouter une ressource de conversion pour une question à laquelle la tuile sait déjà
+    /// répondre.
+    /// </remarks>
+    public System.Windows.Visibility IconVisibility
+        => Icon is null ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+    /// <summary>Visible quand la tuile porte un glyphe de police.</summary>
+    public System.Windows.Visibility GlyphVisibility
+        => Icon is null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    /// <summary>Comment la tuile obtient son compte, quand elle en a un.</summary>
+    /// <remarks>
+    /// La fonction est gardée, pas son résultat. Gardé, le résultat aurait été celui de l'unique
+    /// instant où la grille a été bâtie — voir <see cref="Compteur"/>.
+    /// </remarks>
+    public Func<string>? Compte { get; init; }
+
+    /// <summary>
+    /// Un chiffre montré sous l'icône, quand la tuile a quelque chose à compter.
+    /// </summary>
+    /// <remarks>
+    /// Vide pour presque toutes : une tuile n'affiche un compte que si ce compte veut dire quelque
+    /// chose.
+    ///
+    /// <para>
+    /// <b>Demandé à chaque lecture, et non retenu.</b> Il l'a été : la liste des tuiles est bâtie
+    /// par l'initialiseur d'un membre statique, donc une seule fois par processus, et un compte
+    /// figé là valait pour l'instant du démarrage — celui où, précisément, rien ne tourne encore.
+    /// L'utilisateur lançait le générateur, rouvrait la grille, et le moniteur d'activité affichait
+    /// toujours rien pendant que deux serveurs occupaient la carte.
+    /// </para>
+    ///
+    /// <para>
+    /// Un calcul à chaque lecture ne suffirait pourtant pas : rien ne relit une liaison WPF sans
+    /// qu'on le lui dise. <see cref="Rafraichir"/> est ce signal, et la fenêtre le donne quand elle
+    /// revient devant l'utilisateur. Le compte est donc pris là, et retenu jusqu'au signal suivant :
+    /// deux propriétés liées le lisent chacune, et recenser les processus deux fois par
+    /// rafraîchissement ne dirait rien de plus.
+    /// </para>
+    /// </remarks>
+    public string Compteur => _compteur ??= Compte?.Invoke() ?? "";
+
+    private string? _compteur;
+
+    /// <summary>Visible seulement quand il y a quelque chose à compter.</summary>
+    public System.Windows.Visibility CompteurVisibility
+        => Compteur.Length == 0
+            ? System.Windows.Visibility.Collapsed
+            : System.Windows.Visibility.Visible;
+
+    /// <summary>Redemande le compte à l'outil et le fait relire par la tuile.</summary>
+    /// <remarks>
+    /// Appelé quand l'environnement revient au premier plan, donc au moment où quelqu'un regarde.
+    /// Rien pour une tuile sans compte : la très grande majorité, qui n'a aucune raison de payer
+    /// une notification.
+    /// </remarks>
+    public void Rafraichir()
+    {
+        if (Compte is null)
+        {
+            return;
+        }
+
+        _compteur = Compte();
+
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Compteur)));
+        PropertyChanged?.Invoke(
+            this, new System.ComponentModel.PropertyChangedEventArgs(nameof(CompteurVisibility)));
+    }
+}
 
 /// <summary>
 /// What the control centre offers: SteamXBox's own tools, then shortcuts into Windows.
@@ -46,6 +130,19 @@ public static class QuickActions
     public static IReadOnlyList<QuickAction> All { get; } =
     [
         .. ToolRegistry.All.Select(FromTool),
+
+        // Les outils declares NE SONT PAS ajoutes ici pour l'instant, et c'est deliberé.
+        //
+        // Plugins/ contient des manifestes qui decrivent des outils que l'environnement implemente
+        // DEJA en dur — « Convertir un document » en tete, avec sa barre de progression et sa vraie
+        // conversion. Les ajouter produisait deux tuiles pour un seul outil, dont une qui ouvrait une
+        // fenetre generique sans progression ni conversion : l'utilisateur cliquait la mauvaise.
+        //
+        // Le chargeur (PluginTiles / PluginWindow / PluginVerbs) reste ecrit et compile. Le brancher
+        // demande d'abord de decider ce qui arrive quand un manifeste porte le meme id qu'un outil
+        // compile : l'ignorer, le remplacer, ou refuser de charger. Cette question n'est pas
+        // tranchee, et tant qu'elle ne l'est pas, l'environnement garde ses outils.
+
         .. WindowsShortcuts,
     ];
 
@@ -55,7 +152,14 @@ public static class QuickActions
         tool.Label,
         tool.Hint,
         Invoke: () => { },
-        WithEnvironment: environment => ToolRegistry.Launch(tool, environment));
+        WithEnvironment: environment => ToolRegistry.Launch(tool, environment),
+        Icon: tool.Icon)
+    {
+        // Le compte est demandé à l'outil, jamais calculé ici : la grille ne sait pas ce qu'un
+        // outil aurait à compter, et n'a pas à l'apprendre. La fonction est passée telle quelle,
+        // et non son résultat : cette liste est bâtie une fois pour toute la session.
+        Compte = tool.Compte,
+    };
 
     /// <summary>Links into panels Windows already provides.</summary>
     private static IEnumerable<QuickAction> WindowsShortcuts =>

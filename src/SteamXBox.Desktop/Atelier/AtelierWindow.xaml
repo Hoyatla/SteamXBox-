@@ -1,0 +1,52 @@
+<Window x:Class="SteamXBox.Desktop.Atelier.AtelierWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Générateur multimédia" Width="640" Height="700"
+        MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgDarkBrush}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock x:Name="Titre" FontSize="18"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock x:Name="Aide" FontSize="11" Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"/>
+            </StackPanel>
+
+            <!-- Les deux dossiers de l'outil, atteignables sans quitter la fenetre. Ce qu'on
+                 depose et ce qui en sort : les deux questions qu'on se pose en travaillant, et
+                 pour lesquelles il fallait jusqu'ici retrouver le chemin a la main. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button x:Name="DossierEntree" Content="&#xE8B7;  Entrées"
+                        FontFamily="Segoe MDL2 Assets" Padding="12,6" Margin="0,0,8,0"
+                        Click="EntreeClic"/>
+                <Button x:Name="DossierSortie" Content="&#xE8B7;  Sorties"
+                        FontFamily="Segoe MDL2 Assets" Padding="12,6"
+                        Click="SortieClic"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Un onglet par outil reuni, dans l'ordre du manifeste : c'est l'ordre dans lequel on
+             travaille — creer une image, puis l'animer, puis l'agrandir. -->
+        <TabControl x:Name="Onglets" Grid.Row="1"
+                    Background="Transparent" BorderThickness="0"/>
+
+        <TextBlock x:Name="Etat" Grid.Row="2" Margin="0,12,0,0" FontSize="11"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource TextDimBrush}"/>
+    </Grid>
+</Window>

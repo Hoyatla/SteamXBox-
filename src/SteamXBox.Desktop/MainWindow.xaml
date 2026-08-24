@@ -71,10 +71,25 @@
                                 GotKeyboardFocus="Tile_Focused" MouseEnter="Tile_Hovered"
                                 Tag="{Binding}">
                             <StackPanel>
-                                <TextBlock Text="{Binding Glyph}"
+                                <!-- Deux façons de porter une icône, jamais les deux à la fois : un
+                                     glyphe de police pour les outils compilés, une géométrie pour
+                                     ceux dont l'icône vient de PluginIcons.xaml. -->
+                                <Path Data="{Binding Icon}" Visibility="{Binding IconVisibility}"
+                                      Width="28" Height="28" Stretch="Uniform"
+                                      HorizontalAlignment="Center"
+                                      Fill="{StaticResource AccentBrush}"/>
+                                <TextBlock Text="{Binding Glyph}" Visibility="{Binding GlyphVisibility}"
                                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                            FontSize="28" HorizontalAlignment="Center"
                                            Foreground="{StaticResource AccentBrush}"/>
+                                <!-- Sous l'icône, ce que la tuile a à compter : le nombre
+                                     d'événements en cours pour le moniteur d'activité. Absent
+                                     partout ailleurs, donc invisible partout ailleurs. -->
+                                <TextBlock Text="{Binding Compteur}" Visibility="{Binding CompteurVisibility}"
+                                           FontSize="11" Margin="0,4,0,0" TextAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{StaticResource AccentBrush}"/>
+
                                 <TextBlock Text="{Binding Label, Converter={StaticResource Loc}}"
                                            FontSize="12" Margin="0,10,0,0" TextAlignment="Center"
                                            TextWrapping="Wrap"

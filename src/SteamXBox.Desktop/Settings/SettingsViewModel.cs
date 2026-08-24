@@ -26,6 +26,10 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private bool _autoStart = false;
     [ObservableProperty] private bool _minimizeToTray = true;
+
+    /// <summary>Démarrer le générateur dès le lancement, pour qu'il soit prêt au premier clic.</summary>
+    [ObservableProperty] private bool _prechaufferGenerateur;
+
     [ObservableProperty] private int _devicePollInterval = 3;
     [ObservableProperty] private bool _isHidHideInstalled;
     [ObservableProperty] private bool _isVigEmInstalled;
@@ -41,6 +45,7 @@ public partial class SettingsViewModel : ObservableObject
 
         AutoStart = _settingsService.Settings.AutoStart;
         MinimizeToTray = _settingsService.Settings.MinimizeToTray;
+        PrechaufferGenerateur = _settingsService.Settings.PrechaufferGenerateur;
         // Clamped on load, not only on the slider: a stored value of 30 s meant a controller could sit
         // plugged in for half a minute before SteamXBox noticed it, which reads as "auto-start is
         // broken". Ten seconds is already generous for a detection poll.
@@ -66,6 +71,20 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnMinimizeToTrayChanged(bool value)
     {
         _settingsService.Settings.MinimizeToTray = value;
+        _settingsService.Save();
+    }
+
+    /// <summary>
+    /// Le préchauffage ne s'applique qu'au prochain lancement, et volontairement.
+    /// </summary>
+    /// <remarks>
+    /// Démarrer le générateur à l'instant où l'on coche la case surprendrait : on règle un produit,
+    /// on ne lui demande pas de se mettre au travail. Et l'éteindre en décochant tuerait un serveur
+    /// peut-être en pleine génération.
+    /// </remarks>
+    partial void OnPrechaufferGenerateurChanged(bool value)
+    {
+        _settingsService.Settings.PrechaufferGenerateur = value;
         _settingsService.Save();
     }
 

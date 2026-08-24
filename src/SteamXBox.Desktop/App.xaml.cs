@@ -108,6 +108,19 @@ public partial class App : Application
             Tools.ToolRegistry.StartServices();
             UiLog.Info("tool services started");
 
+            PrechaufferGenerateur();
+
+            // Les carnets qu'on n'a pas rouverts depuis un mois s'effacent au démarrage. Sans cela
+            // un dossier de travaux à moitié faits s'accumulerait indéfiniment, et un produit qui
+            // laisse des traces qu'il ne nettoie pas finit par en être jugé.
+            var oublies = SteamXBox.Tools.Assistant.FichierTravail.Purger(
+                message => UiLog.Info(message));
+
+            if (oublies > 0)
+            {
+                UiLog.Info($"{oublies} carnet(s) abandonné(s) effacé(s).");
+            }
+
             StartGlobalHotkeys();
         }
         catch (Exception ex)
@@ -241,6 +254,47 @@ public partial class App : Application
     /// the log says which it was.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Démarre le générateur au lancement, si le réglage le demande.
+    /// </summary>
+    /// <remarks>
+    /// <b>Éteint par défaut, et le rester est la décision.</b> Le générateur est le plus gros
+    /// consommateur du produit : l'allumer sans qu'on l'ait demandé, c'est un processus Python et sa
+    /// mémoire dès le démarrage, sur une machine qui n'ouvrira peut-être jamais cet outil de la
+    /// journée. Le registre des ressources existe précisément pour que rien ne tourne sans raison,
+    /// et il serait absurde de le contredire ici.
+    ///
+    /// <para>
+    /// Ce que le réglage achète quand on le met : le produit vit sur un disque externe, et le
+    /// premier démarrage du générateur d'une session coûte environ deux minutes — le temps d'ouvrir
+    /// un par un les soixante-douze mille fichiers de Python. Allumé, ce temps se paie pendant
+    /// qu'on fait autre chose.
+    /// </para>
+    ///
+    /// <para>
+    /// Sur un fil à part, toujours : deux minutes sur le fil de démarrage retarderaient l'apparition
+    /// de l'environnement d'autant, et le produit paraîtrait mort au lancement.
+    /// </para>
+    /// </remarks>
+    private static void PrechaufferGenerateur()
+    {
+        if (!SettingsSvc.Settings.PrechaufferGenerateur)
+        {
+            return;
+        }
+
+        if (!SteamXBox.Tools.Generation.ComfyServer.Installe)
+        {
+            UiLog.Info("préchauffage demandé, mais le générateur n'est pas installé.");
+
+            return;
+        }
+
+        UiLog.Info("préchauffage du générateur au démarrage.");
+
+        Task.Run(() => SteamXBox.Tools.Generation.ComfyServer.Preparer(message => UiLog.Info(message)));
+    }
+
     private void StartGlobalHotkeys()
     {
         try
@@ -323,6 +377,17 @@ public partial class App : Application
 
         _signals?.Dispose();
         _signals = null;
+
+        // Les serveurs que le produit a lancés meurent avec lui, sauf ceux qui ont demandé à
+        // survivre. Sans cela ils restaient en vie avec la mémoire vidéo prise — dix gigaoctets et
+        // demi mesurés après une fermeture — et l'utilisateur ne pouvait même pas les arrêter :
+        // enfants d'un processus élevé, ils héritent de ses droits.
+        var rendues = SteamXBox.Tools.Serveurs.Ressources.AuRevoir(message => UiLog.Info(message));
+
+        if (rendues > 0)
+        {
+            UiLog.Info($"{rendues} ressource(s) arrêtée(s) à la fermeture.");
+        }
 
         // Before the process goes: an environment that cleared the screen and then left would hand
         // the user an empty desktop with nothing left to undo it.

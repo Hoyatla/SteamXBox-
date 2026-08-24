@@ -57,4 +57,6 @@ public sealed record ToolDescriptor(
     string Executable = "",
     string Arguments = "",
     Action? Start = null,
-    bool IsSystem = false);
+    bool IsSystem = false,
+    System.Windows.Media.Geometry? Icon = null,
+    Func<string>? Compte = null);

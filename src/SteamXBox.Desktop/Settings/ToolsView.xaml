@@ -16,6 +16,7 @@
                    TextWrapping="Wrap" Foreground="{StaticResource TextDimBrush}"/>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel>
             <ItemsControl x:Name="Tools">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -62,6 +63,47 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- Les dependances ne sont pas des outils : ni tuile, ni interrupteur, ni ejection.
+                 Elles sont ici parce que c'est l'ecran ou l'on vient comprendre ce qui manque, et
+                 que la moitie de ce qui peut manquer a SteamXBox n'est pas dans SteamXBox. -->
+            <StackPanel x:Name="BlocDependances" Margin="0,20,0,0" Visibility="Collapsed">
+                <TextBlock Text="{loc:T Text='Dépendances'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"
+                           Text="{loc:T Text='Des programmes extérieurs que certains outils utilisent. SteamXBox ne les installe pas : il les cherche dans Outils, puis sur le système. Sans eux, seul l’outil concerné s’éteint.'}"/>
+
+                <ItemsControl x:Name="Dependances">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,8" Padding="12,10"
+                                    Background="{StaticResource BgMediumBrush}" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Nom}" FontSize="13"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource TextDimBrush}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                               Margin="12,0,0,0" FontSize="11"
+                                               Text="{Binding Marque}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+          </StackPanel>
         </ScrollViewer>
     </DockPanel>
 </UserControl>

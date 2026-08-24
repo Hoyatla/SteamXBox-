@@ -14,19 +14,9 @@
                    TextWrapping="Wrap"/>
 
         <!-- Dessine par l'hote a partir de content. L'outil decrit, il ne dessine pas : c'est ce qui
-             rend un outil ecrit par un utilisateur navigable a la manette sans qu'il y ait pense. -->
-        <StackPanel x:Name="Body"/>
-
-        <!-- Indeterminee : LibreOffice ne dit pas ou il en est, et une barre qui avancerait
-             a une vitesse inventee mentirait sur le temps restant. Celle-ci ne promet qu'une
-             chose, la seule qui soit vraie : ca travaille encore. -->
-        <ProgressBar x:Name="PanelProgress" Height="3" Margin="0,14,0,0"
-                     IsIndeterminate="True" Visibility="Collapsed"
-                     Background="Transparent" BorderThickness="0"
-                     Foreground="{StaticResource AccentBrush}"/>
-
-        <TextBlock x:Name="PanelStatus" FontSize="11" Margin="0,8,0,0"
-                   Foreground="{StaticResource TextDimBrush}"
-                   TextWrapping="Wrap"/>
+             rend un outil ecrit par un utilisateur navigable a la manette sans qu'il y ait pense.
+             Le dessin lui-meme vit dans PanneauOutil, parce qu'il sert aussi aux onglets de
+             l'atelier. -->
+        <Border x:Name="Hote"/>
     </StackPanel>
 </Window>
