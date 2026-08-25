@@ -243,18 +243,12 @@ public partial class ToolsView : UserControl
         // Les dossiers témoins sont ceux où un programme se répand quand personne ne l'en empêche.
         // Les surveiller pendant l'accueil est la seule façon de dire si l'isolement a tenu au lieu
         // de l'affirmer.
-        string[] temoins =
-        [
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        ];
-
         AccueilEtat.Text = $"Accueil de {nom} dans Outils\\{nom}…";
 
         Travailler(
             "Accueil",
             arret => Raconter(
-                SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, temoins, PluginTools.Folder, arret)),
+                SteamXBox.Plugins.AccueilOutil.Installer(boite.FileName, dossier, null, null, PluginTools.Folder, arret)),
             "",
             AccueilEtat,
             () => Designer(dossier));

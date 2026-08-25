@@ -69,6 +69,35 @@ public static class AccueilOutil
     /// </remarks>
     public static string Ou(string dossier) => $"/D={Court(dossier)}";
 
+    /// <summary>
+    /// Les endroits où un programme se répand quand personne ne l'en empêche.
+    /// </summary>
+    /// <remarks>
+    /// <b>Une liste trop courte est pire que pas de mesure.</b> Elle ne se contente pas de rater une
+    /// fuite : elle produit une affirmation confiante et fausse. Constaté sur LibreOffice — la mesure
+    /// ne regardait que le profil de l'utilisateur, a conclu « aucune trace », et le raccourci était
+    /// sur le Bureau public avec un dossier entier dans le menu Démarrer de la machine.
+    ///
+    /// <para>
+    /// Les emplacements « tout le monde » comptent autant que ceux de l'utilisateur, et c'est
+    /// contre-intuitif : on avait demandé une installation pour l'utilisateur seul. LibreOffice pose
+    /// ses raccourcis à l'échelle de la machine quoi qu'on demande, et rien dans le protocole ne peut
+    /// l'en empêcher — on peut seulement le voir et le dire.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> Temoins() =>
+    [
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+        Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+        Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+    ];
+
     /// <summary>Cet installeur est-il un paquet Windows Installer ?</summary>
     public static bool EstMsi(string setup)
         => Path.GetExtension(setup).Equals(".msi", StringComparison.OrdinalIgnoreCase);
@@ -158,6 +187,10 @@ public static class AccueilOutil
         {
             return new AccueilRapport(-1, dossier, 0, [$"Installeur introuvable : {setup}"]);
         }
+
+        // Sans liste donnee, on prend la complete : oublier un temoin fait dire « aucune fuite » a
+        // une mesure qui n'a pas regarde.
+        temoins ??= Temoins();
 
         var avant = Empreinte(temoins);
         // Un espace qui survit à la forme courte est une impasse, et une impasse silencieuse : la
