@@ -8,6 +8,9 @@ Built for debugging a bare-metal hypervisor: the machine under test has no OS,
 no serial port and no network stack, so nothing on it can report what went
 wrong. A tablet camera pointed at its screen can.
 
+It also reads over USB — either an HDMI capture dongle delivering pixels, or a
+serial/debug port delivering text with no OCR at all. See `docs/USB.md`.
+
 ```
 ASUS laptop (hypervisor, no OS)
       │  light
@@ -28,6 +31,25 @@ same screen as text costs a couple of hundred, can be grepped, and — because
 `out/log.txt` accumulates every distinct line ever shown — preserves the boot
 messages that scrolled past two seconds ago. That transcript is the thing you
 actually debug from.
+
+## Where the input comes from
+
+| `source.kind` | What it reads | Notes |
+|---|---|---|
+| `snapshot` | one HTTP GET per frame | a phone/tablet camera app |
+| `mjpeg` | a multipart HTTP stream | same, higher framerate |
+| `uvc` | a USB video device | **HDMI capture dongle**; needs ffmpeg |
+| `dir` | images from a folder | testing, no hardware |
+| `command` | a command that writes an image | escape hatch |
+| `serial` | **a serial or USB debug port** | no OCR; text is exact |
+| `command-text` | a long-running command's stdout | vendor tools, `socat` |
+| `file` | a growing log file | follows like `tail -f` |
+
+The first six are read as images and go through OCR. The last three arrive as
+text already, so nothing can be misread — `docs/USB.md` explains what it takes
+to get a hypervisor to talk that way, and why you probably want both.
+
+`hvscope devices` lists the USB capture devices and serial ports it can see.
 
 ## Install
 
@@ -92,6 +114,13 @@ accordingly, which is why `state.json` reports it.
 
 **Never trust a single character from OCR.** Check `confidence`, and confirm
 an address against more than one reading before acting on it.
+
+## Two modes
+
+`state.json` carries a `mode` field. In `camera` mode it also reports
+`stable`, `change_score`, `calibrated` and `confidence`; in `text` mode those
+do not exist — there is nothing to stabilise and nothing to be uncertain about
+— and `pending` holds the line still in flight instead.
 
 ## Tests
 

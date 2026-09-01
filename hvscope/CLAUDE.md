@@ -5,7 +5,18 @@ shows into text. If you are debugging something that has no other way to report
 — a hypervisor before any OS, a firmware hang, a kernel panic on a box with no
 serial port — this is your eye on it.
 
-## Read this first
+## First: check which mode you are reading
+
+`out/state.json` has a `mode` field, and it changes how much you can trust
+everything else.
+
+- **`"mode": "text"`** — the characters came off a wire (a serial or USB debug
+  port). They are exact. Nothing below about OCR applies; there is no
+  `confidence` field because there is nothing to be uncertain about. A
+  `pending` field holds a line that has arrived without its newline yet.
+- **`"mode": "camera"`** — the text was recognised from an image. Read on.
+
+## Read this first (camera mode only)
 
 **The output is OCR. It is lossy, and it is confidently wrong sometimes.**
 
@@ -72,6 +83,8 @@ The distinction that matters when a boot hangs:
 | Text present but garbled | Look at `out/screen.png` before touching any setting. |
 | Transcript stops growing | Either the screen genuinely stopped, or OCR is being held back because the frame never settles — check `stable`. |
 | Empty `screen.txt`, high frame count | Everything is being filtered out; `ocr.min_confidence` may be too high. |
+| `mode: text`, transcript never grows | The wire is connected but silent. Either the machine under test has not reached the code that prints, or the baud rate is wrong. |
+| `mode: text`, `pending` never clears | Output is arriving without newlines — likely a prompt, or a wrong baud rate producing garbage. |
 
 ## Do not
 
@@ -89,10 +102,11 @@ The distinction that matters when a boot hangs:
 hvscope/
   geometry.py    perspective correction (homography, corner ordering)
   preprocess.py  median stacking, local thresholding, change detection
-  sources.py     frame sources: snapshot, mjpeg, dir, command
+  sources.py     image sources: snapshot, mjpeg, uvc, dir, command
+  textsources.py text sources: serial, command-text, file (no OCR involved)
   ocr.py         tesseract via TSV; confidence filter, column rebuild, hex repair
   logbook.py     the append-only transcript and its de-duplication
-  daemon.py      the capture loop
+  daemon.py      both capture loops -- camera and text
   server.py      HTTP API and the calibration page
   cli.py         init / probe / calibrate / shot / watch / state
 tests/

@@ -8,7 +8,10 @@ capture dongle later is a config change, not a rewrite.
 from __future__ import annotations
 
 import io
+import platform
+import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 import time
@@ -229,6 +232,130 @@ class CommandSource(FrameSource):
         return f"command {self.command}"
 
 
+# ffmpeg needs a different capture backend on each platform, and none of them
+# can be guessed from the device string alone.
+_FFMPEG_BACKENDS = {"Linux": "v4l2", "Darwin": "avfoundation", "Windows": "dshow"}
+_DEFAULT_DEVICE = {"Linux": "/dev/video0", "Darwin": "0", "Windows": "video=Integrated Camera"}
+
+
+def default_backend() -> str:
+    return _FFMPEG_BACKENDS.get(platform.system(), "v4l2")
+
+
+def ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
+class UvcSource(FrameSource):
+    """Grab stills from a USB video-class device through ffmpeg.
+
+    This is the path an HDMI capture dongle takes: the machine under test
+    sends its display out over HDMI, the dongle presents it to this machine
+    as a webcam, and the frames arrive already rectangular, evenly lit and
+    free of moire. Calibration should be cleared when using it -- there is no
+    camera angle left to correct.
+    """
+
+    name = "uvc"
+
+    def __init__(self, device: str = "", backend: str = "", size: str = "",
+                 input_format: str = "", warmup: int = 2, timeout: float = 30.0,
+                 extra_args: list[str] | None = None):
+        if not ffmpeg_available():
+            raise SourceError("ffmpeg is not on PATH; it is what reads the USB capture device")
+        self.backend = backend or default_backend()
+        self.device = device or _DEFAULT_DEVICE.get(platform.system(), "/dev/video0")
+        self.size = size
+        self.input_format = input_format
+        # Capture hardware needs a few frames to settle its exposure; the
+        # first one out of a cold device is routinely black or blown out.
+        self.warmup = max(0, int(warmup))
+        self.timeout = float(timeout)
+        self.extra_args = list(extra_args or [])
+
+    def _command(self, target: Path) -> list[str]:
+        command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
+        command += ["-f", self.backend]
+        if self.input_format:
+            command += ["-input_format", self.input_format]
+        if self.size:
+            command += ["-video_size", self.size]
+        command += self.extra_args
+        command += ["-i", self.device]
+        if self.warmup:
+            # Discard the settling frames inside the same invocation rather
+            # than paying to open the device twice.
+            command += ["-vf", f"select=gte(n\,{self.warmup})", "-vsync", "0"]
+        command += ["-frames:v", "1", "-f", "image2", str(target)]
+        return command
+
+    def grab(self) -> Image.Image:
+        with tempfile.TemporaryDirectory(prefix="hvscope-uvc-") as tmp:
+            target = Path(tmp) / "frame.png"
+            try:
+                result = subprocess.run(
+                    self._command(target), capture_output=True, timeout=self.timeout, check=False
+                )
+            except FileNotFoundError as exc:
+                raise SourceError("ffmpeg disappeared from PATH") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise SourceError(
+                    f"ffmpeg timed out after {self.timeout}s reading {self.device}; "
+                    "is the capture device streaming?"
+                ) from exc
+
+            if result.returncode != 0 or not target.exists() or target.stat().st_size == 0:
+                detail = result.stderr.decode("utf-8", "replace").strip()[:500]
+                raise SourceError(f"ffmpeg could not read {self.backend}:{self.device}\n{detail}")
+            return _decode(target.read_bytes(), self.device)
+
+    def describe(self) -> str:
+        return f"uvc {self.backend}:{self.device}"
+
+
+def list_video_devices() -> list[dict]:
+    """Enumerate USB capture devices, so the user need not guess the name."""
+    system = platform.system()
+
+    if system == "Linux":
+        devices = []
+        for node in sorted(Path("/dev").glob("video*")):
+            label = ""
+            name_file = Path("/sys/class/video4linux") / node.name / "name"
+            if name_file.exists():
+                label = name_file.read_text(errors="replace").strip()
+            devices.append({"device": str(node), "name": label, "backend": "v4l2"})
+        return devices
+
+    if not ffmpeg_available():
+        return []
+
+    backend = default_backend()
+    probe = "" if system == "Darwin" else "dummy"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-f", backend, "-list_devices", "true", "-i", probe],
+            capture_output=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+
+    # Both backends report the listing on stderr and then exit non-zero.
+    text = result.stderr.decode("utf-8", "replace")
+    devices = []
+    if system == "Darwin":
+        for match in re.finditer(r"\[(\d+)\]\s+(.+)", text):
+            index, label = match.group(1), match.group(2).strip()
+            if "AVFoundation" in label or not label:
+                continue
+            devices.append({"device": index, "name": label, "backend": backend})
+    else:
+        for match in re.finditer(r'"([^"]+)"\s*\(video\)', text):
+            devices.append({"device": f"video={match.group(1)}", "name": match.group(1),
+                            "backend": backend})
+    return devices
+
+
 def build_source(config: dict) -> FrameSource:
     """Instantiate the source named by a config block."""
     kind = (config.get("kind") or "snapshot").lower()
@@ -242,7 +369,20 @@ def build_source(config: dict) -> FrameSource:
         return DirectorySource(config.get("path", ""))
     if kind == "command":
         return CommandSource(config.get("command", ""), max(timeout, 30.0))
-    raise SourceError(f"unknown source kind: {kind!r} (expected snapshot, mjpeg, dir or command)")
+    if kind == "uvc":
+        return UvcSource(
+            device=config.get("device", ""),
+            backend=config.get("backend", ""),
+            size=config.get("size", ""),
+            input_format=config.get("input_format", ""),
+            warmup=int(config.get("warmup", 2)),
+            timeout=max(timeout, 30.0),
+            extra_args=list(config.get("extra_args", [])),
+        )
+    raise SourceError(
+        f"unknown source kind: {kind!r} "
+        "(expected snapshot, mjpeg, uvc, dir or command)"
+    )
 
 
 def grab_burst(source: FrameSource, count: int, delay: float) -> list[Image.Image]:

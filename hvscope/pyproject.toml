@@ -15,7 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4"]
+# Only needed for the `serial` source on Windows; POSIX has a termios fallback.
+serial = ["pyserial>=3.5"]
+dev = ["pytest>=7.4", "pyserial>=3.5"]
 
 [project.scripts]
 hvscope = "hvscope.cli:main"

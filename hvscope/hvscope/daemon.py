@@ -1,14 +1,23 @@
-"""The capture loop: camera frame in, readable text out.
+"""The capture loops.
 
-One cycle is: burst-grab, median-stack, dewarp to the calibrated rectangle,
-threshold, decide whether the screen has settled, OCR when it has, and file
-any new lines in the transcript.
+Two of them, feeding the same transcript, state file and HTTP API.
+
+:class:`Scope` reads a camera: burst-grab, median-stack, dewarp to the
+calibrated rectangle, threshold, wait for the screen to settle, OCR, and file
+any new lines.
+
+:class:`TextScope` reads characters that arrive over a wire -- a serial port,
+a debug port, a command's output -- and files them directly. Everything the
+camera pipeline exists to undo is simply absent there, so it is the better
+path whenever the machine under test can be made to talk rather than only to
+display.
 """
 
 from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +28,7 @@ from PIL import Image
 from . import geometry, ocr, preprocess
 from .logbook import LogBook, write_json, write_text
 from .sources import FrameSource, SourceError, build_source, grab_burst
+from .textsources import TextSource, TextSourceError, build_text_source, is_text_kind
 
 
 def _now() -> str:
@@ -29,6 +39,7 @@ def _now() -> str:
 class ScopeState:
     """Everything a reader needs to judge what the screen is doing."""
 
+    mode: str = "camera"
     frames: int = 0
     errors: int = 0
     last_error: str | None = None
@@ -42,49 +53,101 @@ class ScopeState:
     ocr_available: bool = False
     text_lines: int = 0
     confidence: float = 0.0
+    pending: str = ""
     transcript: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         payload = {
             "updated_at": _now(),
+            "mode": self.mode,
             "frames": self.frames,
             "errors": self.errors,
             "last_error": self.last_error,
             "last_frame_at": self.last_frame_at,
             "screen_changed_at": self.screen_changed_at,
-            "last_ocr_at": self.last_ocr_at,
-            "change_score": round(self.change_score, 4),
-            "stable": self.stable,
-            "calibrated": self.calibrated,
             "source": self.source,
-            "ocr_available": self.ocr_available,
             "text_lines": self.text_lines,
-            "confidence": round(self.confidence, 1),
             "transcript": self.transcript,
         }
+        if self.mode == "camera":
+            # Camera-only signals; meaningless for a wire that delivers text.
+            payload.update({
+                "last_ocr_at": self.last_ocr_at,
+                "change_score": round(self.change_score, 4),
+                "stable": self.stable,
+                "calibrated": self.calibrated,
+                "ocr_available": self.ocr_available,
+                "confidence": round(self.confidence, 1),
+            })
+        else:
+            # A wire is exact, so there is no confidence to report; what a
+            # reader wants instead is the half-line not yet terminated.
+            payload["pending"] = self.pending
         return payload
 
 
-class Scope:
-    """Owns the source, the pipeline and the output directory."""
+class BaseScope:
+    """Shared plumbing: the transcript, the state file and the loop.
+
+    Both scopes publish the same artefacts, so an agent reading ``out/`` does
+    not have to know whether the text arrived through a lens or over a wire.
+    """
+
+    mode = "camera"
 
     def __init__(self, config: dict, out_dir: Path):
         self.config = config
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
-        (self.out / "history").mkdir(exist_ok=True)
 
-        self.source: FrameSource = build_source(config.get("source", {}))
         log_conf = config.get("logbook", {})
         self.logbook = LogBook(
             self.out / "log.txt",
             window=int(log_conf.get("window", 240)),
             min_length=int(log_conf.get("min_length", 2)),
         )
-
-        self.state = ScopeState(source=self.source.describe(), ocr_available=ocr.available())
+        self.state = ScopeState(mode=self.mode)
         self.text = ""
         self.lock = threading.Lock()
+
+    def step(self) -> dict:
+        raise NotImplementedError
+
+    def run(self, stop: threading.Event | None = None, on_cycle=None) -> None:
+        """Capture until ``stop`` is set."""
+        stop = stop or threading.Event()
+        interval = float(self.config.get("capture", {}).get("interval", 1.0))
+        while not stop.is_set():
+            started = time.monotonic()
+            try:
+                snapshot = self.step()
+            except Exception as exc:  # keep the loop alive through any surprise
+                with self.lock:
+                    self.state.errors += 1
+                    self.state.last_error = f"{type(exc).__name__}: {exc}"
+                snapshot = self.state.as_dict()
+            if on_cycle:
+                on_cycle(snapshot)
+            remaining = interval - (time.monotonic() - started)
+            if remaining > 0:
+                stop.wait(remaining)
+
+    def close(self) -> None:
+        pass
+
+
+class Scope(BaseScope):
+    """Reads a camera and turns the screen it sees into text."""
+
+    mode = "camera"
+
+    def __init__(self, config: dict, out_dir: Path):
+        super().__init__(config, out_dir)
+        (self.out / "history").mkdir(exist_ok=True)
+
+        self.source: FrameSource = build_source(config.get("source", {}))
+        self.state.source = self.source.describe()
+        self.state.ocr_available = ocr.available()
 
         self._previous_gray: np.ndarray | None = None
         self._ocr_gray: np.ndarray | None = None
@@ -220,26 +283,73 @@ class Scope:
         snapshot["new_lines"] = new_lines
         return snapshot
 
-    # -- loop -----------------------------------------------------------
+    def close(self) -> None:
+        self.source.close()
 
-    def run(self, stop: threading.Event | None = None, on_cycle=None) -> None:
-        """Capture until ``stop`` is set."""
-        stop = stop or threading.Event()
-        interval = float(self.config.get("capture", {}).get("interval", 1.0))
-        while not stop.is_set():
-            started = time.monotonic()
-            try:
-                snapshot = self.step()
-            except Exception as exc:  # keep the loop alive through any surprise
-                with self.lock:
-                    self.state.errors += 1
-                    self.state.last_error = f"{type(exc).__name__}: {exc}"
-                snapshot = self.state.as_dict()
-            if on_cycle:
-                on_cycle(snapshot)
-            remaining = interval - (time.monotonic() - started)
-            if remaining > 0:
-                stop.wait(remaining)
+
+class TextScope(BaseScope):
+    """Reads characters off a wire and files them, with no OCR in between.
+
+    There is no frame, so there is nothing to stabilise, dewarp or threshold,
+    and nothing to be uncertain about: a line either arrived or it did not.
+    ``screen.txt`` holds a rolling tail of recent output, which is the closest
+    analogue to "what is on screen" that a stream has.
+    """
+
+    mode = "text"
+
+    def __init__(self, config: dict, out_dir: Path):
+        super().__init__(config, out_dir)
+        self.source: TextSource = build_text_source(config.get("source", {}))
+        self.state.source = self.source.describe()
+        self._tail: deque[str] = deque(
+            maxlen=int(config.get("output", {}).get("tail", 200))
+        )
+
+    def step(self) -> dict:
+        """Drain whatever has arrived since the last call."""
+        new_lines: list[str] = []
+        error: str | None = None
+        try:
+            new_lines = self.source.read()
+            pending = self.source.pending()
+        except TextSourceError as exc:
+            error = str(exc)
+            pending = ""
+
+        recorded: list[str] = []
+        if new_lines:
+            self._tail.extend(new_lines)
+            recorded = self.logbook.ingest("\n".join(new_lines))
+
+        with self.lock:
+            self.state.frames += 1
+            self.state.last_frame_at = _now()
+            self.state.pending = pending
+            self.state.transcript = self.logbook.stats()
+            if new_lines:
+                self.state.screen_changed_at = _now()
+            if error:
+                self.state.errors += 1
+                self.state.last_error = error
+            else:
+                self.state.last_error = None
+
+            self.text = "\n".join(self._tail)
+            self.state.text_lines = len(self._tail)
+
+            write_text(self.out / "screen.txt", self.text + ("\n" if self.text else ""))
+            write_json(self.out / "state.json", self.state.as_dict())
+            snapshot = self.state.as_dict()
+
+        snapshot["new_lines"] = recorded
+        return snapshot
 
     def close(self) -> None:
         self.source.close()
+
+
+def build_scope(config: dict, out_dir: Path) -> BaseScope:
+    """Pick the loop that matches the configured source."""
+    kind = (config.get("source", {}).get("kind") or "").lower()
+    return TextScope(config, out_dir) if is_text_kind(kind) else Scope(config, out_dir)

@@ -11,9 +11,10 @@ import time
 from pathlib import Path
 
 from . import __version__, config as config_module, geometry, ocr
-from .daemon import Scope
+from .daemon import build_scope
 from .server import serve
-from .sources import SourceError, build_source
+from .sources import SourceError, build_source, list_video_devices
+from .textsources import TextSourceError, build_text_source, is_text_kind
 
 
 def _load(args) -> tuple[dict, Path, Path]:
@@ -41,9 +42,50 @@ def cmd_init(args) -> int:
     return 0
 
 
+def _probe_text(config, path, out, seconds: float) -> int:
+    """Listen on a text source and report what arrives."""
+    try:
+        source = build_text_source(config["source"])
+    except TextSourceError as exc:
+        print(f"source error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"config     {path}")
+    print(f"source     {source.describe()}")
+    print(f"listening  {seconds:.0f}s ...")
+
+    collected: list[str] = []
+    deadline = time.monotonic() + seconds
+    try:
+        while time.monotonic() < deadline:
+            try:
+                collected.extend(source.read())
+            except TextSourceError as exc:
+                print(f"FAILED     {exc}", file=sys.stderr)
+                return 2
+            time.sleep(0.1)
+    finally:
+        pending = source.pending()
+        source.close()
+
+    print(f"received   {len(collected)} lines")
+    for line in collected[-15:]:
+        print(f"  > {line}")
+    if pending:
+        print(f"  ~ {pending}   (partial, no newline yet)")
+    if not collected and not pending:
+        print("nothing arrived. Check the wiring, the baud rate, and that the "
+              "machine under test is actually sending.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_probe(args) -> int:
-    """Grab one frame and report what came back."""
+    """Grab one frame -- or listen for text -- and report what came back."""
     config, path, out = _load(args)
+    if is_text_kind(config.get("source", {}).get("kind", "")):
+        return _probe_text(config, path, out, float(args.seconds))
+
     try:
         source = build_source(config["source"])
     except SourceError as exc:
@@ -70,6 +112,48 @@ def cmd_probe(args) -> int:
     print(f"calibrated {'yes' if quad else 'no  (run hvscope watch, then open /calibrate)'}")
     source.close()
     return 0
+
+
+def cmd_devices(args) -> int:
+    """List the USB capture devices and serial ports on this machine."""
+    print("video capture devices (HDMI dongles, webcams)")
+    video = list_video_devices()
+    if video:
+        for entry in video:
+            label = f"  {entry['device']}"
+            if entry.get("name"):
+                label += f"   {entry['name']}"
+            print(f"{label}   [backend {entry['backend']}]")
+        print('\n  use with:  "source": {"kind": "uvc", "device": "%s"}' % video[0]["device"])
+    else:
+        print("  none found")
+
+    print("\nserial ports (USB-serial adapters, xHCI debug ports)")
+    ports = _list_serial_ports()
+    if ports:
+        for device, description in ports:
+            print(f"  {device}   {description}")
+        print('\n  use with:  "source": {"kind": "serial", "port": "%s", "baudrate": 115200}'
+              % ports[0][0])
+    else:
+        print("  none found")
+    return 0
+
+
+def _list_serial_ports() -> list[tuple[str, str]]:
+    """Serial ports, via pyserial when present and by globbing otherwise."""
+    try:
+        from serial.tools import list_ports  # type: ignore
+    except ImportError:
+        pass
+    else:
+        return [(port.device, port.description or "") for port in list_ports.comports()]
+
+    found: list[tuple[str, str]] = []
+    for pattern in ("ttyUSB*", "ttyACM*", "ttyS*", "tty.usb*", "cu.usb*"):
+        for node in sorted(Path("/dev").glob(pattern)):
+            found.append((str(node), ""))
+    return found
 
 
 def cmd_calibrate(args) -> int:
@@ -109,8 +193,8 @@ def cmd_shot(args) -> int:
     # OCR rather than waiting for a stability signal that cannot arrive.
     config.setdefault("capture", {})["stable_threshold"] = 100.0
     try:
-        scope = Scope(config, out)
-    except SourceError as exc:
+        scope = build_scope(config, out)
+    except (SourceError, TextSourceError) as exc:
         print(f"source error: {exc}", file=sys.stderr)
         return 2
 
@@ -127,8 +211,8 @@ def cmd_watch(args) -> int:
     """Run the capture loop and the HTTP API until interrupted."""
     config, path, out = _load(args)
     try:
-        scope = Scope(config, out)
-    except SourceError as exc:
+        scope = build_scope(config, out)
+    except (SourceError, TextSourceError) as exc:
         print(f"source error: {exc}", file=sys.stderr)
         return 2
 
@@ -144,7 +228,7 @@ def cmd_watch(args) -> int:
     print(f"output    {out}")
     print(f"api       http://{shown}:{port}/   (dashboard)")
     print(f"          http://{shown}:{port}/text  /log  /state.json  /frame.png")
-    if not config.get("calibration", {}).get("quad"):
+    if scope.mode == "camera" and not config.get("calibration", {}).get("quad"):
         print(f"calibrate http://{shown}:{port}/calibrate  <- not calibrated yet")
     if host == "0.0.0.0" and not token:
         print("warning:  bound to all interfaces with no token; anyone on the LAN can see the camera")
@@ -161,11 +245,16 @@ def cmd_watch(args) -> int:
     def on_cycle(state):
         if args.quiet:
             return
-        flag = "stable" if state.get("stable") else "moving"
         lines = state.get("new_lines") or []
         suffix = f"  +{len(lines)} new" if lines else ""
-        print(f"\rframe {state['frames']:5d}  {flag}  diff {state['change_score']:6.2f}%"
-              f"  text {state['text_lines']:3d} lines{suffix}   ", end="", flush=True)
+        if state.get("mode") == "text":
+            head = (f"\rread {state['frames']:5d}  "
+                    f"transcript {state['transcript'].get('lines', 0):5d} lines{suffix}   ")
+        else:
+            flag = "stable" if state.get("stable") else "moving"
+            head = (f"\rframe {state['frames']:5d}  {flag}  diff {state['change_score']:6.2f}%"
+                    f"  text {state['text_lines']:3d} lines{suffix}   ")
+        print(head, end="", flush=True)
         if lines:
             # Break out of the in-place status line before listing what is new.
             print()
@@ -206,8 +295,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="write to ~/.config/hvscope/ instead of the current directory")
     p.set_defaults(func=cmd_init)
 
-    p = sub.add_parser("probe", help="grab one frame and report on the source")
+    p = sub.add_parser("probe", help="grab one frame, or listen for text, and report")
+    p.add_argument("--seconds", type=float, default=5.0,
+                   help="how long to listen on a text source (default 5)")
     p.set_defaults(func=cmd_probe)
+
+    p = sub.add_parser("devices", help="list USB capture devices and serial ports")
+    p.set_defaults(func=cmd_devices)
 
     p = sub.add_parser("calibrate", help="set the screen-corner quad without the web UI")
     p.add_argument("--points", nargs=4, metavar="X,Y", required=True,
@@ -237,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         return args.func(args)
     except KeyboardInterrupt:
         return 130
-    except ValueError as exc:
+    except (ValueError, TextSourceError, SourceError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

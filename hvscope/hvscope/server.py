@@ -107,32 +107,48 @@ DASHBOARD_PAGE = """<!doctype html>
 </style>
 <header>
  <h1>hvscope</h1>
- <a href="calibrate">calibrate</a><a href="text">/text</a><a href="log">/log</a>
+ <a href="calibrate" id="cal-link">calibrate</a><a href="text">/text</a><a href="log">/log</a>
  <a href="state.json">/state.json</a><span id="tick" style="color:#666"></span>
 </header>
 <main>
- <section><h2>Flattened screen</h2><img id="flat" src="screen-color.png"></section>
- <section><h2>What the OCR reads</h2><img id="bin" src="frame.png"></section>
+ <section id="s-flat"><h2>Flattened screen</h2><img id="flat" src="screen-color.png"></section>
+ <section id="s-bin"><h2>What the OCR reads</h2><img id="bin" src="frame.png"></section>
  <section><h2>State</h2><div class="kv" id="state"></div></section>
- <section><h2>Current text</h2><pre id="text"></pre></section>
+ <section><h2 id="text-title">Current text</h2><pre id="text"></pre></section>
  <section style="grid-column:1/-1"><h2>Transcript</h2><pre id="log"></pre></section>
 </main>
 <script>
 const q=location.search;
 async function refresh(){
   const stamp='?t='+Date.now()+(q?'&'+q.slice(1):'');
-  document.getElementById('flat').src='screen-color.png'+stamp;
-  document.getElementById('bin').src='frame.png'+stamp;
   try{
     const s=await (await fetch('state.json'+q)).json();
-    document.getElementById('state').innerHTML=Object.entries({
-      frames:s.frames,stable:s.stable,'change %':s.change_score,calibrated:s.calibrated,
-      'ocr ok':s.ocr_available,'text lines':s.text_lines,
-      'transcript lines':(s.transcript||{}).lines,'last ocr':s.last_ocr_at||'-',
-      'screen changed':s.screen_changed_at||'-',errors:s.errors,'last error':s.last_error||'-'
-    }).map(([k,v])=>'<b>'+k+'</b><span>'+String(v)+'</span>').join('');
+    // A text stream has no frames, so hide the panels that would 404.
+    const camera = s.mode !== 'text';
+    document.getElementById('s-flat').hidden=!camera;
+    document.getElementById('s-bin').hidden=!camera;
+    document.getElementById('text-title').textContent=camera?'Current text':'Recent output';
+    if(camera){
+      document.getElementById('flat').src='screen-color.png'+stamp;
+      document.getElementById('bin').src='frame.png'+stamp;
+    }
+    const rows = camera ? {
+      mode:s.mode,frames:s.frames,stable:s.stable,'change %':s.change_score,
+      calibrated:s.calibrated,'ocr ok':s.ocr_available,confidence:s.confidence,
+      'text lines':s.text_lines,'transcript lines':(s.transcript||{}).lines,
+      'last ocr':s.last_ocr_at||'-','screen changed':s.screen_changed_at||'-',
+      errors:s.errors,'last error':s.last_error||'-'
+    } : {
+      mode:s.mode,source:s.source,reads:s.frames,
+      'transcript lines':(s.transcript||{}).lines,'buffered lines':s.text_lines,
+      pending:s.pending||'-','last line at':s.screen_changed_at||'-',
+      errors:s.errors,'last error':s.last_error||'-'
+    };
+    document.getElementById('state').innerHTML=Object.entries(rows)
+      .map(([k,v])=>'<b>'+k+'</b><span>'+String(v)+'</span>').join('');
     document.getElementById('text').textContent=await (await fetch('text'+q)).text();
     document.getElementById('log').textContent=await (await fetch('log'+q)).text();
+    document.getElementById('cal-link').hidden=!camera;
     document.getElementById('tick').textContent='updated '+new Date().toLocaleTimeString();
   }catch(e){document.getElementById('tick').textContent='offline';}
 }
@@ -178,6 +194,13 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
     def _file(self, name: str, content_type: str) -> None:
+        if getattr(self.scope, "mode", "camera") == "text":
+            self._text(
+                f"{name} is not produced in text mode: this source delivers "
+                "characters, not frames\n",
+                404,
+            )
+            return
         path = self.scope.out / name
         if not path.exists():
             self._text(f"{name} not produced yet\n", 404)

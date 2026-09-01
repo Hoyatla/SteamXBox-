@@ -8,13 +8,33 @@ from pathlib import Path
 
 DEFAULT_CONFIG: dict = {
     "source": {
-        # Point this at the camera app on the tablet, e.g.
-        # http://192.168.1.42:8080/shot.jpg for IP Webcam.
+        # Image sources -- the screen is read through a lens or a capture chip:
+        #   snapshot  one HTTP GET per frame  (a phone/tablet camera app)
+        #   mjpeg     a multipart HTTP stream (same, higher framerate)
+        #   uvc       a USB video device      (an HDMI capture dongle)
+        #   dir       replay images from a folder (testing, no hardware)
+        #   command   run a command that writes one image
+        #
+        # Text sources -- the machine under test sends characters, so there is
+        # no OCR and nothing is misread:
+        #   serial       a serial port: USB-serial adapter, or the TTY of an
+        #                xHCI-debug-capability link
+        #   command-text the stdout of a long-running command
+        #   file         follow a growing log file
         "kind": "snapshot",
         "url": "http://192.168.1.42:8080/shot.jpg",
         "path": "",
         "command": "",
         "timeout": 5.0,
+        # uvc only; run `hvscope devices` to find the device string.
+        "device": "",
+        "backend": "",
+        "size": "",
+        "input_format": "",
+        "warmup": 2,
+        # serial only.
+        "port": "",
+        "baudrate": 115200,
     },
     "capture": {
         "interval": 1.0,
@@ -59,6 +79,8 @@ DEFAULT_CONFIG: dict = {
     "output": {
         "dir": "out",
         "history": 60,
+        # Text mode: how many recent lines screen.txt holds.
+        "tail": 200,
     },
     "server": {
         # 0.0.0.0 so the Claude Code machine elsewhere on the LAN can read it.

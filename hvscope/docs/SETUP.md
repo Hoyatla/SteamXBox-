@@ -147,22 +147,14 @@ hvscope watch --token "$(openssl rand -hex 16)"
 Requests then need `?token=...` or an `X-Hvscope-Token` header. Or bind to
 localhost with `--host 127.0.0.1` if the agent runs on the same PC.
 
-## Moving to an HDMI capture dongle later
+## Reading over USB instead
 
-If you buy a UVC capture dongle (HDMI out of the ASUS, USB into the PC), the
-image gets dramatically better — no perspective, no moire, no lighting — and
-only the config changes:
+Two options, both implemented and both better than a camera in their own way:
+an HDMI capture dongle (pixels over USB, no perspective or moire to fight), or
+a serial/debug port (text over USB, nothing recognised so nothing misread).
 
-```json
-{
-  "source": {
-    "kind": "command",
-    "command": "ffmpeg -y -f v4l2 -i /dev/video0 -frames:v 1 {out}"
-  },
-  "calibration": { "quad": null },
-  "capture": { "stack": 1 }
-}
-```
+`hvscope devices` lists what this machine can see. **`docs/USB.md` covers both,
+including what the hypervisor itself has to do to talk over a USB debug port.**
 
-Clear the quad: a dongle already delivers a rectangle, so there is nothing to
-dewarp.
+You can also keep the camera but move its feed onto the USB cable with
+`adb forward` — same pipeline, no WiFi. That is in `docs/USB.md` too.
