@@ -1,0 +1,255 @@
+"""Where frames come from.
+
+The capture backend is deliberately pluggable. Today the tablet runs an IP
+camera app and this fetches JPEG snapshots over the LAN; swapping in an HDMI
+capture dongle later is a config change, not a rewrite.
+"""
+
+from __future__ import annotations
+
+import io
+import shlex
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from PIL import Image, UnidentifiedImageError
+
+
+class SourceError(RuntimeError):
+    """Raised when a frame cannot be obtained."""
+
+
+class FrameSource:
+    """A thing that yields still frames on demand."""
+
+    name = "source"
+
+    def grab(self) -> Image.Image:
+        raise NotImplementedError
+
+    def describe(self) -> str:
+        return self.name
+
+    def close(self) -> None:
+        pass
+
+
+def _decode(payload: bytes, origin: str) -> Image.Image:
+    if not payload:
+        raise SourceError(f"{origin} returned an empty body")
+    try:
+        image = Image.open(io.BytesIO(payload))
+        image.load()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise SourceError(f"{origin} did not return a decodable image: {exc}") from exc
+    return image
+
+
+class SnapshotSource(FrameSource):
+    """One HTTP GET per frame.
+
+    Works with any camera app exposing a still-image endpoint -- IP Webcam's
+    ``/shot.jpg``, a UVC bridge, or a plain file server. Simple and it
+    resynchronises after every network hiccup, which matters more than
+    framerate when a boot log only changes a few times a second.
+    """
+
+    name = "snapshot"
+
+    def __init__(self, url: str, timeout: float = 5.0):
+        if not url:
+            raise SourceError("snapshot source needs a url")
+        self.url = url
+        self.timeout = float(timeout)
+
+    def grab(self) -> Image.Image:
+        # Cache-busting: some camera apps happily serve a stale still.
+        separator = "&" if "?" in self.url else "?"
+        request = urllib.request.Request(
+            f"{self.url}{separator}_t={int(time.time() * 1000)}",
+            headers={"User-Agent": "hvscope/1.0", "Cache-Control": "no-cache"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                payload = response.read()
+        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+            raise SourceError(f"cannot reach {self.url}: {exc}") from exc
+        return _decode(payload, self.url)
+
+    def describe(self) -> str:
+        return f"snapshot {self.url}"
+
+
+class MjpegSource(FrameSource):
+    """Pull frames out of a multipart MJPEG stream.
+
+    Higher framerate than snapshotting because the connection stays open, at
+    the cost of reconnect handling. Useful once you care about catching a
+    panic that flashes past.
+    """
+
+    name = "mjpeg"
+    _MAX_FRAME = 24 * 1024 * 1024
+
+    def __init__(self, url: str, timeout: float = 10.0):
+        if not url:
+            raise SourceError("mjpeg source needs a url")
+        self.url = url
+        self.timeout = float(timeout)
+        self._stream = None
+        self._buffer = b""
+
+    def _connect(self) -> None:
+        request = urllib.request.Request(self.url, headers={"User-Agent": "hvscope/1.0"})
+        try:
+            self._stream = urllib.request.urlopen(request, timeout=self.timeout)
+        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+            raise SourceError(f"cannot open stream {self.url}: {exc}") from exc
+        self._buffer = b""
+
+    def grab(self) -> Image.Image:
+        if self._stream is None:
+            self._connect()
+
+        # Scan for a JPEG SOI/EOI pair rather than trusting the part headers,
+        # which vary between camera apps.
+        while True:
+            start = self._buffer.find(b"\xff\xd8")
+            end = self._buffer.find(b"\xff\xd9", start + 2) if start >= 0 else -1
+            if start >= 0 and end > start:
+                frame = self._buffer[start : end + 2]
+                self._buffer = self._buffer[end + 2 :]
+                return _decode(frame, self.url)
+
+            if len(self._buffer) > self._MAX_FRAME:
+                self.close()
+                raise SourceError(f"no JPEG boundary found in {self._MAX_FRAME} bytes from {self.url}")
+
+            try:
+                chunk = self._stream.read(65536)
+            except (OSError, TimeoutError) as exc:
+                self.close()
+                raise SourceError(f"stream {self.url} broke: {exc}") from exc
+            if not chunk:
+                self.close()
+                raise SourceError(f"stream {self.url} ended")
+            self._buffer += chunk
+
+    def close(self) -> None:
+        if self._stream is not None:
+            try:
+                self._stream.close()
+            finally:
+                self._stream = None
+
+    def describe(self) -> str:
+        return f"mjpeg {self.url}"
+
+
+class DirectorySource(FrameSource):
+    """Replay images from a folder, cycling forever.
+
+    Lets the whole pipeline be developed and tested with no hardware attached.
+    """
+
+    name = "dir"
+    _SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
+
+    def __init__(self, path: str):
+        self.path = Path(path).expanduser()
+        if not self.path.is_dir():
+            raise SourceError(f"not a directory: {self.path}")
+        self._index = 0
+
+    def _files(self) -> list[Path]:
+        files = sorted(p for p in self.path.iterdir() if p.suffix.lower() in self._SUFFIXES)
+        if not files:
+            raise SourceError(f"no images in {self.path}")
+        return files
+
+    def grab(self) -> Image.Image:
+        files = self._files()
+        chosen = files[self._index % len(files)]
+        self._index += 1
+        try:
+            image = Image.open(chosen)
+            image.load()
+        except (UnidentifiedImageError, OSError) as exc:
+            raise SourceError(f"cannot read {chosen}: {exc}") from exc
+        return image
+
+    def describe(self) -> str:
+        return f"dir {self.path}"
+
+
+class CommandSource(FrameSource):
+    """Run a command that writes one image, then read it.
+
+    The escape hatch: ``termux-camera-photo``, ``ffmpeg -f v4l2`` against a
+    capture dongle, ``adb exec-out screencap`` -- anything that can produce a
+    file. ``{out}`` in the command is replaced by the target path.
+    """
+
+    name = "command"
+
+    def __init__(self, command: str, timeout: float = 30.0):
+        if not command:
+            raise SourceError("command source needs a command")
+        self.command = command
+        self.timeout = float(timeout)
+
+    def grab(self) -> Image.Image:
+        with tempfile.TemporaryDirectory(prefix="hvscope-") as tmp:
+            target = Path(tmp) / "frame.jpg"
+            rendered = self.command.replace("{out}", str(target))
+            try:
+                result = subprocess.run(
+                    shlex.split(rendered),
+                    capture_output=True,
+                    timeout=self.timeout,
+                    check=False,
+                )
+            except FileNotFoundError as exc:
+                raise SourceError(f"command not found: {rendered}") from exc
+            except subprocess.TimeoutExpired as exc:
+                raise SourceError(f"command timed out after {self.timeout}s: {rendered}") from exc
+
+            if result.returncode != 0:
+                detail = result.stderr.decode("utf-8", "replace").strip()[:400]
+                raise SourceError(f"command failed ({result.returncode}): {rendered}\n{detail}")
+            if not target.exists() or target.stat().st_size == 0:
+                raise SourceError(f"command produced no image at {target}: {rendered}")
+            return _decode(target.read_bytes(), rendered)
+
+    def describe(self) -> str:
+        return f"command {self.command}"
+
+
+def build_source(config: dict) -> FrameSource:
+    """Instantiate the source named by a config block."""
+    kind = (config.get("kind") or "snapshot").lower()
+    timeout = float(config.get("timeout", 5.0))
+
+    if kind == "snapshot":
+        return SnapshotSource(config.get("url", ""), timeout)
+    if kind == "mjpeg":
+        return MjpegSource(config.get("url", ""), max(timeout, 10.0))
+    if kind == "dir":
+        return DirectorySource(config.get("path", ""))
+    if kind == "command":
+        return CommandSource(config.get("command", ""), max(timeout, 30.0))
+    raise SourceError(f"unknown source kind: {kind!r} (expected snapshot, mjpeg, dir or command)")
+
+
+def grab_burst(source: FrameSource, count: int, delay: float) -> list[Image.Image]:
+    """Grab several frames back to back, for median stacking."""
+    frames: list[Image.Image] = []
+    for index in range(max(1, int(count))):
+        if index and delay > 0:
+            time.sleep(delay)
+        frames.append(source.grab())
+    return frames
