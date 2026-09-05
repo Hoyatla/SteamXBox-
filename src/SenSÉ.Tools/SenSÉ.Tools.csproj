@@ -24,6 +24,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\SenSÉ.Plugins\SenSÉ.Plugins.csproj" />
+    <ProjectReference Include="..\SenSÉ.Mcp.Bus\SenSÉ.Mcp.Bus.csproj" />
   </ItemGroup>
 
   <ItemGroup>

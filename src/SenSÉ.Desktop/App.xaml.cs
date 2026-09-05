@@ -2,6 +2,8 @@
 using System.Windows.Threading;
 using SenSÉ.Shell.Configuration;
 using SenSÉ.Core.Diagnostics;
+using SenSÉ.Mcp.Bus;
+using SenSÉ.Desktop.Observateurs;
 using SenSÉ.Shell.Localization;
 using SenSÉ.Shell.Theming;
 
@@ -107,6 +109,28 @@ public partial class App : Application
             Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
             Tools.ToolRegistry.StartServices();
             UiLog.Info("tool services started");
+
+
+            // Bus d'evenements pour la proactivite. In-process, thread-safe, demarre une fois
+            // pour toute la duree de l'environnement. L'Assistant s'y branche quand sa fenetre
+            // s'ouvre, et l'observateur de projets y pousse les changements de fichiers.
+            EventBus = new SenSÉ.Mcp.Bus.EventBus();
+            _runnerProactif = new ProactifRunner(EventBus, message => UiLog.Info(message));
+            _runnerProactif.Demarrer();
+
+            // Observateur de demo : surveille Outils\Projets\ et pousse les changements de
+            // fichiers sur le bus. Le premier observateur reel, a etendre ensuite avec
+            // mbox, processus, scheduler.
+            try
+            {
+                var racineProjets = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "Projets");
+                _watcherProjets = new ProjetsWatcher(racineProjets, EventBus, message => UiLog.Info(message));
+                _watcherProjets.Demarrer();
+            }
+            catch (Exception ex)
+            {
+                UiLog.Failure("demarrage du ProjetsWatcher", ex);
+            }
 
             // Le générateur est décrit par les réglages, pas par des constantes semées dans le code.
             // Port et « installation à part » sont lus une fois, ici, et tout le reste du produit
@@ -430,4 +454,10 @@ public partial class App : Application
 
         base.OnExit(e);
     }
+
+    /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>
+    public static SenSÉ.Mcp.Bus.EventBus? EventBus { get; private set; }
+
+    private static ProactifRunner? _runnerProactif;
+    private static ProjetsWatcher? _watcherProjets;
 }

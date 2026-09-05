@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -1183,5 +1183,34 @@ public sealed class AssistantLocal
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Variante UN-tour de <see cref="Repondre"/>, declenchee par un
+    /// observateur proactif. Pas de boucle, pas d'outils MCP dans cette
+    /// premiere iteration : juste un appel synchrone au modele avec la
+    /// demande, qui rend la reponse texte.
+    /// </summary>
+    /// <remarks>
+    /// <b>Methode prevue pour etre etendue.</b> Quand les outils MCP
+    /// seront injectes comme <see cref="Capacite"/>, ils prendront leur
+    /// place ici sans rien changer au reste.
+    /// </remarks>
+    public Task<string> RepondreProactifAsync(string raison, CancellationToken arret = default)
+    {
+        // On reutilise Repondre avec des listes vides : un seul tour,
+        // un seul message, l'Assistant rend sa reaction textuelle.
+        // La grande consigne systeme reste, elle n'est pas genante pour
+        // une reaction courte.
+        var reponse = Repondre(
+            demande: raison,
+            outils: [],
+            capacites: [],
+            executeur: (_, _) => "",
+            journal: null,
+            arret: arret,
+            autonome: true);
+
+        return Task.FromResult(reponse);
     }
 }

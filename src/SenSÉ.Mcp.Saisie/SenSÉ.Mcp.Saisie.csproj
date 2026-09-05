@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SenSÉ.Mcp.Saisie</AssemblyName>
+    <RootNamespace>SenSÉ.Mcp.Saisie</RootNamespace>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ MCP Saisie</AssemblyTitle>
+    <Description>Capture, souris, clavier, screenshot de fenetre pour l'Assistant.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Mcp.Bus\SenSÉ.Mcp.Bus.csproj" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

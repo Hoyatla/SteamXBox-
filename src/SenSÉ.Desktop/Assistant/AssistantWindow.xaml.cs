@@ -1700,4 +1700,29 @@ public partial class AssistantWindow : Window
             Dire("systeme", "Le presse-papiers est occupé par une autre application.");
         }
     }
+
+    /// <summary>
+    /// Appelé par le ProactifRunner quand l'EventBus reçoit un événement
+    /// pertinent. Délègue à AssistantProactif, puis affiche la réponse
+    /// dans la conversation avec le préfixe "de lui-même".
+    /// </summary>
+    public void SurEvenementProactif(SenSÉ.Mcp.Bus.Evenement evenement, Action<string>? journal = null)
+    {
+        if (evenement is null) return;
+        if (_occupe) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var reponse = await AssistantProactif.ProvoquerAsync(_agent, evenement, journal)
+                    .ConfigureAwait(false);
+                _ = Dispatcher.BeginInvoke(() => Dire("systeme", reponse));
+            }
+            catch (Exception ex)
+            {
+                journal?.Invoke($"proactif échoué: {ex.GetType().Name}: {ex.Message}");
+            }
+        });
+    }
 }

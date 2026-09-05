@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SenSÉ.Mcp.Client</AssemblyName>
+    <RootNamespace>SenSÉ.Mcp.Client</RootNamespace>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ MCP Client</AssemblyTitle>
+    <Description>Client JSON-RPC pour parler aux serveurs MCP depuis l'Assistant.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Mcp.Bus\SenSÉ.Mcp.Bus.csproj" />
+  </ItemGroup>
+
+</Project>
