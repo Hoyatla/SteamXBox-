@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
@@ -10,7 +10,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>SenSÉ.Core</AssemblyName>
+    <AssemblyName>SenSÉ</AssemblyName>
     <RootNamespace>SenSÉ.App.Console</RootNamespace>
     <ApplicationIcon>Assets\SenSÉ.ico</ApplicationIcon>
     <Product>SenSÉ</Product>

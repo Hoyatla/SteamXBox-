@@ -1,4 +1,4 @@
-﻿using SenSÉ.Core.Input;
+using SenSÉ.Core.Input;
 using SenSÉ.Core.Mapping;
 using SenSÉ.Core.Runtime;
 using Xunit;
@@ -92,7 +92,9 @@ public class InputModeHandlerDesktopTests
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
 
-        Assert.True(handler.SteamKillRequested);
+        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
+
+        // Assert.True(handler.SteamKillRequested);
         Assert.False(handler.SteamLaunchRequested);
     }
 
@@ -105,7 +107,9 @@ public class InputModeHandlerDesktopTests
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
 
-        Assert.True(handler.SteamKillRequested);
+        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
+
+        // Assert.True(handler.SteamKillRequested);
         Assert.False(handler.SteamLaunchRequested);
     }
 
@@ -116,7 +120,8 @@ public class InputModeHandlerDesktopTests
         var handler = Handler();
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
-        Assert.True(handler.SteamKillRequested);
+        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
+        // Assert.True(handler.SteamKillRequested);
 
         // Y comes up, Steam stays down.
         handler.Update(Frame(SteamControllerButtons.Steam, 20));
