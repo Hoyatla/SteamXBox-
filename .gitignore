@@ -86,3 +86,7 @@ Library/archive/
 # pendant une session. Des donnees personnelles, pas du code — et le produit les
 # efface lui-meme au bout d'un mois sans ouverture.
 /Travaux/
+
+# Binaires SenSÉ (apres rename)
+/SenSÉ*.exe
+/SenSÉ-*.exe

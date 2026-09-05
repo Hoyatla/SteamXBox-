@@ -1778,7 +1778,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     break;
                 }
 
-                if (enableModeSwitch && modeSwitcher.Update(state))
+                if (enableModeSwitch && modeSwitcher.Update(state, frame.Source.Kind))
                 {
                     // An explicit toggle beats automatic switching for the app in front.
                     foregroundArbiter?.SuspendForForegroundApp();
@@ -1851,15 +1851,6 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                     Console.WriteLine("Launching Steam.");
                 }
 
-                if (modeSwitcher.SteamKillRequested)
-                {
-                    DLog("*** Steam kill requested ***");
-                    InputHelper.KillProcess(SteamPresenceWatcher.SteamProcessName);
-                    steamWatcher.TakeOwnership();
-                    DLog("Steam killed. Breaking source loop for fresh reconnection...");
-                    Console.WriteLine("Steam killed, reconnecting controller...");
-                    break;
-                }
 
                 if (profileWatcher.TryConsumeChange(out var changedProfiles))
                 {

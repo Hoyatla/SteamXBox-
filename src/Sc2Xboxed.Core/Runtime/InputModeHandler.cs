@@ -5,7 +5,7 @@ using Sc2Xboxed.Core.Mapping;
 namespace Sc2Xboxed.Core.Runtime;
 
 /// <summary>
-/// Translates button chords into user intent: switch output mode, launch Steam, kill Steam.
+/// Translates button chords into user intent: switch output mode, launch Steam software.
 /// It deliberately says nothing about the controller's native firmware layer — that follows from
 /// <see cref="ControllerOwner"/>, tracked by <see cref="SteamPresenceWatcher"/>.
 /// </summary>
@@ -14,7 +14,6 @@ public sealed class InputModeHandler
 	private readonly SteamControllerButtons _switchButtons;
 	private readonly TimeSpan _debounce;
 	private bool _wasSwitchPressed;
-	private bool _steamUsedAsModifier;
 	private bool _wasSteamPressed;
 	private bool _chordConsumed;
 	private TimeSpan? _chordHeldSince;
@@ -31,29 +30,35 @@ public sealed class InputModeHandler
 	public ControllerOutputMode CurrentMode { get; private set; }
 
 	/// <summary>
-	/// The user pressed the Steam (PS) button alone: launch Steam software.
+	/// The user pressed the Steam (PS) button alone on a Steam Controller, with the right
+	/// trackpad not being used as a mouse: launch Steam software.
 	/// </summary>
 	/// <remarks>
-	/// Steam alone is the launch, Steam + Y is the kill — a plain press never does two things, and
-	/// the environment chord (X) is gone: Steam + X is just a PS press on a pad that also has X down.
+	/// Steam software has its own close button, so there is no kill chord from SenSÉ's side. When
+	/// Steam exits, SteamPresenceWatcher detects it and the controller reclaims on its own.
 	///
 	/// <para>
-	/// It works in both modes. A PS5 or an Xbox pressed in native mode still opens Steam: launching
-	/// Steam software is not the same as taking the controller back, and the "hand over" that would
-	/// do that belongs only to the Steam Controller — see the Program loop.
+	/// Two filters gate the launch (both 2026-09-05, after the user reported that any pad use was
+	/// firing the launch):
 	/// </para>
+	///
+	/// <list type="bullet">
+	///   <item>
+	///     The frame must come from a Steam Controller. The XInput mapper folds the Xbox Guide
+	///     into <see cref="SteamControllerButtons.Steam"/> (XInputStateMapper.cs:114), and the
+	///     DualSense parser folds the PS button in too (DualSenseReportParser.cs:220). The launch
+	///     is a Steam-Controller-only feature; a Guide / PS press on a different pad must not
+	///     fire it.
+	///   </item>
+	///   <item>
+	///     The right trackpad must not be touched or pressed. The Steam Controller firmware
+	///     reports the Steam bit on right trackpad activity (mouse-move / click). The thumb
+	///     sits on the trackpad only when using it as a mouse, not when pressing the Steam
+	///     button, so the gate filters the false launches while a real press goes through.
+	///   </item>
+	/// </list>
 	/// </remarks>
 	public bool SteamLaunchRequested { get; private set; }
-
-	/// <summary>
-	/// The user asked to stop Steam: Steam pressed while Y is held.
-	/// </summary>
-	/// <remarks>
-	/// Lives in both modes on purpose. Y is the Steam Controller's own kill button and the chord is
-	/// the pad's only way to stop the Steam process; a pad stuck in Xbox mode would otherwise need
-	/// the keyboard to get out.
-	/// </remarks>
-	public bool SteamKillRequested { get; private set; }
 
 	public InputModeHandler(ControllerOutputMode initialMode, SteamControllerButtons switchButtons, TimeSpan debounce)
 	{
@@ -62,45 +67,30 @@ public sealed class InputModeHandler
 		_debounce = debounce;
 	}
 
-	public bool Update(ControllerState state)
+	public bool Update(ControllerState state, ControllerKind source = ControllerKind.SteamController)
 	{
 		bool switchPressed = (state.Buttons & _switchButtons) != 0;
 		bool switchRising = switchPressed && !_wasSwitchPressed;
 		_wasSwitchPressed = switchPressed;
 
 		bool steamPressed = state.Buttons.HasFlag(SteamControllerButtons.Steam);
-		bool steamRising = steamPressed && !_wasSteamPressed;
+
+		// Steam-launch gates (2026-09-05): only the Steam Controller's physical Steam button
+		// fires the launch. See SteamLaunchRequested remarks for the two reasons.
+		bool fromSteamController = source == ControllerKind.SteamController;
+		bool trackpadActive = state.RightPad.IsTouched || state.RightPad.IsPressed;
+		bool steamForLaunch = steamPressed && fromSteamController && !trackpadActive;
+		bool steamRisingForLaunch = steamForLaunch && !_wasSteamPressed;
 		_wasSteamPressed = steamPressed;
 
-		bool yPressed = state.Buttons.HasFlag(SteamControllerButtons.Y);
-
 		SteamLaunchRequested = false;
-		SteamKillRequested = false;
 
-		if (steamRising)
+		if (steamRisingForLaunch)
 		{
-			// Steam + Y stops the Steam process and reconnects the controller. First, before the
-			// launch: a kill is a deliberate command and the launch must not also fire when the
-			// modifier is released after the Steam button.
-			if (yPressed)
-			{
-				SteamKillRequested = true;
-				_steamUsedAsModifier = true;
-				return false;
-			}
-
-			// The flag keeps a kill chord from also launching Steam when the modifier is released
-			// after the Steam button.
-			if (!_steamUsedAsModifier)
-			{
-				SteamLaunchRequested = true;
-				return false;
-			}
-		}
-
-		if (!steamPressed)
-		{
-			_steamUsedAsModifier = false;
+			// Steam software has its own close button — no kill chord. Reclaim happens when
+			// Steam exits (SteamPresenceWatcher at Program.cs:1871-1877).
+			SteamLaunchRequested = true;
+			return false;
 		}
 
 		// Both stick clicks held together also switch mode. It works in either direction and in
@@ -160,7 +150,7 @@ public sealed class InputModeHandler
 	}
 
 	/// <summary>Overrides the current output mode, used by automatic foreground-based switching.</summary>
-	public void SetMode(ControllerOutputMode mode)
+	public void SetMode(ControllerOutputMode mode	)
 	{
 		CurrentMode = mode;
 	}
@@ -174,7 +164,7 @@ public sealed class InputModeHandler
 	{
 		SteamControllerButtons buttons = state.Buttons & ~_switchButtons;
 
-		if (SteamLaunchRequested || SteamKillRequested)
+		if (SteamLaunchRequested)
 			buttons &= ~SteamControllerButtons.Steam;
 
 		// Held from the moment the chord switches mode until both clicks are released. Otherwise the
