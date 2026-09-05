@@ -1,0 +1,35 @@
+﻿<Window x:Class="SenSÉ.Desktop.Tools.PluginPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Outil" Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        MinWidth="360" MinHeight="220"
+        ResizeMode="CanResize"
+        Background="{StaticResource BgDarkBrush}">
+
+    <!-- Redimensionnable, et la taille est retenue par outil.
+
+         Le panneau etait en NoResize : il se calait sur son contenu et l'utilisateur n'avait
+         aucune poignee. Un outil a neuf reglages ouvrait une fenetre haute qu'on ne pouvait ni
+         reduire ni elargir, et celui qui voulait voir sa description en entier n'avait rien a
+         tirer. SizeToContent reste pour la PREMIERE ouverture — c'est la bonne taille tant que
+         personne n'en a choisi une — et cede des que l'utilisateur en impose une.
+
+         Le contenu passe dans un defilement : agrandi en largeur il respire, reduit en hauteur il
+         defile au lieu d'etre coupe. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="20">
+        <TextBlock x:Name="PanelTitle" FontSize="18" Margin="0,0,0,2"
+                   Foreground="{StaticResource TextPrimaryBrush}"/>
+        <TextBlock x:Name="PanelHint" FontSize="11" Margin="0,0,0,14"
+                   Foreground="{StaticResource TextDimBrush}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Dessine par l'hote a partir de content. L'outil decrit, il ne dessine pas : c'est ce qui
+             rend un outil ecrit par un utilisateur navigable a la manette sans qu'il y ait pense.
+             Le dessin lui-meme vit dans PanneauOutil, parce qu'il sert aussi aux onglets de
+             l'atelier. -->
+        <Border x:Name="Hote"/>
+    </StackPanel>
+    </ScrollViewer>
+</Window>

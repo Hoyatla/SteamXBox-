@@ -1,9 +1,9 @@
-SteamXBox — Mentions relatives aux composants tiers
+﻿SenSÉ — Mentions relatives aux composants tiers
 Copyright (c) 2026 Hoyatla. Tous droits réservés.
 
-SteamXBox est un logiciel propriétaire (voir LICENSE). Il utilise les composants
+SenSÉ est un logiciel propriétaire (voir LICENSE). Il utilise les composants
 tiers ci-dessous, qui restent régis par leurs licences respectives. Ces licences
-sont toutes permissives : aucune n'impose l'ouverture du code de SteamXBox. Elles
+sont toutes permissives : aucune n'impose l'ouverture du code de SenSÉ. Elles
 exigent en revanche que les mentions suivantes accompagnent toute distribution,
 et ce fichier est ce qui satisfait cette obligation.
 
@@ -47,7 +47,7 @@ https://github.com/CommunityToolkit/dotnet
 PILOTES INSTALLÉS SÉPARÉMENT
 -------------------------------------------------------------------------------
 
-Ces composants ne sont pas liés à SteamXBox ni redistribués par lui. Ils sont
+Ces composants ne sont pas liés à SenSÉ ni redistribués par lui. Ils sont
 installés indépendamment par l'utilisateur et pilotés, pour HidHide, par
 invocation d'un exécutable distinct. Ils sont recensés ici pour mémoire.
 
@@ -77,7 +77,7 @@ texte accompagne les fichiers concernés :
 OUTILS EXTERNES DÉTECTÉS, JAMAIS EMBARQUÉS
 ------------------------------------------
 
-SteamXBox n'inclut ni ne redistribue aucun des programmes ci-dessous. Il les
+SenSÉ n'inclut ni ne redistribue aucun des programmes ci-dessous. Il les
 cherche sur la machine et s'en sert s'ils y sont ; sinon la fonction concernée
 s'éteint et le dit. C'est l'utilisateur ou l'administrateur qui les installe, et
 donc lui qui les met à jour.
@@ -97,7 +97,7 @@ donc lui qui les met à jour.
                        https://poppler.freedesktop.org/
 
 ATTENTION SUR POPPLER — sa licence est GPL. L'appeler comme programme séparé,
-installé par l'utilisateur, n'engage pas le code de SteamXBox ; le LIVRER avec le
+installé par l'utilisateur, n'engage pas le code de SenSÉ ; le LIVRER avec le
 produit, si. Aucun installeur ne doit le poser, et aucun binaire poppler ne doit
 entrer dans une archive de distribution. Si un moteur de rendu PDF devait un jour
 être embarqué, ce serait PDFium (BSD-3), jamais poppler.
@@ -194,7 +194,7 @@ Sa licence le permet sans contrepartie sur notre propre code.
                             Ces trois licences ont été relevées à la source, sur
                             l'API de Hugging Face, et non supposées d'après la
                             réputation de leurs familles. Apache 2.0 n'impose rien
-                            au code de SteamXBox.
+                            au code de SenSÉ.
 
                             SUR LA MACHINE DE DÉVELOPPEMENT UNIQUEMENT :
                             Outils\Modeles contient Qwen3.5-9B, copié depuis une
@@ -211,9 +211,9 @@ Sa licence le permet sans contrepartie sur notre propre code.
 BSD 3-Clause — la redistribution, sous forme binaire, exige de reproduire la
 mention de copyright, la liste des conditions et l'avertissement de garantie
 dans la documentation. Le présent fichier remplit cette obligation. Elle
-n'impose ni l'ouverture ni le partage du code de SteamXBox.
+n'impose ni l'ouverture ni le partage du code de SenSÉ.
 
-Le pilote de cette chaîne, src/SteamXBox.Tools/Video/VideoUpscale.cs, est notre
+Le pilote de cette chaîne, src/SenSÉ.Tools/Video/VideoUpscale.cs, est notre
 code : il découpe la vidéo en tronçons, interpole, agrandit, réencode et efface
 au fur et à mesure, pour que le disque reste borné. Sans lui, un film de 80
 minutes réclamerait environ 570 Go d'images intermédiaires. Il a d'abord été
@@ -221,7 +221,7 @@ minutes réclamerait environ 570 Go d'images intermédiaires. Il a d'abord été
 de l'outil vidéo envers un interpréteur installé par l'utilisateur.
 
 
-RÈGLE POUR TOUT AJOUT — SteamXBox étant un produit commercial fermé, seules les
+RÈGLE POUR TOUT AJOUT — SenSÉ étant un produit commercial fermé, seules les
 licences suivantes sont acceptables pour une nouvelle ressource graphique :
 
   MIT, Apache 2.0, BSD, CC0, CC-BY

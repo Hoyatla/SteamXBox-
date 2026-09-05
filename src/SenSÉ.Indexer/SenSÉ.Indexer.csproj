@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L'indexeur du corpus documentaire.
+
+    Un executable a part, et non un morceau du Desktop : il tourne une fois, sur le serveur qui voit
+    le partage, planifie par la DSI. Trente postes indexant le meme partage chacun de leur cote
+    serait absurde, et la politique des outils interdit de toute facon a un outil de laisser tourner
+    quelque chose d'invisible.
+
+    Cible net10.0 et non net10.0-windows : rien ici ne touche a l'interface, et l'institution peut
+    vouloir l'executer ailleurs que sur un poste.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SenSÉ.Indexer</RootNamespace>
+    <AssemblyName>SenSÉ.Indexer</AssemblyName>
+
+    <!--
+      Un seul fichier autonome. Quatrieme projet ou cette omission se rencontre : sans ces trois
+      lignes, la publication sort un apphost qui cherche ses assemblages a cote, et l'executable
+      copie seul a la racine demarre puis annonce qu'il ne trouve pas son propre .dll.
+
+      Constate le 11 aout 2026 : l'indexeur etait reste en 4.4.0 a la racine pendant que tout le
+      reste passait en 4.7.0, parce qu'il n'etait publie par aucune commande.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ Indexer</AssemblyTitle>
+    <Description>SenSÉ - alimente l'index documentaire.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Tools\SenSÉ.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+  </ItemGroup>
+
+</Project>

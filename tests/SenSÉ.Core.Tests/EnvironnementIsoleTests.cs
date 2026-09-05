@@ -1,0 +1,234 @@
+﻿using System.Diagnostics;
+using SenSÉ.Plugins;
+using Xunit;
+
+namespace SenSÉ.Core.Tests;
+
+/// <summary>
+/// L'environnement propre donné à un outil extérieur.
+/// </summary>
+/// <remarks>
+/// Ce qui est éprouvé ici vient d'un fait constaté : Comfy Desktop désinstallé a laissé
+/// quarante-deux gigaoctets dans le dossier de l'utilisateur, parce qu'il les avait écrits là où
+/// son environnement lui disait de le faire. Rien de tout cela n'aurait survécu s'il avait été
+/// lancé avec un environnement à lui.
+/// </remarks>
+public class EnvironnementIsoleTests : IDisposable
+{
+    private readonly DirectoryInfo _bac = Directory.CreateTempSubdirectory("env");
+
+    public void Dispose()
+    {
+        _bac.Delete(recursive: true);
+        GC.SuppressFinalize(this);
+    }
+
+    private (ProcessStartInfo Depart, string Refus) Preparer(EnvironnementOutil? declare = null)
+    {
+        var depart = new ProcessStartInfo("outil.exe");
+
+        return (depart, EnvironnementIsole.Preparer(depart, _bac.FullName, declare));
+    }
+
+    /// <summary>Ce que l'outil croit être le dossier de l'utilisateur est dans le produit.</summary>
+    [Theory]
+    [InlineData("APPDATA")]
+    [InlineData("LOCALAPPDATA")]
+    [InlineData("TEMP")]
+    public void WhatTheToolTakesForTheUserFolderIsInsideTheProduct(string variable)
+    {
+        var (depart, refus) = Preparer();
+
+        Assert.Equal("", refus);
+        Assert.StartsWith(_bac.FullName, depart.Environment[variable]!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Le profil de l'utilisateur n'est pas détourné d'office.
+    /// </summary>
+    /// <remarks>
+    /// Mesuré, pas supposé : détourner <c>USERPROFILE</c> fait tomber l'installeur de Comfy Desktop
+    /// sur <c>0xC0000005</c> — deux fois, à deux emplacements différents — quand le même installeur
+    /// va au bout sans lui. Windows dérive trop de chemins du profil par ses propres interfaces
+    /// pour qu'un programme survive à un profil qui ne ressemble pas à un profil.
+    /// </remarks>
+    [Theory]
+    [InlineData("USERPROFILE")]
+    [InlineData("HOME")]
+    public void TheUserProfileIsNotDivertedByDefault(string variable)
+    {
+        var pose = Preparer().Depart.Environment[variable];
+
+        Assert.True(
+            pose is null || !pose.StartsWith(_bac.FullName, StringComparison.OrdinalIgnoreCase),
+            $"{variable} ne doit pas être détourné d'office : cela tue les installeurs.");
+    }
+
+    /// <summary>Mais un outil qui le veut peut le demander en connaissance de cause.</summary>
+    [Fact]
+    public void AToolCanStillAskForItKnowingWhatItCosts()
+    {
+        var declare = new EnvironnementOutil { Detourne = { ["USERPROFILE"] = "" } };
+
+        Assert.Equal(_bac.FullName, Preparer(declare).Depart.Environment["USERPROFILE"]);
+    }
+
+    /// <summary>
+    /// Les caches des bibliothèques qui téléchargent sont détournés eux aussi.
+    /// </summary>
+    /// <remarks>
+    /// C'est la variable la plus lourde de conséquences du lot : sans elle, une bibliothèque va
+    /// chercher ses poids et les dépose dans le dossier de l'utilisateur, hors de toute
+    /// désinstallation. Les quarante-deux gigaoctets retrouvés venaient de là.
+    /// </remarks>
+    [Theory]
+    [InlineData("HF_HOME")]
+    [InlineData("HUGGINGFACE_HUB_CACHE")]
+    [InlineData("TORCH_HOME")]
+    [InlineData("PIP_CACHE_DIR")]
+    public void TheCachesOfDownloadingLibrariesAreDivertedToo(string variable)
+        => Assert.StartsWith(
+            _bac.FullName, Preparer().Depart.Environment[variable]!, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Les dossiers existent avant que l'outil ne démarre.</summary>
+    /// <remarks>
+    /// Beaucoup de programmes n'essaient pas de créer le dossier que leur environnement désigne :
+    /// ils supposent qu'il est là, puisque Windows le garantit d'habitude.
+    /// </remarks>
+    [Fact]
+    public void TheFoldersExistBeforeTheToolStarts()
+    {
+        var depart = Preparer().Depart;
+
+        Assert.True(Directory.Exists(depart.Environment["LOCALAPPDATA"]));
+        Assert.True(Directory.Exists(depart.Environment["TEMP"]));
+    }
+
+    /// <summary>
+    /// Le lancement passe par le processus et non par le shell.
+    /// </summary>
+    /// <remarks>
+    /// Windows n'accepte un environnement sur mesure que là : par le shell, l'enfant hérite de la
+    /// session et tout le détournement est perdu sans un mot.
+    /// </remarks>
+    [Fact]
+    public void TheLaunchGoesThroughTheProcessRatherThanTheShell()
+        => Assert.False(Preparer().Depart.UseShellExecute);
+
+    /// <summary>Ce que l'outil sait de la machine ne lui est pas retiré.</summary>
+    /// <remarks>
+    /// On isole où il écrit, pas ce qu'il voit : repartir d'un environnement vide casserait la
+    /// plupart des programmes — à commencer par ceux qui cherchent leurs propres bibliothèques
+    /// dans le PATH — pour un gain nul.
+    /// </remarks>
+    [Fact]
+    public void WhatTheToolKnowsOfTheMachineIsNotTakenAway()
+        => Assert.False(string.IsNullOrEmpty(Preparer().Depart.Environment["PATH"]));
+
+    /// <summary>Un outil peut détourner une variable que la liste habituelle ignore.</summary>
+    [Fact]
+    public void AToolCanDivertAVariableTheStandardListDoesNotKnow()
+    {
+        var declare = new EnvironnementOutil { Detourne = { ["OLLAMA_MODELS"] = "modeles" } };
+
+        Assert.Equal(
+            Path.Combine(_bac.FullName, "modeles"),
+            Preparer(declare).Depart.Environment["OLLAMA_MODELS"]);
+    }
+
+    /// <summary>Ce qui est partagé n'est pas rattaché au dossier de l'outil.</summary>
+    /// <remarks>
+    /// Le dossier des modèles est commun : chaque outil doit pouvoir le désigner sans qu'on en
+    /// recopie soixante-six gigaoctets dans son environnement.
+    /// </remarks>
+    [Fact]
+    public void WhatIsSharedIsNotTiedToTheToolFolder()
+    {
+        var declare = new EnvironnementOutil { Ajoute = { ["COMFYUI_MODELS"] = @"D:\Modeles" } };
+
+        Assert.Equal(@"D:\Modeles", Preparer(declare).Depart.Environment["COMFYUI_MODELS"]);
+    }
+
+    /// <summary>Une déclaration sans dossier est refusée plutôt que devinée.</summary>
+    [Fact]
+    public void ADeclarationWithoutAFolderIsRefusedRatherThanGuessed()
+        => Assert.Contains(
+            "aucun dossier",
+            EnvironnementIsole.Preparer(new ProcessStartInfo("x.exe"), "", null),
+            StringComparison.Ordinal);
+
+    /// <summary>Un manifeste qui ne demande rien n'a pas d'environnement imposé.</summary>
+    [Fact]
+    public void AManifestThatAsksForNothingGetsNoImposedEnvironment()
+        => Assert.Null(new PluginManifest().Environnement);
+}
+
+/// <summary>
+/// La directive qui dit à un installeur où s'installer.
+/// </summary>
+/// <remarks>
+/// Une seule chose est éprouvée ici, et elle a coûté quatre cent quatre-vingt-huit mégaoctets au
+/// mauvais endroit : la documentation de NSIS promet que <c>/D=</c> prend tout jusqu'à la fin de la
+/// ligne, espaces compris ; à l'essai il coupe au premier espace. Donné le dossier d'accueil normal
+/// du produit — qui vit sous « Program Files » — l'installeur a créé <c>C:\Program</c> à la racine
+/// du disque sans signaler la moindre erreur.
+/// </remarks>
+public class AccueilOutilTests : IDisposable
+{
+    private readonly DirectoryInfo _bac =
+        Directory.CreateTempSubdirectory("accueil avec espaces");
+
+    public void Dispose()
+    {
+        _bac.Delete(recursive: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Un dossier dont l'espace survit à la forme courte est refusé, pas tenté.
+    /// </summary>
+    /// <remarks>
+    /// <c>PROGRA~1</c> existe parce que c'est un nom court hérité ; un dossier créé aujourd'hui n'en
+    /// reçoit pas si la génération des noms courts est désactivée sur le disque, ce qui est courant.
+    /// La conversion ne peut donc pas être garantie, et l'échec doit être bruyant : sans ce refus,
+    /// l'installeur annonce une réussite et s'installe ailleurs.
+    /// </remarks>
+    [Fact]
+    public void AFolderWhoseSpaceSurvivesTheShortFormIsRefusedRatherThanAttempted()
+    {
+        var dossier = Path.Combine(_bac.FullName, "un outil");
+        var court = SenSÉ.Plugins.AccueilOutil.Court(dossier);
+
+        if (!court.Contains(' ', StringComparison.Ordinal))
+        {
+            // Ce disque sait donner des noms courts : la directive est utilisable telle quelle.
+            Assert.DoesNotContain(' ', SenSÉ.Plugins.AccueilOutil.Ou(dossier));
+
+            return;
+        }
+
+        var rapport = SenSÉ.Plugins.AccueilOutil.Installer(
+            Environment.ProcessPath!, dossier);
+
+        Assert.Equal(-1, rapport.Code);
+        Assert.Contains("contient un espace", rapport.Dits[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>Et elle désigne bien le dossier demandé, pas un autre.</summary>
+    /// <remarks>
+    /// Un chemin court reste le même dossier : la vérification passe par le système de fichiers
+    /// plutôt que par la forme du texte, sinon l'épreuve ne dirait rien de ce qui compte.
+    /// </remarks>
+    [Fact]
+    public void AndItStillPointsAtTheFolderThatWasAsked()
+    {
+        var dossier = Path.Combine(_bac.FullName, "un outil");
+        var court = SenSÉ.Plugins.AccueilOutil.Court(dossier);
+        var temoin = Path.Combine(dossier, "temoin.txt");
+
+        File.WriteAllText(temoin, "ici");
+
+        Assert.True(File.Exists(Path.Combine(court, "temoin.txt")),
+            $"« {court} » doit désigner « {dossier} »");
+    }
+}

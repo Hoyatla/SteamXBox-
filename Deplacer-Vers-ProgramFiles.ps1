@@ -1,4 +1,4 @@
-﻿# Deplace le projet vers C:\Program Files\SteamXBox, Outils compris.
+﻿# Deplace le projet vers C:\Program Files\SenSÉ, Outils compris.
 #
 # Outils pese 84 Go — ComfyUI et ses 72 839 fichiers
 # Python, les modeles, ffmpeg, llama.cpp. Le produit, lui, resout tout depuis le dossier de son
@@ -6,7 +6,7 @@
 # le generateur, le modele de langage, l'agrandissement et le montage.
 #
 # Une jonction de repertoire resout ce conflit sans une ligne de code : Windows fait suivre
-# C:\Program Files\SteamXBox\Outils vers le dossier d'origine, et AppContext.BaseDirectory + "Outils"
+# C:\Program Files\SenSÉ\Outils vers le dossier d'origine, et AppContext.BaseDirectory + "Outils"
 # continue de tomber juste.
 #
 # RIEN N'EST EFFACE. Le dossier d'origine reste entier et devient la sauvegarde, comme demande.
@@ -14,8 +14,8 @@
 # A lancer dans un PowerShell ADMINISTRATEUR : Program Files refuse l'ecriture autrement.
 
 param(
-    [string]$Source = "D:\sauv.minecraft\Modspack perso\Mods\Projets\SteamXBox-portable-win-x64",
-    [string]$Cible  = "C:\Program Files\SteamXBox",
+    [string]$Source = "D:\sauv.minecraft\Modspack perso\Mods\Projets\SenSÉ-portable-win-x64",
+    [string]$Cible  = "C:\Program Files\SenSÉ",
     [switch]$SansBinaires,
     [switch]$OutilsEnJonction,
     [switch]$PourDeVrai
@@ -132,7 +132,7 @@ if ($OutilsEnJonction) {
 # --- Verification ------------------------------------------------------------------------------
 
 $aVerifier = @(
-    'SteamXBox.Desktop.exe',
+    'SenSÉ.Desktop.exe',
     'Plugins',
     'Outils\Modeles',
     'Outils\ComfyUI\main.py',
@@ -151,7 +151,7 @@ foreach ($v in $aVerifier) {
 Dire ""
 if ($manque -eq 0) {
     Dire "Deplacement termine. Le dossier d'origine est intact et sert de sauvegarde." 'Green'
-    Dire "Lancez desormais : $Cible\SteamXBox.Desktop.exe" 'Green'
+    Dire "Lancez desormais : $Cible\SenSÉ.Desktop.exe" 'Green'
 } else {
     Dire "$manque element(s) manquant(s) : ne lancez pas depuis la cible avant d'avoir compris." 'Red'
 }

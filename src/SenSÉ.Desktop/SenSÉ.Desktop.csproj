@@ -1,0 +1,69 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    L'environnement SenSÉ : le centre de controle aujourd'hui, le hub, la roue d'applications,
+    les espaces et les piles ensuite.
+
+    Processus distinct de SenSÉ.exe, qui reste ce qu'il est : l'outil de configuration du pont
+    manette. Les deux ne partagent que leur apparence, via SenSÉ.Shell. Un environnement qui
+    vivrait dans le processus du pont serait ingerable des le troisieme module, et se fermerait avec
+    lui.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SenSÉ.Desktop</AssemblyName>
+
+    <!--
+      Le manifeste demande l'administrateur, et le commentaire est ici parce qu'un commentaire dans
+      le XML du manifeste a deja rendu un executable indemarrable ("configuration cote-a-cote
+      incorrecte").
+
+      SenSÉ avait cesse de demander l'elevation apres mesure que HidHide ne l'exigeait pas. La
+      mesure etait juste et la conclusion trop large : ce n'est pas le pilote qui l'exige, c'est
+      l'injection d'entree. Windows interdit a un processus d'envoyer une frappe ou un clic a une
+      fenetre d'integrite superieure, et un lanceur de jeu AAA en est une. Sans elevation la manette
+      cesse de commander des qu'un de ces programmes passe au premier plan — constate le 12 aout,
+      ou le noyau comptait 103 mouvements pendant que le crochet bas niveau du moniteur n'en voyait
+      aucun partir.
+
+      Le Bureau l'exige en plus du noyau parce que c'est lui qui le lance : un parent non eleve
+      declencherait une invite UAC a chaque demarrage de l'enfant, au lieu d'une seule a l'ouverture.
+    -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>SenSÉ.Desktop</RootNamespace>
+    <ApplicationIcon>Desktop.ico</ApplicationIcon>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ Desktop</AssemblyTitle>
+    <Description>SenSÉ - environnement de navigation superpose a Windows.</Description>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Shell\SenSÉ.Shell.csproj" />
+    <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
+    <ProjectReference Include="..\SenSÉ.Tools\SenSÉ.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <!--
+    Les icones de l'interface, prises dans Library/Icons/fluent (MIT, usage commercial autorise).
+    Embarquees et non copiees a cote : la publication est mono-fichier, et un fichier voisin peut
+    manquer ou etre supprime alors qu'une ressource embarquee voyage avec l'executable.
+    LICENSE.txt suit les icones dans l'assemblage, pour que la provenance ne se perde jamais.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Icons\*.svg" />
+    <EmbeddedResource Include="Assets\Icons\LICENSE.txt" />
+  </ItemGroup>
+
+</Project>

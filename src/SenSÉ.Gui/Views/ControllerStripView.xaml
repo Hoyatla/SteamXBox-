@@ -1,0 +1,89 @@
+﻿<UserControl x:Class="SenSÉ.Gui.Views.ControllerStripView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        The connected controllers, one numbered button each. Shown in both the Profile and the Xbox
+        tab from a single view model, so the two cannot disagree about what is attached.
+    -->
+    <Border Background="{StaticResource BgLightBrush}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+        <StackPanel>
+            <TextBlock Text="Manettes connectées"
+                       Foreground="{StaticResource TextPrimaryBrush}"
+                       FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+            <ItemsControl ItemsSource="{Binding Controllers}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Command="{Binding DataContext.SelectCommand,
+                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                Margin="0,0,8,0" Padding="0" Cursor="Hand"
+                                BorderThickness="0" Background="Transparent">
+                            <Button.ContextMenu>
+                                <!--
+                                    A ContextMenu lives outside the visual tree, so its DataContext is
+                                    pointed at the chip being right-clicked (the PlacementTarget) rather
+                                    than inherited. The handlers in the code-behind read it back.
+                                -->
+                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
+                                                  RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="Renommer…" Click="RenameMenuItem_Click"/>
+                                    <MenuItem Header="Réinitialiser le nom" Click="ResetNameMenuItem_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Chip" CornerRadius="8" Padding="14,8"
+                                            Background="{StaticResource BgLightBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Number}"
+                                                       FontSize="20" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontSize="11"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding ProfileName}"
+                                                       FontSize="11"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{StaticResource TextDimBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <ControlTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter TargetName="Chip" Property="Background"
+                                                    Value="{StaticResource AccentBrush}"/>
+                                        </DataTrigger>
+                                        <!--
+                                            Belongs to another family than the tab being looked at:
+                                            dimmed, never hidden. A pad that disappears when the tab
+                                            changes reads as a pad that disconnected.
+                                        -->
+                                        <DataTrigger Binding="{Binding IsCurrentFamily}" Value="False">
+                                            <Setter TargetName="Chip" Property="Opacity" Value="0.45"/>
+                                        </DataTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{StaticResource TextDimBrush}"
+                       FontSize="11" Margin="0,8,0,0"/>
+        </StackPanel>
+    </Border>
+</UserControl>

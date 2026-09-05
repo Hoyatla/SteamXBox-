@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 net session >nul 2>&1
 if %errorlevel% neq 0 (
@@ -7,10 +7,10 @@ if %errorlevel% neq 0 (
 )
 cd /d "%~dp0"
 echo ==========================================
-echo  SteamXBox - DualSense power-off test
+echo  SenSÉ - DualSense power-off test
 echo ==========================================
 echo.
-"%~dp0SteamXBox.Core.exe" ds-power-off > "%TEMP%\ds-off-result.txt" 2>&1
+"%~dp0SenSÉ.Core.exe" ds-power-off > "%TEMP%\ds-off-result.txt" 2>&1
 echo.
 type "%TEMP%\ds-off-result.txt"
 echo.

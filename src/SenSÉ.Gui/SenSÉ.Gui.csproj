@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SenSÉ</AssemblyName>
+    <RootNamespace>SenSÉ.Gui</RootNamespace>
+    <ApplicationIcon>SenSÉ.ico</ApplicationIcon>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ GUI</AssemblyTitle>
+    <Description>SenSÉ - Steam Controller to Xbox 360 bridge GUI.</Description>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\paypal-support.gif" />
+    <Resource Include="Resources\paypal-support.gif" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\app.ico" />
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Shell\SenSÉ.Shell.csproj" />
+    <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
+    <ProjectReference Include="..\SenSÉ.Hid\SenSÉ.Hid.csproj" />
+    <ProjectReference Include="..\SenSÉ.Windows\SenSÉ.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

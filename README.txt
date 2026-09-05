@@ -1,8 +1,8 @@
-SteamXBox
+﻿SenSÉ
 Version 4.7 - win-x64
 
 
-SteamXBox turns a game controller into a way of using Windows.
+SenSÉ turns a game controller into a way of using Windows.
 
 It began as a bridge exposing a Valve Steam Controller to games as a virtual Xbox 360
 pad. It now also drives the desktop itself: the pointer, scrolling, text entry through
@@ -10,18 +10,18 @@ an on-screen keyboard, a full-screen environment, and a launcher that finds and 
 anything on the machine.
 
 The goal is continuity. While Steam is running, Steam Input owns the controller. When
-Steam closes, SteamXBox takes over so the controller keeps working - for navigation, for
+Steam closes, SenSÉ takes over so the controller keeps working - for navigation, for
 typing, and for everything the desktop is normally used for.
 
 
 Contents
 --------
-  SteamXBox.exe            The graphical application. This is the one to launch.
-  SteamXBox.Core.exe       The controller runtime. Started and stopped by the GUI.
-  SteamXBox.Desktop.exe    The full-screen environment and its control centre.
-  Sc2XboxedSticks.Osk.exe  The on-screen keyboard driven by the sticks.
-  Sc2XboxedPads.Osk.exe    The on-screen keyboard driven by the trackpads.
-  SteamXBox.Indexer.exe    Builds a document index for an organisation. Optional,
+  SenSÉ.exe            The graphical application. This is the one to launch.
+  SenSÉ.Core.exe       The controller runtime. Started and stopped by the GUI.
+  SenSÉ.Desktop.exe    The full-screen environment and its control centre.
+  SenSÉSticks.Osk.exe  The on-screen keyboard driven by the sticks.
+  SenSÉPads.Osk.exe    The on-screen keyboard driven by the trackpads.
+  SenSÉ.Indexer.exe    Builds a document index for an organisation. Optional,
                            run by an administrator, never by the end user.
 
 USAGE.txt describes the launch modes, the included scripts, and the interface language.
@@ -83,7 +83,7 @@ is per controller.
 
 The desktop environment
 -----------------------
-SteamXBox.Desktop is a full-screen environment holding a control centre: audio output,
+SenSÉ.Desktop is a full-screen environment holding a control centre: audio output,
 Wi-Fi, Bluetooth, brightness, do-not-disturb, task manager, screen capture, calculator,
 clipboard. Every tile is reachable with the arrow keys and therefore with a controller.
 
@@ -104,7 +104,7 @@ next time.
 Connected drives are shown above the search field and are searchable the moment they are
 plugged in; removable ones can be ejected from there.
 
-  D, steamxbox     Restricts the search to drive D.
+  D, SenSÉ     Restricts the search to drive D.
   web: <words>     Searches the web, if a provider is configured.
   docs: <words>    Searches the organisation's own documents, if one is configured.
 
@@ -119,7 +119,7 @@ administrator runs and controls. Nothing is sent to a search engine the organisa
 not chosen.
 
 Document search goes to a Meilisearch instance holding the organisation's own corpus,
-built by SteamXBox.Indexer.exe from a folder or a network share. It reads plain text, PDF,
+built by SenSÉ.Indexer.exe from a folder or a network share. It reads plain text, PDF,
 Word, Excel and PowerPoint - both the current formats and the older .doc, .xls and .ppt -
 along with OpenDocument, and the templates of both families. The older formats and
 OpenDocument are read through LibreOffice when it is installed on the indexing machine;
@@ -149,8 +149,8 @@ you can override it in the Settings tab.
 
 Licences
 --------
-SteamXBox is proprietary software, all rights reserved. See LICENSE.
+SenSÉ is proprietary software, all rights reserved. See LICENSE.
 Third-party components keep their own licenses; see THIRD-PARTY-NOTICES.txt.
 
-Project page: https://github.com/Hoyatla/SteamXBox-Explorer
+Project page: https://github.com/Hoyatla/SenSÉ-Explorer
 Community:    https://discord.gg/MmmvB5s3E

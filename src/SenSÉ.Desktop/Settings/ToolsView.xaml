@@ -1,0 +1,156 @@
+﻿<UserControl x:Class="SenSÉ.Desktop.Settings.ToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:SenSÉ.Shell.Localization;assembly=SenSÉ.Shell">
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+            <TextBlock Text="{loc:T Text='Outils'}" FontSize="20"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{StaticResource TextDimBrush}"
+                       Text="{loc:T Text='Un outil est un dossier. Le désactiver le garde en place. Archiver le compresse et libère la place. Éjecter supprime le dossier sans toucher à son archive.'}"/>
+        </StackPanel>
+
+        <TextBlock x:Name="Status" DockPanel.Dock="Bottom" Margin="0,12,0,0" FontSize="11"
+                   TextWrapping="Wrap" Foreground="{StaticResource TextDimBrush}"/>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <ItemsControl x:Name="Tools">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12,10"
+                                Background="{StaticResource BgMediumBrush}" CornerRadius="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- A gauche du nom, comme demande : ranger, puis jeter. -->
+                                <Button Grid.Column="0" Width="30" Height="30" Margin="0,0,4,0"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                        Click="Archive_Click" Tag="{Binding Id}" Visibility="{Binding ArchiveVisibility}"
+                                        ToolTip="{Binding ArchiveHint}"
+                                        Content="{Binding ArchiveGlyph}" FontFamily="Segoe Fluent Icons"
+                                        FontSize="15" Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                                <Button Grid.Column="1" Width="30" Height="30" Margin="0,0,10,0"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                        Click="Eject_Click" Tag="{Binding Id}" Visibility="{Binding EjectVisibility}"
+                                        ToolTip="{loc:T Text='Supprimer le dossier de cet outil'}"
+                                        Content="&#xE8F8;" FontFamily="Segoe Fluent Icons"
+                                        FontSize="15" Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding Detail}" FontSize="11"
+                                               Foreground="{StaticResource TextDimBrush}"/>
+                                </StackPanel>
+
+                                <CheckBox Grid.Column="3" VerticalAlignment="Center"
+                                          Content="{Binding SwitchLabel}"
+                                          IsChecked="{Binding IsEnabled, Mode=OneTime}"
+                                          IsEnabled="{Binding CanSwitch}"
+                                          Tag="{Binding Id}" Click="Switch_Click"
+                                          Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Les dependances ne sont pas des outils : ni tuile, ni interrupteur, ni ejection.
+                 Elles sont ici parce que c'est l'ecran ou l'on vient comprendre ce qui manque, et
+                 que la moitie de ce qui peut manquer a SenSÉ n'est pas dans SenSÉ. -->
+            <StackPanel x:Name="BlocDependances" Margin="0,20,0,0" Visibility="Collapsed">
+                <TextBlock Text="{loc:T Text='Dépendances'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"
+                           Text="{loc:T Text='Des programmes extérieurs que certains outils utilisent. SenSÉ ne les installe pas : il les cherche dans Outils, puis sur le système. Sans eux, seul l’outil concerné s’éteint.'}"/>
+
+                <ItemsControl x:Name="Dependances">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,8" Padding="12,10"
+                                    Background="{StaticResource BgMediumBrush}" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Nom}" FontSize="13"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource TextDimBrush}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                               Margin="12,0,0,0" FontSize="11"
+                                               Text="{Binding Marque}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Le générateur tient dans un fichier : c'est ce qui le rend portable.
+
+                 Le programme et son interpréteur — torch et CUDA compris — font cinq gigaoctets et
+                 ne s'installent nulle part : ni registre, ni service, ni dossier système. Ils
+                 partent donc dans une archive, et se remettent en place sur une autre machine sans
+                 rien télécharger. Les modèles, eux, restent dehors : soixante-six gigaoctets qui ne
+                 se compressent pas, et que Modeles\jeux-modeles.json sait déjà nommer et réclamer. -->
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="{loc:T Text='Générateur portable'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock x:Name="PaquetInfo" Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="Compresser" Content="{loc:T Text='Compresser…'}"
+                            Padding="12,6" Click="CompresserClic"/>
+                    <Button x:Name="Decompresser" Content="{loc:T Text='Décompresser…'}"
+                            Margin="8,0,0,0" Padding="12,6" Click="DecompresserClic"/>
+                    <Button x:Name="ArreterPaquet" Content="{loc:T Text='Arrêter'}"
+                            Margin="8,0,0,0" Padding="12,6" Visibility="Collapsed"
+                            Click="ArreterPaquetClic"/>
+                </StackPanel>
+
+                <ProgressBar x:Name="PaquetBarre" Height="4" Margin="0,10,0,0"
+                             Visibility="Collapsed" Minimum="0" Maximum="1000"/>
+                <TextBlock x:Name="PaquetEtat" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
+
+            <!-- Un programme extérieur écrit là où son environnement lui dit d'écrire, et nulle
+                 part ailleurs. SenSÉ lui en compose donc un, et l'installeur du tiers — celui
+                 de l'éditeur, pas une copie faite à la main — s'exécute dedans. Ce qui échappe
+                 malgré tout est mesuré et dit, parce qu'un isolement supposé ne vaut rien. -->
+            <StackPanel Margin="0,20,0,0">
+                <TextBlock Text="{loc:T Text='Accueillir un outil'}" FontSize="16"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Margin="0,4,0,10" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"
+                           Text="{loc:T Text='Faire tourner l’installeur d’un programme extérieur dans un dossier qui n’est qu’à lui, à l’intérieur de SenSÉ. Il s’installe normalement, mais ce qu’il croit être votre disque est le dossier qu’on lui donne — et il s’en va tout entier quand on supprime ce dossier.'}"/>
+
+                <Button x:Name="Accueillir" Content="{loc:T Text='Installer un programme ici…'}"
+                        Padding="12,6" HorizontalAlignment="Left" Click="AccueillirClic"/>
+
+                <TextBlock x:Name="AccueilEtat" Margin="0,8,0,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

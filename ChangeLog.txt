@@ -1,11 +1,11 @@
-SteamXBox - Change log
+﻿SenSÉ - Change log
 ======================
 
 
 0.5.0
 -----
   La numerotation repart a 0.5.0, et le produit tient desormais sa suite dans
-  son propre depot, SteamXBox-Explorer.
+  son propre depot, SenSÉ-Explorer.
 
   Ce qui la rend possible : la ligne publique et gratuite s'arrete a la 3.2 et
   n'ira pas plus loin. Les numeros 4.0 a 4.8.3 sont ceux de ce produit-ci, sous
@@ -18,7 +18,7 @@ SteamXBox - Change log
   compteur. Ce que la 4.8.3 apportait est dans la 0.5.0, et la suite se compte a
   partir d'ici.
 
-  * Toutes les adresses du produit designent desormais SteamXBox-Explorer :
+  * Toutes les adresses du produit designent desormais SenSÉ-Explorer :
     la page du projet dans README.txt, l'adresse d'assistance et de mise a jour
     des deux installeurs, et l'adresse ou l'agent de mise a jour ira lire son
     manifeste.
@@ -101,11 +101,11 @@ SteamXBox - Change log
   10:01-10:21, deux defauts cumules, tous les deux corriges ici.
 
   * Le clavier resident de la premiere manette tenait le journal partage
-    steamxbox-Sc2XboxedSticks.Osk-debug.log pendant toute la session, et chaque
+    SenSÉ-SenSÉSticks.Osk-debug.log pendant toute la session, et chaque
     clavier suivant mourrait sur la ligne qui l'ouvrait : IOException « deja
     utilise par un autre processus » avant meme sa banniere ou sa fenetre. Sept
     processions ont echoue ainsi dans la session (10:01, 10:15 x2, 10:16, 10:17,
-    10:19), chacune confirmee par l'Observateur d'evenements (Sc2Xboxed.Osk.Program.Main,
+    10:19), chacune confirmee par l'Observateur d'evenements (SenSÉ.Osk.Program.Main,
     code 0xe0434352). La console ne voyait aucune fenetre, le Core disait
     « le clavier a pris la manette et n'est pas a l'ecran ». Chaque instance a
     desormais son propre journal (suffixe dans le nom de fichier), et un journal
@@ -138,7 +138,7 @@ SteamXBox - Change log
     demandait a Windows quels pads HID etaient presents : il ne voyait que les pads
     virtuels ViGEm, tous ecartes comme tels, donc aucune coincidence n'arrivait
     jamais et l'attente durait indefiniment. Le Core publie desormais sa correlation
-    slot -> identite durable dans %LOCALAPPDATA%\SteamXBox\live-xinput-slots.json,
+    slot -> identite durable dans %LOCALAPPDATA%\SenSÉ\live-xinput-slots.json,
     et le dialogue la lit : la premiere manette qui s'identifie pendant la fenetre
     de 45 secondes est assignee au chip clique. Efface au demarrage — jamais de
     mapping herite d'une session precedente. Un appariement que l'arbre de
@@ -245,16 +245,16 @@ SteamXBox - Change log
 
 4.7
 ---
-  Ce que SteamXBox laissait derriere lui
+  Ce que SenSÉ laissait derriere lui
 
-  Un defaut signale depuis le debut du projet — « SteamXBox casse mon systeme, et
+  Un defaut signale depuis le debut du projet — « SenSÉ casse mon systeme, et
   ca continue apres l'avoir ferme » — etait traite chaque fois comme un incident
   isole. Il ne l'etait pas : le produit posait de l'etat en dehors de son propre
   processus, et presque tous ses chemins de restauration supposaient une sortie
   propre. Cette version est le resultat de l'inventaire de tout ce qu'il touche,
   ecrit dans EMPREINTE-SYSTEME.md.
 
-  * Il n'existait AUCUNE sortie propre. La croix de la fenetre, Stop-SteamXBox.cmd
+  * Il n'existait AUCUNE sortie propre. La croix de la fenetre, Stop-SenSÉ.cmd
     et « Core.exe stop » appelaient tous les trois Process.Kill, donc la ligne qui
     rend les manettes n'etait jamais atteinte. Les trois sont propres desormais.
 
@@ -493,7 +493,7 @@ SteamXBox - Change log
 
   * The button mapping is editable. All 18 remappable buttons are exposed, laid out like the
     controller, and saved in their own named profiles. Steam and Quick Access stay fixed: they
-    drive SteamXBox itself.
+    drive SenSÉ itself.
 
   * Menu now produces Start and View produces Back. They shipped inverted.
 
@@ -502,11 +502,11 @@ SteamXBox - Change log
     interface before doing anything; each one now has a real effect.
 
   * Holding Menu and View together for three seconds powers the controller off. Neither button
-    fires its own action on the way. SteamXBox unplugs the virtual pad and stands by, for as long
+    fires its own action on the way. SenSÉ unplugs the virtual pad and stands by, for as long
     as it takes, until the controller is switched back on.
 
   * An experimental trigger haptic channel, off by default. No trigger actuator has been confirmed
-    on this firmware; "SteamXBox.Core.exe haptic-probe" sweeps the actuator indices to find out.
+    on this firmware; "SenSÉ.Core.exe haptic-probe" sweeps the actuator indices to find out.
 
   * A Discord link sits at the bottom of the navigation rail, above the status cards.
 
@@ -528,7 +528,7 @@ SteamXBox - Change log
     profile fell back to "Default" at the next launch, and "Start with Windows" did not stick.
 
   * The Windows startup entry is verified after being written, and the interface shows the command
-    Windows will actually run, with a warning when it points at a different copy of SteamXBox.
+    Windows will actually run, with a warning when it points at a different copy of SenSÉ.
 
   * Profile names containing spaces are passed to the runtime correctly.
 
@@ -547,4 +547,4 @@ Earlier versions
 
   That line is closed: 3.2 is the last of it, and it stays where it was published —
   the free, public repository. Everything from 4.0 onwards belongs to this product,
-  which now counts from 0.5.0 in SteamXBox-Explorer.
+  which now counts from 0.5.0 in SenSÉ-Explorer.

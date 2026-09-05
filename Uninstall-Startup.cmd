@@ -1,13 +1,13 @@
-@echo off
+﻿@echo off
 setlocal
 
-set "STEAMXBOX_SHORTCUT=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\SteamXBox.lnk"
+set "SenSÉ_SHORTCUT=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\SenSÉ.lnk"
 
-if exist "%STEAMXBOX_SHORTCUT%" (
-  del /q "%STEAMXBOX_SHORTCUT%"
-  echo [OK] Demarrage automatique SteamXBox retire.
+if exist "%SenSÉ_SHORTCUT%" (
+  del /q "%SenSÉ_SHORTCUT%"
+  echo [OK] Demarrage automatique SenSÉ retire.
 ) else (
-  echo [OK] Aucun raccourci de demarrage automatique SteamXBox a retirer.
+  echo [OK] Aucun raccourci de demarrage automatique SenSÉ a retirer.
 )
 
 echo.

@@ -1,4 +1,4 @@
-# État au 12 août — à lire avant de reprendre
+﻿# État au 12 août — à lire avant de reprendre
 
 Document de reprise. Il existe pour que la prochaine séance ne recommence pas les mesures de
 celle-ci. Écrit après une journée au bilan médiocre : deux régressions introduites puis corrigées,
@@ -27,7 +27,7 @@ En mode Xbox, isolément :
 1. bouger **seulement le stick gauche**, 3 s
 2. puis **seulement les gâchettes**, 3 s
 
-Puis lire `steamxbox-debug.log`, lignes `mode=Xbox360`.
+Puis lire `SenSÉ-debug.log`, lignes `mode=Xbox360`.
 
 | Résultat | Conclusion |
 |---|---|
@@ -83,9 +83,9 @@ permanence. Une modification qui routait le pad droit vers le stick droit a ét�
 | **`SendInput` : retour jeté** | Douze appels d'`InputHelper` ignoraient la valeur de retour. Le compteur affichait `mouse events=103` pour une seconde où rien n'était parti. Passent maintenant par un point unique : `INJECTION REFUSEE ×N (erreur N)`. |
 | **Élévation** | Les quatre exécutables en `requireAdministrator`, vérifié dans la ressource `RT_MANIFEST` de chaque binaire. Sans elle, aucune injection vers un lanceur de jeu. |
 | **Manette Xbox physique disparue** | Ma régression. Une vraie Xbox 360 filaire porte le même `VID_045E&PID_028E` qu'une manette ViGEm ; le filtre ajouté rejetait le slot avec la vraie manette dedans. Les manettes émulées sont maintenant écartées **avant** l'association, dans `XusbInterfacePaths`. |
-| **Adoption de sa propre sortie** | SteamXBox redécouvrait sa manette virtuelle 0,4 s après l'avoir créée, lui donnait un clavier, et la masquait avec HidHide. Le garde-fou existant n'avait jamais pu fonctionner (deux raisons distinctes, documentées dans `XInputDurableIdentity`). |
+| **Adoption de sa propre sortie** | SenSÉ redécouvrait sa manette virtuelle 0,4 s après l'avoir créée, lui donnait un clavier, et la masquait avec HidHide. Le garde-fou existant n'avait jamais pu fonctionner (deux raisons distinctes, documentées dans `XInputDurableIdentity`). |
 | **Profil non rendu après l'OSK** | `OskActive` restait vrai indéfiniment. L'incrustation bat désormais un fichier tant qu'elle est à l'écran ; une prise de main non confirmée pendant 6 s est rendue. |
-| **29 périphériques fantômes** | Retirés. Un registre (`%LOCALAPPDATA%\SteamXBox\virtual-pads.txt`) note ce que le produit crée, et le désinstalleur appelle `pads-cleanup`. |
+| **29 périphériques fantômes** | Retirés. Un registre (`%LOCALAPPDATA%\SenSÉ\virtual-pads.txt`) note ce que le produit crée, et le désinstalleur appelle `pads-cleanup`. |
 
 ---
 
@@ -102,9 +102,9 @@ mesuré, pas avant.
 
 ## 6. Travail `uiAccess`, en place et non testé
 
-- Certificat auto-signé `CN=SteamXBox Test Signing (NE PAS LIVRER)`, empreinte
+- Certificat auto-signé `CN=SenSÉ Test Signing (NE PAS LIVRER)`, empreinte
   `ECF2527F921410AC28C86D66B1BAA4D83923E3AD`, dans *Racines de confiance* et *Éditeurs approuvés*
-- Copie signée du noyau dans `C:\Program Files\SteamXBoxTest\` — jamais exécutée
+- Copie signée du noyau dans `C:\Program Files\SenSÉTest\` — jamais exécutée
 - Les deux projets injecteurs ont deux manifestes, choisis par la présence d'un certificat
 
 `uiAccess` donnerait le droit d'injecter vers des fenêtres élevées **sans** invite UAC — ce qui
@@ -116,7 +116,7 @@ compte pour des écoles et des entreprises. Il exige signature *et* emplacement 
 certutil -delstore Root ECF2527F921410AC28C86D66B1BAA4D83923E3AD
 certutil -delstore TrustedPublisher ECF2527F921410AC28C86D66B1BAA4D83923E3AD
 ```
-puis supprimer `C:\Program Files\SteamXBoxTest`.
+puis supprimer `C:\Program Files\SenSÉTest`.
 
 ---
 
@@ -143,8 +143,8 @@ puis supprimer `C:\Program Files\SteamXBoxTest`.
 Instrumentation : `RuntimeCounters.cs`, `tools/Moniteur/Program.cs`, `InputHelper.cs`
 Correctifs : `XInputDurableIdentity.cs`, `DeviceTree.cs`, `ProfileMapper.cs`, `OskInstanceNaming.cs`,
 `Osk/Program.cs`, `VirtualPadSet.cs`, `DualSenseControllerSource.cs`, `App.Console/Program.cs`
-Élévation : les quatre `app.manifest`, `SteamXBox.Desktop.csproj`
-Nouveaux : `OskPresence.cs`, `app.uiaccess.manifest`, `SteamXBox.Debug.exe`, `tools/LanceurDebug/`
+Élévation : les quatre `app.manifest`, `SenSÉ.Desktop.csproj`
+Nouveaux : `OskPresence.cs`, `app.uiaccess.manifest`, `SenSÉ.Debug.exe`, `tools/LanceurDebug/`
 Installeurs : les deux `.iss` (appel de `pads-cleanup` à la désinstallation)
 
 `git diff` par fichier permet d'annuler sélectivement. Rien n'est à moitié fait : tout ce qui est

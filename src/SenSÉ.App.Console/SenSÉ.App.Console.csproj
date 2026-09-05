@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
+    <ProjectReference Include="..\SenSÉ.Hid\SenSÉ.Hid.csproj" />
+    <ProjectReference Include="..\SenSÉ.VirtualGamepad\SenSÉ.VirtualGamepad.csproj" />
+    <ProjectReference Include="..\SenSÉ.Windows\SenSÉ.Windows.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>SenSÉ.Core</AssemblyName>
+    <RootNamespace>SenSÉ.App.Console</RootNamespace>
+    <ApplicationIcon>Assets\SenSÉ.ico</ApplicationIcon>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ</AssemblyTitle>
+    <Description>Steam Controller to Xbox 360 virtual controller bridge.</Description>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!--
+      Deux manifestes, choisis par la presence d'un certificat, exactement comme SenSÉ.Osk.
+
+      La copie ordinaire demande requireAdministrator. La version signee prend a la place
+      asInvoker + uiAccess="true" : les deux sont incompatibles, uiAccess existant precisement pour
+      donner le droit d'injecter des entrees SANS etre administrateur.
+
+      Mesure du 12 aout : eleve, SendInput a ete refuse mille fois par seconde avec l'erreur 5
+      pendant qu'un lanceur de jeu tenait le premier plan. L'elevation monte le processus en
+      integrite High, ce qui ne franchit ni System ni un processus protege par un anti-triche.
+      uiAccess est le mecanisme documente pour cela, et il exige un binaire signe ET installe dans
+      un emplacement sur - Program Files, pas un dossier de travail.
+
+      uiAccess="true" dans une copie portable non signee la rend simplement inlancable, d'ou le
+      conditionnel plutot qu'un seul manifeste.
+    -->
+    <ApplicationManifest Condition="'$(SenSÉSignThumbprint)' != '' or '$(SenSÉSignCertificate)' != ''">app.uiaccess.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(ApplicationManifest)' == ''">app.manifest</ApplicationManifest>
+
+    <!--
+      Un seul fichier, autonome, comme les autres executables du produit.
+
+      Ces trois lignes manquaient et rien ne le signalait : « dotnet publish » produisait un apphost
+      accompagne de ses assemblages, et copier le seul .exe a la racine donnait un binaire qui
+      demarre puis annonce qu'il ne trouve pas son propre .dll. Le 11 aout 2026 un Core casse a ete
+      deploye ainsi, et decouvert seulement en essayant de le lancer.
+
+      Ecrit ici plutot que passe en options a la main : une option qu'il faut se rappeler est une
+      option qu'on oublie, et l'oubli produit un binaire qui a l'air correct.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+
+</Project>

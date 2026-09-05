@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    La logique des outils, sans interface.
+
+    Cible net10.0 et non net10.0-windows : c'est cette separation qui permet au projet de tests de
+    l'atteindre. Tout ce qu'un outil decide — des regles, des bornes, du formatage — appartient ici ;
+    ce qui dessine, ecoute Windows ou touche au presse-papiers reste dans SenSÉ.Desktop, ou rien
+    n'est testable.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SenSÉ.Tools</RootNamespace>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ Tools</AssemblyTitle>
+    <Description>SenSÉ - logique des outils, sans interface.</Description>
+  </PropertyGroup>
+  <!--
+    Le vocabulaire des manifestes. L assistant construit la liste des outils qu il peut appeler
+    a partir des manifestes eux-memes : decrit une fois, lu par le chargeur, par l editeur et
+    par le modele. Une seconde description, ecrite a la main pour le modele, divergerait.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Plugins\SenSÉ.Plugins.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+
+    <!--
+      Le chiffrement au repos de l'index du courrier, par la protection de donnees de Windows.
+      Voir Search/PersonalFile.cs : la cle vient du compte Windows, il n'y a donc rien a retenir
+      pour l'utilisateur ni rien a stocker pour ce produit.
+    -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <PackageReference Include="PdfPig" Version="0.1.15" />
+  </ItemGroup>
+
+</Project>

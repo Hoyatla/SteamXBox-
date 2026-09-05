@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ce qui est commun a toutes les fenetres de SenSÉ : le theme, la traduction, le catalogue de
+    themes et le centre de controle.
+
+    Cette bibliotheque existe pour que SenSÉ.Desktop ne soit pas oblige de vivre dans le
+    processus du pont manette. Le GUI configure la manette ; Desktop est l'environnement. Ce sont
+    deux surfaces differentes, avec des cycles de vie differents, et les melanger devient
+    ingerable des qu'il y a plus d'un module. Elles partagent leur apparence, pas leur processus.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\SenSÉ.Hid\SenSÉ.Hid.csproj" />
+    <ProjectReference Include="..\SenSÉ.Windows\SenSÉ.Windows.csproj" />
+    <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
+    <ProjectReference Include="..\SenSÉ.Plugins\SenSÉ.Plugins.csproj" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>SenSÉ.Shell</RootNamespace>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ Shell</AssemblyTitle>
+    <Description>SenSÉ - theme, localisation et centre de controle partages.</Description>
+  </PropertyGroup>
+
+</Project>

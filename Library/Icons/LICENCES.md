@@ -1,10 +1,10 @@
-# Icônes — provenance et licences
+﻿# Icônes — provenance et licences
 
 75 272 icônes, 10 jeux, récupérées depuis [Iconify](https://iconify.design) via le dépôt
 [iconify/icon-sets](https://github.com/iconify/icon-sets). Un dossier par jeu, comme sur le site.
 
 **Tous les jeux ci-dessous autorisent l'usage commercial**, donc la distribution dans une version
-gratuite comme dans une version payante de SteamXBox. C'est le critère qui a présidé à la sélection :
+gratuite comme dans une version payante de SenSÉ. C'est le critère qui a présidé à la sélection :
 Iconify agrège 231 jeux, dont certains en *non commercial* et en GPL-2, volontairement écartés.
 
 Chaque dossier contient son propre `LICENSE.txt` avec l'auteur, la source et le texte de référence.
@@ -62,7 +62,7 @@ livrés avec ; sinon, reprends-les dans les mentions légales.
 Les icônes de marque sont libres **en tant que fichiers**, mais les marques qu'elles représentent
 appartiennent à leurs détenteurs. S'en servir pour désigner un service — un bouton « ouvrir Steam »,
 un lien Discord — est de l'usage nominatif, admis. S'en servir comme identité de ton propre logiciel
-ne l'est pas. Cela vaut pour le logo Steam en particulier, vu ce que fait SteamXBox.
+ne l'est pas. Cela vaut pour le logo Steam en particulier, vu ce que fait SenSÉ.
 
 ## Ajouter d'autres jeux
 
@@ -79,9 +79,9 @@ la page du jeu, et l'outil la recopie dans le `LICENSE.txt` du dossier.
 
 | Icône | Source | Licence |
 |---|---|---|
-| `branding/Desktop.ico` (SteamXBox.Desktop.exe) | `fluent/window-24-regular.svg` | MIT — libre en gratuit et en payant, aucune attribution obligatoire |
-| `branding/OverlayKeyboard.ico` (Sc2Xboxed.Osk.exe) | `clavier overlay.png` (fourni) | à confirmer par l'auteur du projet |
-| `branding/SteamXBox.ico` (SteamXBox.exe) | `background/steamxbox_share_image1.png` | œuvre du projet |
+| `branding/Desktop.ico` (SenSÉ.Desktop.exe) | `fluent/window-24-regular.svg` | MIT — libre en gratuit et en payant, aucune attribution obligatoire |
+| `branding/OverlayKeyboard.ico` (SenSÉ.Osk.exe) | `clavier overlay.png` (fourni) | à confirmer par l'auteur du projet |
+| `branding/SenSÉ.ico` (SenSÉ.exe) | `background/SenSÉ_share_image1.png` | œuvre du projet |
 
 Aucune icône Icons8 n'est employée : leur palier gratuit impose un lien d'attribution
 visible et un produit payant demande une licence achetée, ce qui ne convient pas à un

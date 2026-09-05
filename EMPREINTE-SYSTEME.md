@@ -1,6 +1,6 @@
-# Empreinte système de SteamXBox
+﻿# Empreinte système de SenSÉ
 
-**Tout ce que SteamXBox modifie en dehors de son propre processus, qui le restaure, et quand.**
+**Tout ce que SenSÉ modifie en dehors de son propre processus, qui le restaure, et quand.**
 
 Établi le 11 août 2026 par balayage exhaustif du code et vérification de l'état réel de la machine
 de développement. Ce n'est pas une liste de mémoire : chaque ligne renvoie à un fichier, et la
@@ -8,9 +8,9 @@ colonne « constaté » dit ce qui a été mesuré ce jour-là.
 
 ## Pourquoi ce document existe
 
-Un défaut a été signalé depuis le début du projet — « SteamXBox casse mon système, et ça continue
+Un défaut a été signalé depuis le début du projet — « SenSÉ casse mon système, et ça continue
 après l'avoir fermé » — et il a été traité chaque fois comme un incident isolé. Il ne l'est pas.
-C'est une **propriété de conception** : SteamXBox écrit de l'état qui vit en dehors de lui, et
+C'est une **propriété de conception** : SenSÉ écrit de l'état qui vit en dehors de lui, et
 presque tous ses chemins de restauration supposent une sortie propre.
 
 Une sortie propre est le cas rare. L'utilisateur ferme la fenêtre de console, tue le processus,
@@ -21,9 +21,9 @@ restauration qui n'aura pas lieu le jour où elle compte.
 
 Deux, et elles ne se négocient pas.
 
-### 1. Le clavier et la souris physiques passent avant SteamXBox
+### 1. Le clavier et la souris physiques passent avant SenSÉ
 
-> **SteamXBox ne doit jamais couper le clavier ni la souris physiques au profit de quoi que ce soit.**
+> **SenSÉ ne doit jamais couper le clavier ni la souris physiques au profit de quoi que ce soit.**
 > La saisie doit rester possible au clavier, à la souris **et** au clavier à l'écran, ensemble.
 
 Posée par l'utilisateur le 11 août 2026, et elle est plus qu'une préférence : c'est la condition pour
@@ -35,7 +35,7 @@ seul appareil composite**. Sur la machine de développement, `VID_37D7&PID_2501`
 
 | Interface | Ce que c'est |
 |---|---|
-| `&MI_00` | manette Xbox — **ce que SteamXBox masque** |
+| `&MI_00` | manette Xbox — **ce que SenSÉ masque** |
 | `&MI_01&COL01` | **clavier** |
 | `&MI_01&COL02` | **souris** |
 | le parent | l'appareil composite qui porte les trois |
@@ -55,7 +55,7 @@ masquage. Chaque refus est journalisé avec sa raison.
 | Masquage HID | **garde en place**, vérifiée contre les appareils réels |
 | Crochet clavier bas niveau | ne gèle plus la frappe depuis le 11 août, mais voit toujours toutes les touches |
 | Clavier à l'écran | au privilège de l'utilisateur : ne peut plus taper dans une fenêtre élevée |
-| Mode lézard du Steam Controller | désactive l'émulation clavier-souris **de la manette** — voulu, et la manette la reprend d'elle-même dès que SteamXBox se tait |
+| Mode lézard du Steam Controller | désactive l'émulation clavier-souris **de la manette** — voulu, et la manette la reprend d'elle-même dès que SenSÉ se tait |
 
 Toute nouveauté qui touche à un périphérique d'entrée se mesure contre cette règle **avant** d'être
 écrite, pas après.
@@ -85,17 +85,17 @@ existe, prendre le second.
 | **Manette virtuelle Xbox 360** | pilote ViGEmBus | `PadSender.DisconnectAsync`, et Windows en fermant le descripteur | sortie propre, ou mort du processus | **non — mesuré** |
 | **Mode lézard désactivé** (Steam Controller) | dans la manette | la manette elle-même, dès que le battement cesse | à la seconde qui suit | **non** |
 
-**Constaté le 11 août, SteamXBox fermé :** le masquage global était **actif**, avec **5 appareils
-masqués** alors que la note de SteamXBox n'en revendiquait que **2**. Une entrée **vide**
+**Constaté le 11 août, SenSÉ fermé :** le masquage global était **actif**, avec **5 appareils
+masqués** alors que la note de SenSÉ n'en revendiquait que **2**. Une entrée **vide**
 (`--app-reg ""`) figurait dans la liste blanche du pilote. Une manette Xbox 360 présente était
 masquée, donc invisible pour Steam et pour les jeux. La cause : la note vivait à côté de
-l'exécutable, donc chaque copie de SteamXBox avait la sienne, et celle de la copie désinstallée est
+l'exécutable, donc chaque copie de SenSÉ avait la sienne, et celle de la copie désinstallée est
 partie à la corbeille avec elle.
 
 ### Le mode lézard se répare tout seul, et c'est voulu
 
 La manette **réarme son émulation clavier-souris d'elle-même** quand plus rien ne lui dit de se
-taire. C'est la raison d'être du battement toutes les 800 ms : tant que SteamXBox parle, la manette
+taire. C'est la raison d'être du battement toutes les 800 ms : tant que SenSÉ parle, la manette
 se tait ; dès qu'il meurt, elle revient. Aucun état à réparer, personne à qui le demander.
 
 **Ce document a d'abord dit le contraire, et c'était faux à moitié.** `Disable()` change deux
@@ -116,7 +116,7 @@ vit. Windows le ferme à la mort du processus, quelle qu'en soit la cause.
 après un kill brutal**, et toujours zéro huit secondes plus tard.
 
 Deux tentatives antérieures n'avaient rien démontré et le document le disait : la session tournait en
-mode **profil**, où SteamXBox pilote le pointeur et ne crée aucune manette virtuelle. Il faut
+mode **profil**, où SenSÉ pilote le pointeur et ne crée aucune manette virtuelle. Il faut
 `--start-mode gamepad` pour que la question ait un sens — une mesure sur le mauvais mode répond à une
 autre question.
 
@@ -135,7 +135,7 @@ vie est déjà celle du processus.**
 ```
 
 Quatre dixièmes de seconde après avoir créé une manette virtuelle pour que les jeux la voient,
-SteamXBox la redécouvrait, l'adoptait comme manette entrante, lui allouait un clavier et un processus
+SenSÉ la redécouvrait, l'adoptait comme manette entrante, lui allouait un clavier et un processus
 d'incrustation — et la **masquait avec HidHide**. La sortie annulait son propre but.
 
 Un garde-fou existait et n'a jamais fonctionné, pour deux raisons distinctes qu'il fallait mesurer
@@ -164,7 +164,7 @@ jamais d'elle-même.
 manettes virtuelles `\01 \02 \03`, plus onze jeux d'interfaces `IG_00` à `IG_0A` empilés au fil des
 sessions.
 
-Ce n'est pas cosmétique. SteamXBox associe un slot XInput à une manette physique en énumérant les
+Ce n'est pas cosmétique. SenSÉ associe un slot XInput à une manette physique en énumérant les
 appareils XUSB ; avec une dizaine de candidats indiscernables il **renonce**, et le dit :
 
 ```
@@ -184,9 +184,9 @@ XInput et HID, dont Windows frappe un numéro neuf à chaque fois. Environ deux 
 
 #### Un registre, parce qu'une règle serait une supposition
 
-SteamXBox note désormais, à chaque création, les nœuds que sa propre manette virtuelle a fait
+SenSÉ note désormais, à chaque création, les nœuds que sa propre manette virtuelle a fait
 apparaître — la différence entre l'état du bus avant et après la connexion. Le fichier est
-`%LOCALAPPDATA%\SteamXBox\virtual-pads.txt`.
+`%LOCALAPPDATA%\SenSÉ\virtual-pads.txt`.
 
 Le nettoyage évident serait « retirer tout `VID_045E&PID_028E` absent », et c'est ce que le premier
 passage a fait ici. Ça marche sur cette machine et **c'est une supposition** : ce couple identifie
@@ -196,7 +196,7 @@ gravité — Windows la recrée — mais ce n'est pas notre enregistrement à ef
 la supposition en liste.
 
 Rien n'est retiré pendant l'usage : cela demande l'administrateur, et le produit a délibérément cessé
-de le demander. `SteamXBox.Core.exe pads-cleanup` est appelé **par le désinstalleur**, après `stop` et
+de le demander. `SenSÉ.Core.exe pads-cleanup` est appelé **par le désinstalleur**, après `stop` et
 `hidhide-off` — retirer des enregistrements pendant que le produit tient encore ses manettes
 retirerait des appareils en service. Ce qui résiste reste inscrit plutôt que d'être oublié.
 
@@ -219,14 +219,14 @@ couvre que ce qui sera créé à partir de maintenant.
 | **Écoute du presse-papiers** (`AddClipboardFormatListener`) | toutes les copies de la machine | `ClipboardService.Stop` | sortie | non — mais **nuisible pendant** |
 
 Ces deux-là ne survivent pas au processus, et c'est précisément ce qui les a rendus difficiles à
-attribuer : le symptôme disparaît en fermant SteamXBox, ce qui ressemble à une coïncidence.
+attribuer : le symptôme disparaît en fermant SenSÉ, ce qui ressemble à une coïncidence.
 
 **Défaut trouvé et corrigé le 11 août :** le crochet était installé depuis le fil d'interface. Un
 crochet bas niveau est livré **sur le fil qui l'a installé**, et chaque frappe de chaque application
 attend sa réponse. Le service presse-papiers lisait le presse-papiers **dans la pompe à messages du
 même fil** ; copier un dossier dans l'explorateur bloquait ce fil sur l'explorateur, donc bloquait le
 clavier de toute la machine. Mesuré : **33 secondes de clavier mort dans toutes les applications**,
-jusqu'à la fermeture de SteamXBox.
+jusqu'à la fermeture de SenSÉ.
 
 Le crochet a désormais un fil dédié qui ne fait rien d'autre. Le presse-papiers ne lit plus rien dans
 la pompe et ignore les fichiers copiés.
@@ -238,7 +238,7 @@ Trois questions ont coûté une journée parce que rien ne les mesurait. Elles l
 | Question | Où c'est lu | Ce qui apparaît |
 |---|---|---|
 | Le curseur a-t-il bougé ? | moniteur, 20 ms | `pointeur mouvements inj/phys=… curseur=…` |
-| Est-ce SteamXBox ou l'utilisateur ? | moniteur, crochet `WH_MOUSE_LL` | `inj/phys` — le drapeau `LLMHF_INJECTED` |
+| Est-ce SenSÉ ou l'utilisateur ? | moniteur, crochet `WH_MOUSE_LL` | `inj/phys` — le drapeau `LLMHF_INJECTED` |
 | Combien de sources lisent une manette ? | noyau, ligne `Counter` | `SOURCES MULTIPLES=3 pad-a:66 pad-b:66 pad-c:66` |
 | Le pad est-il touché sans rien produire ? | noyau, ligne `Counter` | `PAD SOURD`, et `pad ignoré=N (raison)` |
 
@@ -292,7 +292,7 @@ qu'on croyait l'intention.
 | **Maj verrouillée** par l'OSK | toute la machine | garde-fou explicite `KeyUp(0xA0)` | non, depuis longtemps |
 
 Un bouton enfoncé n'est pas envoyé à une fenêtre : il change l'état du périphérique. Il survit donc à
-tout, y compris à la fermeture de SteamXBox — seul un redémarrage le défait.
+tout, y compris à la fermeture de SenSÉ — seul un redémarrage le défait.
 
 **Défaut trouvé et corrigé le 12 août :** l'arête suspendait le **relâchement** en même temps que
 l'appui pendant que l'OSK tenait la manette. C'est juste pour un raccourci — une touche tapée sous
@@ -333,7 +333,7 @@ exprès, et parce qu'un désinstalleur devra les rendre.
 
 ---
 
-## 4. Fenêtres qui n'appartiennent pas à SteamXBox
+## 4. Fenêtres qui n'appartiennent pas à SenSÉ
 
 | Action | Cible | Qui restaure | Quand | Survit à un crash ? |
 |---|---|---|---|---|
@@ -352,11 +352,11 @@ suivie que si elle est postérieure au dernier démarrage de la machine, et simp
 Vérifié le 11 août avec une marque datée de trois jours : effacée, **aucune fenêtre relevée**.
 | `SetForegroundWindow` / `BringWindowToTop` | la fenêtre choisie par l'utilisateur | sans objet | — | non |
 
-**Vérifié :** SteamXBox ne pose `HWND_TOPMOST` que sur **ses propres** fenêtres (le clavier à
+**Vérifié :** SenSÉ ne pose `HWND_TOPMOST` que sur **ses propres** fenêtres (le clavier à
 l'écran). Aucune fenêtre étrangère n'est forcée au premier plan. Le verrou d'ordre Z n'agit que sur
 la fenêtre d'environnement.
 
-L'hypothèse « SteamXBox pose des drapeaux topmost partout », soutenue puis abandonnée plusieurs fois,
+L'hypothèse « SenSÉ pose des drapeaux topmost partout », soutenue puis abandonnée plusieurs fois,
 est **fausse** et ce document la clôt.
 
 ---
@@ -365,13 +365,13 @@ est **fausse** et ce document la clôt.
 
 | Processus | Lancé par | Qui l'arrête | Survit à un crash du parent ? |
 |---|---|---|---|
-| `SteamXBox.Core.exe` | le GUI | `CoreProcessService`, **et le noyau** | **non** |
-| `Sc2Xboxed*.Osk.exe` | le Core, à l'ouverture du clavier | le Core, **et le noyau** | **non** |
-| `SteamXBox-Moniteur.exe` | l'utilisateur, depuis une tuile | fermeture de sa fenêtre | **oui — et c'est voulu** |
+| `SenSÉ.Core.exe` | le GUI | `CoreProcessService`, **et le noyau** | **non** |
+| `SenSÉ*.Osk.exe` | le Core, à l'ouverture du clavier | le Core, **et le noyau** | **non** |
+| `SenSÉ-Moniteur.exe` | l'utilisateur, depuis une tuile | fermeture de sa fenêtre | **oui — et c'est voulu** |
 
 ### Le noyau s'en charge, pas un chemin de sortie
 
-Chaque enfant que SteamXBox lance comme sa propre machinerie rejoint un **job object** portant
+Chaque enfant que SenSÉ lance comme sa propre machinerie rejoint un **job object** portant
 `KILL_ON_JOB_CLOSE`. Windows ferme le descripteur du job quand le processus qui le tient s'arrête —
 sortie propre, exception, force-kill, coupure de courant — et le noyau termine alors tout ce qui est
 dedans.
@@ -404,7 +404,7 @@ la session qu'il observe.
 
 ## 6. Fichiers hors du dossier applicatif
 
-`%LOCALAPPDATA%\SteamXBox\` — 18 Mo, dont :
+`%LOCALAPPDATA%\SenSÉ\` — 18 Mo, dont :
 
 | Fichier | Rôle | Remarque |
 |---|---|---|
@@ -417,7 +417,7 @@ la session qu'il observe.
 
 `plugins-disabled.json` et `stop.requested` ont été supprimés le 11 août : orphelins l'un et l'autre.
 
-`%USERPROFILE%\Pictures\SteamXBox\` — captures d'écran, voulues.
+`%USERPROFILE%\Pictures\SenSÉ\` — captures d'écran, voulues.
 
 `hidhide-hidden.state` — désormais dans l'état partagé, plus à côté de l'exécutable.
 
@@ -452,8 +452,8 @@ aux lettres qui existe toujours, donc le coût est une reconstruction, pas une p
 
 | Version | Emplacement | Date | Démarre avec Windows |
 |---|---|---|---|
-| **3.2.0** | `C:\Users\User\AppData\Local\Programs\SteamXBox\` | 1 août | **oui** (`HKCU\...\Run`) |
-| **4.6.0** | `D:\...\SteamXBox-portable-win-x64\` | 10 août | non |
+| **3.2.0** | `C:\Users\User\AppData\Local\Programs\SenSÉ\` | 1 août | **oui** (`HKCU\...\Run`) |
+| **4.6.0** | `D:\...\SenSÉ-portable-win-x64\` | 10 août | non |
 
 **C'est la découverte la plus importante de cet inventaire.**
 
@@ -506,10 +506,10 @@ moins réel : rien ne garantit qu'il le reste.
 
 | Exécutable | Manifeste avant | Après |
 |---|---|---|
-| `SteamXBox.exe` (GUI) | `requireAdministrator` | `asInvoker` |
-| `SteamXBox.Core.exe` | `requireAdministrator` | `asInvoker` |
-| `Sc2Xboxed*.Osk.exe` (clavier à l'écran) | `requireAdministrator` | `asInvoker` |
-| `SteamXBox.Desktop.exe` (environnement) | aucun manifeste | inchangé |
+| `SenSÉ.exe` (GUI) | `requireAdministrator` | `asInvoker` |
+| `SenSÉ.Core.exe` | `requireAdministrator` | `asInvoker` |
+| `SenSÉ*.Osk.exe` (clavier à l'écran) | `requireAdministrator` | `asInvoker` |
+| `SenSÉ.Desktop.exe` (environnement) | aucun manifeste | inchangé |
 
 **C'est probablement la cause structurelle de la plus grande partie des symptômes signalés depuis le
 début du projet.**
@@ -522,7 +522,7 @@ fenêtre d'un processus de privilège supérieur. Les conséquences observées :
   devant lui, et rien de non élevé ne peut le réordonner. C'est « le clic ne met plus les fenêtres
   en avant » et « aucune fenêtre ne passe devant l'ancienne ».
 - Un Gestionnaire des tâches non élevé ne peut pas arrêter ces processus.
-- **`SteamXBox.Desktop` ne peut pas piloter `Core` ni l'OSK.** La signalisation par fichiers
+- **`SenSÉ.Desktop` ne peut pas piloter `Core` ni l'OSK.** La signalisation par fichiers
   (`DesktopSignal`, « OSK close signal written ») existe pour contourner cette frontière — un
   contournement d'un problème que le produit s'est créé lui-même.
 
@@ -602,7 +602,7 @@ démarrer le processus**. Pas de dégradation, pas d'avertissement — le clavie
 plus du tout.
 
 Basculer ce drapeau avant d'avoir le certificat **casse la fonctionnalité au lieu de l'améliorer**.
-La condition est inscrite dans `Sc2Xboxed.Osk.csproj`, à l'endroit où quelqu'un la lira au moment de
+La condition est inscrite dans `SenSÉ.Osk.csproj`, à l'endroit où quelqu'un la lira au moment de
 signer.
 
 ### Les curseurs de Windows sont remplacés, et personne ne prévient
@@ -629,6 +629,6 @@ document dont la restauration dépend encore de quelqu'un qui y pense.
 
 ## Comment maintenir ce document
 
-Toute nouvelle chose qui touche à autre chose que le processus de SteamXBox s'ajoute ici **avant**
+Toute nouvelle chose qui touche à autre chose que le processus de SenSÉ s'ajoute ici **avant**
 d'être écrite, avec sa ligne de restauration remplie. Une ligne dont la colonne « survit à un crash »
 dit « non » est un défaut, pas une note.

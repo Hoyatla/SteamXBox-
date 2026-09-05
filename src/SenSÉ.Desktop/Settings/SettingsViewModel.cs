@@ -1,0 +1,302 @@
+﻿using SenSÉ.Shell;
+using SenSÉ.Shell.Theming;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using SenSÉ.Core.Osk;
+using SenSÉ.Shell.Localization;
+
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+
+namespace SenSÉ.Desktop.Settings;
+
+/// <summary>
+/// ComboBox entry pairing a localized label with the enum value actually stored. Binding to the
+/// value rather than the label keeps the UI and the settings model from drifting apart.
+/// </summary>
+
+
+/// <summary>ComboBox entry for the interface language.</summary>
+public sealed record LanguageOption(string Display, AppLanguage Value);
+
+public partial class SettingsViewModel : ObservableObject
+{
+    private readonly SettingsService _settingsService;
+
+    [ObservableProperty] private bool _autoStart = false;
+    [ObservableProperty] private bool _minimizeToTray = true;
+
+    /// <summary>Démarrer le générateur dès le lancement, pour qu'il soit prêt au premier clic.</summary>
+    [ObservableProperty] private bool _prechaufferGenerateur;
+
+    [ObservableProperty] private int _devicePollInterval = 3;
+    [ObservableProperty] private bool _isHidHideInstalled;
+    [ObservableProperty] private bool _isVigEmInstalled;
+    [ObservableProperty] private string _hidHideStatus = Strings.Current["Inconnu"];
+    [ObservableProperty] private string _vigEmStatus = Strings.Current["Inconnu"];
+
+    public SettingsViewModel()
+    {
+        _settingsService = App.SettingsSvc;
+        _settingsService.Load();
+
+        LoadWindowsPlugins();
+
+        AutoStart = _settingsService.Settings.AutoStart;
+        MinimizeToTray = _settingsService.Settings.MinimizeToTray;
+        PrechaufferGenerateur = _settingsService.Settings.PrechaufferGenerateur;
+        // Clamped on load, not only on the slider: a stored value of 30 s meant a controller could sit
+        // plugged in for half a minute before SenSÉ noticed it, which reads as "auto-start is
+        // broken". Ten seconds is already generous for a detection poll.
+        DevicePollInterval = Math.Clamp(_settingsService.Settings.DevicePollIntervalMs / 1000, AppSettings.MinPollSeconds, AppSettings.MaxPollSeconds);
+
+        CheckDriverStatus();
+
+        // Shown from the start, not only after the checkbox is toggled. The entry can be created by
+        // the portable Install-Startup script or by an older install, and then the interface said
+        // nothing at all — which reads as "this setting does nothing".
+        if (WindowsStartupService.IsEnabled())
+        {
+            StartupStatus = DescribeRegistration();
+        }
+    }
+
+    partial void OnAutoStartChanged(bool value)
+    {
+        _settingsService.Settings.AutoStart = value;
+        _settingsService.Save();
+    }
+
+    partial void OnMinimizeToTrayChanged(bool value)
+    {
+        _settingsService.Settings.MinimizeToTray = value;
+        _settingsService.Save();
+    }
+
+    /// <summary>
+    /// Le préchauffage ne s'applique qu'au prochain lancement, et volontairement.
+    /// </summary>
+    /// <remarks>
+    /// Démarrer le générateur à l'instant où l'on coche la case surprendrait : on règle un produit,
+    /// on ne lui demande pas de se mettre au travail. Et l'éteindre en décochant tuerait un serveur
+    /// peut-être en pleine génération.
+    /// </remarks>
+    partial void OnPrechaufferGenerateurChanged(bool value)
+    {
+        _settingsService.Settings.PrechaufferGenerateur = value;
+        _settingsService.Save();
+    }
+
+    /// <summary>Bounds of the device detection poll, in seconds.</summary>
+
+    partial void OnDevicePollIntervalChanged(int value)
+    {
+        _settingsService.Settings.DevicePollIntervalMs = Math.Clamp(value, AppSettings.MinPollSeconds, AppSettings.MaxPollSeconds) * 1000;
+        _settingsService.Save();
+        OnPropertyChanged(nameof(DevicePollIntervalDisplay));
+    }
+
+    public string DevicePollIntervalDisplay => $"{DevicePollInterval} s";
+
+    // ---- Language ----
+
+    public LanguageOption[] LanguageOptions { get; } =
+    [
+        new("Suivre Windows", AppLanguage.System),
+        new("Français", AppLanguage.French),
+        new("English", AppLanguage.English),
+    ];
+
+    public AppLanguage Language
+    {
+        get => _settingsService.Settings.Language;
+        set
+        {
+            if (_settingsService.Settings.Language == value) return;
+            _settingsService.Settings.Language = value;
+            _settingsService.Save();
+            Strings.Current.Apply(value);
+            OnPropertyChanged();
+        }
+    }
+
+    // ---- Theme ----
+
+    /// <summary>Themes found under the Themes folder, plus the built-in look.</summary>
+    public IReadOnlyList<ThemeInfo> Themes { get; } = ThemeCatalog.Discover();
+
+    /// <summary>
+    /// Selected theme. Applied at the next start of the interface: a WPF style captures the brushes
+    /// it references when it is parsed, so swapping the dictionary under a live window would leave
+    /// half the interface on the old palette.
+    /// </summary>
+    public ThemeInfo SelectedTheme
+    {
+        get => Themes.FirstOrDefault(t => t.Id == _settingsService.Settings.Theme) ?? ThemeInfo.BuiltIn;
+        set
+        {
+            var id = value?.Id ?? "";
+            if (_settingsService.Settings.Theme == id) return;
+
+            _settingsService.Settings.Theme = id;
+            _settingsService.Save();
+
+            // The overlay is a separate process reading its own settings file.
+            try
+            {
+                var osk = SenSÉ.Core.Osk.OskSettings.Load();
+                osk.Theme = id;
+                osk.Save();
+            }
+            catch { }
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ThemeStatus));
+        }
+    }
+
+    public string ThemeStatus => SelectedTheme.IsBuiltIn
+        ? ""
+        : Strings.Current.Format("{0} — appliqué au prochain démarrage.", SelectedTheme.Description);
+    // ---- Windows startup ----
+
+    /// <summary>
+    /// Reads the registry rather than the settings file: the Run key can be removed by other tools,
+    /// and the checkbox has to show what Windows will actually do.
+    /// </summary>
+    public bool StartWithWindows
+    {
+        get => WindowsStartupService.IsEnabled();
+        set
+        {
+            if (WindowsStartupService.IsEnabled() == value) return;
+
+            if (!WindowsStartupService.SetEnabled(value))
+            {
+                StartupStatus = Strings.Current["Impossible de modifier le démarrage Windows."];
+                OnPropertyChanged();
+                return;
+            }
+
+            _settingsService.Settings.StartWithWindows = value;
+            _settingsService.Save();
+            StartupStatus = value ? DescribeRegistration() : "";
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Shows what Windows will launch, and warns when that is a different copy of SenSÉ than the
+    /// one running. An install left a stale entry pointing at a path this build never updates, which
+    /// looked exactly like the setting doing nothing.
+    /// </summary>
+    private static string DescribeRegistration()
+    {
+        var command = WindowsStartupService.RegisteredCommand();
+        if (command is null)
+        {
+            return Strings.Current["Impossible de modifier le démarrage Windows."];
+        }
+
+        var current = Environment.ProcessPath;
+        if (!string.IsNullOrEmpty(current)
+            && !command.Trim('"').Equals(current, StringComparison.OrdinalIgnoreCase))
+        {
+            return Strings.Current.Format("Windows lancera une autre copie : {0}", command);
+        }
+
+        return Strings.Current.Format("Windows lancera : {0}", command);
+    }
+
+    [ObservableProperty] private string _startupStatus = "";
+
+    /// <summary>Product and version for the About box, read from the assembly.</summary>
+    public static string AppVersion => AppVersionInfo.ProductAndVersion;
+
+    // Overlay keyboard settings live in the profile editor (ProfileViewModel), with the rest of the
+    // controller configuration.
+
+    [RelayCommand]
+    private void CheckDriverStatus()
+    {
+        try
+        {
+            var hidHidePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SenSÉ.Core.exe");
+            if (File.Exists(hidHidePath))
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = hidHidePath,
+                    Arguments = "hidhide-status",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true,
+                };
+                using var proc = Process.Start(psi);
+                if (proc != null)
+                {
+                    var output = proc.StandardOutput.ReadToEnd();
+                    proc.WaitForExit(3000);
+                    IsHidHideInstalled = !output.Contains("not installed") && !output.Contains("error");
+                    HidHideStatus = IsHidHideInstalled ? Strings.Current["Installé"] : Strings.Current["Non installé"];
+                }
+            }
+
+            IsVigEmInstalled = IsViGEmBusInstalled();
+            VigEmStatus = IsVigEmInstalled ? Strings.Current["Installé"] : Strings.Current["Non installé"];
+        }
+        catch
+        {
+            HidHideStatus = Strings.Current["Erreur"];
+            VigEmStatus = Strings.Current["Erreur"];
+        }
+    }
+
+    private static bool IsViGEmBusInstalled()
+    {
+        try
+        {
+            var vigemKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+            if (vigemKey == null) return false;
+
+            foreach (var subKeyName in vigemKey.GetSubKeyNames())
+            {
+                using var subKey = vigemKey.OpenSubKey(subKeyName);
+                var name = subKey?.GetValue("DisplayName")?.ToString() ?? "";
+                if (name.Contains("ViGEmBus", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    [RelayCommand]
+    private void OpenHidHideDownload()
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "https://github.com/nefarius/HidHide/releases/latest",
+            UseShellExecute = true,
+        });
+    }
+
+    [RelayCommand]
+    private static void OpenUrl(string? url)
+    {
+        if (!string.IsNullOrEmpty(url))
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+    }
+
+    [RelayCommand]
+    private void OpenViGEmDownload()
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "https://github.com/nefarius/ViGEmBus/releases/latest",
+            UseShellExecute = true,
+        });
+    }
+}

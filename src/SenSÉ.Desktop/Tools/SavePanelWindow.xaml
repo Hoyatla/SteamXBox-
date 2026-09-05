@@ -1,0 +1,62 @@
+﻿<Window x:Class="SenSÉ.Desktop.Tools.SavePanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SenSÉ.Shell.Localization;assembly=SenSÉ.Shell"
+        Title="Enregistrer"
+        Width="620" Height="560"
+        MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip"
+        Background="{StaticResource BgDarkBrush}">
+
+    <!-- Le panneau appartient a l'hote, pas au systeme. Un SaveFileDialog Win32 serait plus court a
+         ecrire et ne se pilote pas a la manette : il ne suit pas le theme et ses listes ne prennent
+         pas le focus au clavier virtuel. C'est pourtant la seule fenetre par laquelle un outil peut
+         sortir de chez lui. Le contrat dit que l'hote dessine ; c'est ici qu'il le prouve. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Background="{StaticResource BgMediumBrush}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock x:Name="PurposeText" VerticalAlignment="Center" Margin="12,0,0,0"
+                       FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+        </Grid>
+
+        <!-- Le chemin courant, en clair : l'utilisateur doit voir ou il est avant d'accorder quoi
+             que ce soit, puisque c'est cela qu'il accorde. -->
+        <TextBlock Grid.Row="1" x:Name="CurrentPath" Margin="12,10,12,6"
+                   FontSize="12" TextTrimming="CharacterEllipsis"
+                   Foreground="{StaticResource TextDimBrush}"/>
+
+        <ListBox Grid.Row="2" x:Name="Entries" Margin="12,0,12,0"
+                 Background="{StaticResource BgLightBrush}" BorderThickness="0"
+                 Foreground="{StaticResource TextPrimaryBrush}"
+                 MouseDoubleClick="Entries_Activate"
+                 KeyDown="Entries_KeyDown"/>
+
+        <StackPanel Grid.Row="3" Margin="12">
+            <TextBlock Text="{loc:T Text='Nom du fichier'}" FontSize="11" Margin="0,0,0,4"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <TextBox x:Name="FileName" FontSize="14" Padding="8,6"
+                     Background="{StaticResource BgLightBrush}" BorderThickness="0"
+                     Foreground="{StaticResource TextPrimaryBrush}"
+                     CaretBrush="{StaticResource TextPrimaryBrush}"/>
+
+            <TextBlock x:Name="Problem" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Foreground="{StaticResource AccentOrangeBrush}" Visibility="Collapsed"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button Content="{loc:T Text='Annuler'}" Width="110" Height="34" Margin="0,0,8,0"
+                        Click="Cancel_Click" IsCancel="True"/>
+                <Button Content="{loc:T Text='Enregistrer'}" Width="140" Height="34"
+                        Click="Accept_Click" IsDefault="True"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

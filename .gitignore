@@ -1,7 +1,7 @@
-# Binaries
-SteamXBox.exe
-SteamXBox.Core.exe
-Sc2Xboxed.Osk.exe
+﻿# Binaries
+SenSÉ.exe
+SenSÉ.Core.exe
+SenSÉ.Osk.exe
 *.bak
 
 # WPF native dependencies
@@ -9,8 +9,8 @@ Sc2Xboxed.Osk.exe
 wpfgfx_cor3.dll
 
 # Installer output
-SteamXBox_Full_Setup_*.exe
-SteamXBox_Setup_*.exe
+SenSÉ_Full_Setup_*.exe
+SenSÉ_Setup_*.exe
 
 # ViGEmBus / HidHide installers (re-download at build time)
 ViGEmBus_*.exe
@@ -37,19 +37,19 @@ Desktop.ini
 Library/Exclusif/
 
 # Binaires deployes a la racine : reconstruits par publish, 130 Mo piece.
-/SteamXBox.exe
-/SteamXBox.Desktop.exe
-/SteamXBox.Core.exe
-/SteamXBox.Indexer.exe
-/SteamXBox-Moniteur.exe
-/Sc2Xboxed.Osk.exe
-/Sc2XboxedPads.Osk.exe
-/Sc2XboxedSticks.Osk.exe
-/Sc2XboxedSteam.Osk.exe
-/Sc2XboxedPS5.Osk.exe
-/Sc2XboxedXbox.Osk.exe
-/SteamXBox.Debug.exe
-/SteamXBox.Mcp.exe
+/SenSÉ.exe
+/SenSÉ.Desktop.exe
+/SenSÉ.Core.exe
+/SenSÉ.Indexer.exe
+/SenSÉ-Moniteur.exe
+/SenSÉ.Osk.exe
+/SenSÉPads.Osk.exe
+/SenSÉSticks.Osk.exe
+/SenSÉSteam.Osk.exe
+/SenSÉPS5.Osk.exe
+/SenSÉXbox.Osk.exe
+/SenSÉ.Debug.exe
+/SenSÉ.Mcp.exe
 /Banc-DualSense.exe
 /publish/
 /artifacts/
@@ -59,8 +59,8 @@ Library/Exclusif/
 
 # Artefacts d'execution.
 *.signal
-steamxbox-*.log*
-steamxbox-diag.txt
+SenSÉ-*.log*
+SenSÉ-diag.txt
 
 # Backups locaux
 Library/archive/

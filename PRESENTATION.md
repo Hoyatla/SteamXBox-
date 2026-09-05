@@ -1,4 +1,4 @@
-# SteamXBox
+﻿# SenSÉ
 
 *Texte de présentation — version 0.5.0*
 
@@ -6,7 +6,7 @@
 
 ## En une phrase
 
-SteamXBox transforme une manette de jeu en une façon d'utiliser Windows.
+SenSÉ transforme une manette de jeu en une façon d'utiliser Windows.
 
 ---
 
@@ -20,7 +20,7 @@ Les solutions existantes traitent le symptôme : elles émulent une souris. Le p
 avance, mais rien n'est pensé pour la manette — ni les cibles, ni la saisie de texte, ni
 la navigation. On se retrouve à viser des cases de douze pixels avec un joystick.
 
-SteamXBox part de l'autre bout : **si la manette est le seul périphérique garanti, alors
+SenSÉ part de l'autre bout : **si la manette est le seul périphérique garanti, alors
 c'est l'environnement qui doit être conçu pour elle.**
 
 ---
@@ -35,7 +35,7 @@ Le point de départ historique. Une manette Steam Controller est exposée aux je
 une manette Xbox 360 virtuelle, via ViGEmBus.
 
 L'idée directrice est la **continuité** : tant que Steam tourne, Steam Input garde la
-main sur la manette. Dès que Steam se ferme, SteamXBox prend le relais et la manette
+main sur la manette. Dès que Steam se ferme, SenSÉ prend le relais et la manette
 continue de servir. L'utilisateur ne fait rien, ne bascule rien.
 
 ### 2. Les manettes comme entrées indépendantes
@@ -94,7 +94,7 @@ branchement** ; les amovibles s'éjectent de là.
 
 Trois raccourcis de saisie :
 
-- `D, steamxbox` — restreint la recherche au lecteur D
+- `D, SenSÉ` — restreint la recherche au lecteur D
 - `web: <mots>` — recherche web
 - `docs: <mots>` — recherche dans les documents de l'organisation
 
@@ -135,7 +135,7 @@ Trois choix expliquent la plupart des autres.
 
 ### Aucune injection, jamais
 
-SteamXBox ne place jamais de code dans un autre processus. Pas de DLL dans
+SenSÉ ne place jamais de code dans un autre processus. Pas de DLL dans
 `explorer.exe`, pas de détour d'API système.
 
 Ce n'est pas de la prudence excessive : un logiciel qui injecte se fait signaler par les
@@ -143,7 +143,7 @@ antivirus, casse à chaque mise à jour cumulative de Windows, et emporte le she
 quand il plante. Aucun service informatique d'établissement ne déploie ça.
 
 Le coût est assumé et il est réel : certains effets sont hors d'atteinte et le resteront.
-Sur ses propres fenêtres, en revanche, SteamXBox fait ce qu'il veut, puisque c'est lui qui
+Sur ses propres fenêtres, en revanche, SenSÉ fait ce qu'il veut, puisque c'est lui qui
 les dessine.
 
 ### L'hôte dessine, l'outil décrit
@@ -216,7 +216,7 @@ qu'eux à partir d'un `plugin.json` seul.
 
 ## Distribution
 
-SteamXBox est un logiciel **propriétaire, tous droits réservés**, distribué en version
+SenSÉ est un logiciel **propriétaire, tous droits réservés**, distribué en version
 **gratuite et payante**. Les composants tiers conservent leurs licences respectives, qui
 sont énumérées avec le produit.
 

@@ -1,0 +1,14 @@
+﻿<Application x:Class="SenSÉ.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Le meme theme que le GUI, depuis la meme bibliotheque. -->
+                <ResourceDictionary Source="pack://application:,,,/SenSÉ.Shell;component/Themes/DarkTheme.xaml"/>
+                <!-- Les icones vectorielles des tuiles, converties une fois depuis Library/Icons. -->
+                <ResourceDictionary Source="ControlCentre/PluginIcons.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

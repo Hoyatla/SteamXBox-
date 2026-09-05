@@ -1,0 +1,90 @@
+﻿<Window x:Class="SenSÉ.Desktop.Settings.SenSÉSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:SenSÉ.Shell.Localization;assembly=SenSÉ.Shell"
+        xmlns:settings="clr-namespace:SenSÉ.Desktop.Settings"
+        Title="SenSÉ Settings"
+        Width="1000" Height="720"
+        MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip"
+        Background="{StaticResource BgDarkBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Background="{StaticResource BgMediumBrush}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <TextBlock Text="{loc:T Text='Paramètres SenSÉ'}" VerticalAlignment="Center"
+                       Margin="12,0,0,0" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="─" Click="Minimize_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" BorderThickness="0"
+                        Foreground="{StaticResource TextSecondaryBrush}"/>
+                <Button Content="□" Click="Maximize_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" BorderThickness="0"
+                        Foreground="{StaticResource TextSecondaryBrush}"/>
+                <Button Content="✕" Click="Close_Click" Width="46" Height="32"
+                        FontSize="13" Background="Transparent" BorderThickness="0"
+                        Foreground="{StaticResource TextSecondaryBrush}">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentRedBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Même rail que la fenêtre de configuration, avec les trois écrans qui viennent d'en
+                 sortir : ils y étaient noyés au milieu des onglets manette, alors qu'ils ne
+                 parlent que de SenSÉ lui-même. -->
+            <Border Grid.Column="0" Style="{StaticResource NavRail}">
+                <StackPanel Margin="16,16" x:Name="NavPanel">
+                    <RadioButton Content="{loc:T Text='⚙  Paramètres'}" Tag="0" Click="Nav_Click"
+                                 GroupName="Nav" IsChecked="True" Style="{StaticResource NavButton}"/>
+                    <RadioButton Content="{loc:T Text='🧩  Outils'}" Tag="3" Click="Nav_Click"
+                                 GroupName="Nav" Style="{StaticResource NavButton}"/>
+
+                    <!-- Les journaux et le diagnostic restent en bas : ils ne parlent qu'au
+                         developpement, et ce qui sert tous les jours ne doit pas etre derriere eux. -->
+                    <Separator Margin="0,12" Background="{StaticResource BorderBrush}"/>
+
+                    <RadioButton Content="{loc:T Text='📄  Logs'}" Tag="1" Click="Nav_Click"
+                                 GroupName="Nav" Style="{StaticResource NavButton}"/>
+                    <RadioButton Content="{loc:T Text='🔧  Debug'}" Tag="2" Click="Nav_Click"
+                                 GroupName="Nav" Style="{StaticResource NavButton}"/>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Column="1">
+                <settings:SettingsView x:Name="SettingsView" Margin="24"/>
+                <settings:LogView x:Name="LogView" Margin="24" Visibility="Collapsed"/>
+                <settings:DebugView x:Name="DebugView" Margin="24" Visibility="Collapsed"/>
+                <settings:ToolsView x:Name="ToolsView" Margin="24" Visibility="Collapsed"/>
+            </Grid>
+        </Grid>
+    </Grid>
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
+                      GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+</Window>

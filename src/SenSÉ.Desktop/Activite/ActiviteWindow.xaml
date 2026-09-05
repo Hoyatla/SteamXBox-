@@ -1,0 +1,48 @@
+﻿<Window x:Class="SenSÉ.Desktop.Activite.ActiviteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Activité" Width="640" Height="620" MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgDarkBrush}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Activité" FontSize="18"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock x:Name="Resume" FontSize="11" Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextDimBrush}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <!-- Ne vise que les serveurs inscrits au registre, jamais le produit lui-même :
+                     un bouton qui fermerait SenSÉ en croyant libérer la carte serait pire que
+                     pas de bouton. -->
+                <Button x:Name="ToutArreter" Content="Arrêter les serveurs"
+                        Padding="14,6" Margin="0,0,8,0" Click="ToutArreterClic"/>
+                <Button x:Name="Rafraichir" Content="Actualiser"
+                        Padding="14,6" Click="RafraichirClic"/>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Familles"/>
+        </ScrollViewer>
+
+        <TextBlock x:Name="Etat" Grid.Row="2" Margin="0,12,0,0" FontSize="11"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource TextDimBrush}"/>
+    </Grid>
+</Window>
