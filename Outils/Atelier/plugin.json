@@ -1,0 +1,16 @@
+{
+  "id": "atelier",
+  "name": "Atelier",
+  "category": "tool",
+  "version": "0.1.0",
+  "author": "Hoyatla",
+  "licence": "MIT",
+  "source": "https://github.com/Hoyatla/SenS-",
+  "glyph": "E8A5",
+  "icon": "atelier",
+  "hint": "Compose des graphes de nœuds : code, image, vidéo, son. Modèles locaux et MCPs interconnectés.",
+  "surface": "tile",
+  "does": "application",
+  "target": "{tools}\\Atelier\\SenSÉ.Atelier.exe",
+  "enabled": true
+}

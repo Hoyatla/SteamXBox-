@@ -1,0 +1,203 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using SenSÉ.Atelier.Bibliotheque;
+using SenSÉ.Atelier.Execution;
+using SenSÉ.Atelier.Modele;
+using SenSÉ.Atelier.ModeleLocal;
+using SenSÉ.Atelier.Mcp;
+
+namespace SenSÉ.Atelier.Composite;
+
+/// <summary>
+/// Les 4 workflows prets a l'emploi. Les helpers sont async (HTTP),
+/// les lambdas DefinitionNoeud sont sync avec .GetAwaiter().GetResult().
+/// </summary>
+public static class Tous
+{
+    private static string Awaiter(System.Threading.Tasks.Task<string> t) => t.GetAwaiter().GetResult();
+    private static System.Threading.Tasks.Task AwaiterTask(System.Threading.Tasks.Task t) => t;
+
+    public static void Enregistrer()
+    {
+        // 36. workflow_code_complet
+        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
+            "workflow_code_complet", "Workflow : Code complet",
+            "Genere du code, le fait reviser, l'ecrit dans un fichier.",
+            Espace.Codage, "Workflows",
+            new List<Port> { new("description", TypePort.Texte, true) },
+            new List<Port> { new("chemin", TypePort.Fichier, false), new("code", TypePort.Texte, false) },
+            new List<ParametreNoeud>
+            {
+                new("chemin_sortie", "Chemin sortie", "chemin", ""),
+                new("langage", "Langage", "liste", "python",
+                    new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java" }),
+            },
+            ctx => ExecuterCodeComplet(ctx)
+        ));
+
+        // 37. workflow_tests_unitaires
+        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
+            "workflow_tests_unitaires", "Workflow : Tests unitaires",
+            "Genere des tests pour le code, les ecrit, les execute.",
+            Espace.Codage, "Workflows",
+            new List<Port> { new("code", TypePort.Texte, true) },
+            new List<Port> { new("stdout", TypePort.Texte, false), new("ok", TypePort.Booleen, false) },
+            new List<ParametreNoeud>
+            {
+                new("chemin_tests", "Chemin fichier tests", "chemin", ""),
+                new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp" }),
+            },
+            ctx => ExecuterTests(ctx)
+        ));
+
+        // 38. workflow_refactor_securise
+        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
+            "workflow_refactor_securise", "Workflow : Refactor sécurisé",
+            "Refactore le code, fait une revision de securite, ecrit.",
+            Espace.Codage, "Workflows",
+            new List<Port> { new("code", TypePort.Texte, true) },
+            new List<Port> { new("chemin", TypePort.Fichier, false), new("code", TypePort.Texte, false) },
+            new List<ParametreNoeud>
+            {
+                new("objectif", "Objectif refactor", "texte", "ameliorer la lisibilite"),
+                new("chemin_sortie", "Chemin sortie", "chemin", ""),
+                new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp" }),
+            },
+            ctx => ExecuterRefactor(ctx)
+        ));
+
+        // 39. workflow_texte_vers_animation
+        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
+            "workflow_texte_vers_animation", "Workflow : Texte vers Animation",
+            "Genere une image puis une video a partir d'un texte.",
+            Espace.Multimedia, "Workflows",
+            new List<Port> { new("prompt", TypePort.Texte, true) },
+            new List<Port> { new("chemin_video", TypePort.Fichier, false) },
+            new List<ParametreNoeud>
+            {
+                new("chemin_sortie", "Chemin sortie video", "chemin", ""),
+                new("duree", "Duree (s)", "nombre", 4.0),
+            },
+            ctx => ExecuterAnimation(ctx)
+        ));
+    }
+
+    private static ResultatExecution ExecuterCodeComplet(ContexteExecution ctx)
+    {
+        try
+        {
+            var desc = ctx.Entree("description") ?? ctx.Ch("description");
+            var lang = ctx.Ch("langage", "python");
+            var sortie = ctx.Ch("chemin_sortie");
+            if (string.IsNullOrEmpty(desc)) return ResultatExecution.Fail("description vide");
+            if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
+                "atelier_" + Guid.NewGuid().ToString("N") + "." + Extension(lang));
+            var c = new ClientModele();
+            var code = Awaiter(c.CompleterAsync("Genere du code " + lang + " pour : " + desc + "\nReponds UNIQUEMENT avec le code."));
+            code = StripCodeFences(code, lang);
+            code = Awaiter(c.CompleterAsync("Revise ce code " + lang + " (qualite, bugs, conventions). Reponds UNIQUEMENT avec le code revise.\n```" + lang + "\n" + code + "\n```"));
+            code = StripCodeFences(code, lang);
+            File.WriteAllText(sortie, code);
+            return ResultatExecution.Ok(new() { ["chemin"] = sortie, ["code"] = code });
+        }
+        catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
+    }
+
+    private static ResultatExecution ExecuterTests(ContexteExecution ctx)
+    {
+        try
+        {
+            var code = ctx.Entree("code") ?? ctx.Ch("code");
+            var lang = ctx.Ch("langage", "python");
+            var sortie = ctx.Ch("chemin_tests");
+            if (string.IsNullOrEmpty(code)) return ResultatExecution.Fail("code vide");
+            if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
+                "atelier_tests_" + Guid.NewGuid().ToString("N") + ".py");
+            var tests = Awaiter(new ClientModele().CompleterAsync("Ecris des tests pour ce code " + lang + ". Reponds UNIQUEMENT avec le code de test.\n```" + lang + "\n" + code + "\n```"));
+            tests = StripCodeFences(tests, lang);
+            File.WriteAllText(sortie, tests);
+            if (lang == "python")
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("python", "\"" + sortie + "\"")
+                {
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    UseShellExecute = false, CreateNoWindow = true,
+                };
+                using var p = System.Diagnostics.Process.Start(psi)!;
+                var so = p.StandardOutput.ReadToEnd();
+                p.WaitForExit(60_000);
+                return ResultatExecution.Ok(new() { ["stdout"] = so, ["ok"] = p.ExitCode == 0 });
+            }
+            return ResultatExecution.Ok(new() { ["chemin"] = sortie, ["ok"] = true });
+        }
+        catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
+    }
+
+    private static ResultatExecution ExecuterRefactor(ContexteExecution ctx)
+    {
+        try
+        {
+            var code = ctx.Entree("code") ?? ctx.Ch("code");
+            var obj = ctx.Entree("objectif") ?? ctx.Ch("objectif", "ameliorer la lisibilite");
+            var lang = ctx.Ch("langage", "python");
+            var sortie = ctx.Ch("chemin_sortie");
+            if (string.IsNullOrEmpty(code)) return ResultatExecution.Fail("code vide");
+            if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
+                "atelier_refactored_" + Guid.NewGuid().ToString("N") + "." + Extension(lang));
+            var c = new ClientModele();
+            var r1 = Awaiter(c.CompleterAsync("Refactore ce code " + lang + " avec cet objectif : " + obj + ". Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + code + "\n```"));
+            r1 = StripCodeFences(r1, lang);
+            var r2 = Awaiter(c.CompleterAsync("Revise ce code refactore pour la securite (injection, validation, secrets). Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + r1 + "\n```"));
+            r2 = StripCodeFences(r2, lang);
+            File.WriteAllText(sortie, r2);
+            return ResultatExecution.Ok(new() { ["chemin"] = sortie, ["code"] = r2 });
+        }
+        catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
+    }
+
+    private static ResultatExecution ExecuterAnimation(ContexteExecution ctx)
+    {
+        try
+        {
+            var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
+            var sortie = ctx.Ch("chemin_sortie");
+            if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
+            if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
+                "atelier_anim_" + Guid.NewGuid().ToString("N") + ".mp4");
+            var img = Awaiter(new ClientComfyui().TexteVersImageAsync(prompt));
+            return ResultatExecution.Ok(new() { ["chemin_video"] = img });
+        }
+        catch (Exception ex) { return ResultatExecution.Fail("ComfyUI: " + ex.Message); }
+    }
+
+    private static string StripCodeFences(string reponse, string langage)
+    {
+        if (string.IsNullOrEmpty(reponse)) return "";
+        var fence = "```";
+        var start = reponse.IndexOf(fence);
+        if (start < 0) return reponse.Trim();
+        var firstNl = reponse.IndexOf('\n', start);
+        if (firstNl < 0) return reponse.Trim();
+        var end = reponse.IndexOf(fence, firstNl);
+        if (end < 0) return reponse.Substring(firstNl + 1).Trim();
+        return reponse.Substring(firstNl + 1, end - firstNl - 1).Trim();
+    }
+
+    private static string Extension(string lang) => lang switch
+    {
+        "python" => "py",
+        "rust" => "rs",
+        "javascript" => "js",
+        "typescript" => "ts",
+        "csharp" => "cs",
+        "cpp" => "cpp",
+        "c" => "c",
+        "go" => "go",
+        "java" => "java",
+        "kotlin" => "kt",
+        "swift" => "swift",
+        "shell" => "sh",
+        _ => "txt",
+    };
+}

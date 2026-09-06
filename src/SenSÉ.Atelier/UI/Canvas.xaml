@@ -1,0 +1,12 @@
+<UserControl x:Class="SenSÉ.Atelier.UI.CanvasAtelier"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SenSÉ.Atelier.UI"
+             Background="{StaticResource FondCanvasBrush}"
+             ClipToBounds="True">
+    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <Grid>
+            <Canvas x:Name="Surface" Width="4000" Height="3000" Background="Transparent" />
+        </Grid>
+    </ScrollViewer>
+</UserControl>

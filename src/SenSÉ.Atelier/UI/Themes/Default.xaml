@@ -1,0 +1,88 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Palette -->
+    <Color x:Key="FondFenetre">#1E1E2E</Color>
+    <Color x:Key="FondPanneau">#252535</Color>
+    <Color x:Key="FondCanvas">#181825</Color>
+    <Color x:Key="Bordure">#3B3B52</Color>
+    <Color x:Key="Texte">#E4E4F4</Color>
+    <Color x:Key="TexteSecondaire">#9393B8</Color>
+    <Color x:Key="Accent">#8FB4FF</Color>
+    <Color x:Key="AccentHover">#A8C4FF</Color>
+
+    <SolidColorBrush x:Key="FondFenetreBrush" Color="{StaticResource FondFenetre}" />
+    <SolidColorBrush x:Key="FondPanneauBrush" Color="{StaticResource FondPanneau}" />
+    <SolidColorBrush x:Key="FondCanvasBrush"  Color="{StaticResource FondCanvas}" />
+    <SolidColorBrush x:Key="BordureBrush"     Color="{StaticResource Bordure}" />
+    <SolidColorBrush x:Key="TexteBrush"       Color="{StaticResource Texte}" />
+    <SolidColorBrush x:Key="TexteSecondaireBrush" Color="{StaticResource TexteSecondaire}" />
+    <SolidColorBrush x:Key="AccentBrush"      Color="{StaticResource Accent}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}" />
+
+    <Style TargetType="Window">
+        <Setter Property="Background" Value="{StaticResource FondFenetreBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TexteBrush}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TexteBrush}" />
+    </Style>
+
+    <Style x:Key="EnteteSection" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TexteSecondaireBrush}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="8,8,8,4" />
+
+    </Style>
+
+    <Style TargetType="Button">
+        <Setter Property="Background" Value="#34344A" />
+        <Setter Property="Foreground" Value="{StaticResource TexteBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BordureBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style x:Key="BoutonAccent" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        <Setter Property="Foreground" Value="#1E1E2E" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="BoutonPalette" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="12,4" />
+    </Style>
+
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="#1A1A26" />
+        <Setter Property="Foreground" Value="{StaticResource TexteBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BordureBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="Background" Value="#1A1A26" />
+        <Setter Property="Foreground" Value="{StaticResource TexteBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BordureBrush}" />
+        <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <Style x:Key="Onglet" TargetType="TabItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TexteSecondaireBrush}" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+</ResourceDictionary>

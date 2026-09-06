@@ -1,0 +1,76 @@
+<Window x:Class="SenSÉ.Atelier.UI.FenetreAtelier"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SenSÉ.Atelier.UI"
+        Title="Atelier — SenSÉ" Height="800" Width="1280" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Barre superieure : espaces -->
+        <Border Grid.Row="0" Background="{StaticResource FondPanneauBrush}" Padding="8,4">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnCodage" Content="Codage" Click="BtnCodage_Click" Style="{StaticResource BoutonAccent}" />
+                <Button x:Name="BtnMultimedia" Content="Multimédia" Click="BtnMultimedia_Click" />
+            </StackPanel>
+        </Border>
+
+        <!-- Onglets de graphes -->
+        <Border Grid.Row="1" Background="{StaticResource FondPanneauBrush}" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,1">
+            <StackPanel Orientation="Horizontal" Margin="4,0">
+                <ItemsControl x:Name="OngletsGraphes">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="2,4" Padding="10,4" CornerRadius="4,4,0,0"
+                                    Background="{Binding Fond, Converter={x:Null}}"
+                                    BorderBrush="{StaticResource BordureBrush}" BorderThickness="1"
+                                    MouseLeftButtonUp="OngletGraphe_Click" Tag="{Binding Id}" Cursor="Hand">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Nom}" Foreground="{StaticResource TexteBrush}" />
+                                    <TextBlock Text=" ×" Margin="6,0,0,0" Foreground="{StaticResource TexteSecondaireBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button x:Name="BtnNouveauGraphe" Content="+" Click="BtnNouveauGraphe_Click" ToolTip="Nouveau graphe" Margin="4,4" />
+            </StackPanel>
+        </Border>
+
+        <!-- Barre d'actions -->
+        <Border Grid.Row="2" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnExecuter" Content="▶ Exécuter (F5)" Click="BtnExecuter_Click" Style="{StaticResource BoutonAccent}" />
+                <Button x:Name="BtnSauvegarder" Content="💾 Sauvegarder" Click="BtnSauvegarder_Click" />
+                <TextBlock x:Name="Statut" Margin="12,0" VerticalAlignment="Center" Foreground="{StaticResource TexteSecondaireBrush}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Corps : 3 colonnes -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="280" />
+            </Grid.ColumnDefinitions>
+            <local:Palette x:Name="PaletteCtl" Grid.Column="0" NoeudChoisi="Palette_NoeudChoisi" />
+            <local:CanvasAtelier x:Name="CanvasCtl" Grid.Column="1" SelectionNoeud="CanvasCtl_SelectionNoeud" NoeudDeplace="CanvasCtl_NoeudDeplace" GrapheModifie="CanvasCtl_GrapheModifie" />
+            <local:Inspecteur x:Name="InspecteurCtl" Grid.Column="2" />
+        </Grid>
+
+        <!-- Barre de statut -->
+        <Border Grid.Row="4" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt." />
+        </Border>
+    </Grid>
+</Window>
