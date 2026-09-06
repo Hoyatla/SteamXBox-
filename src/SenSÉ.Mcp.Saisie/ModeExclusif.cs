@@ -1,240 +1,252 @@
-﻿using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using System.Windows.Media;
-using System.Windows.Threading;
+﻿using System.Runtime.InteropServices;
 
 namespace SenSÉ.Mcp.Saisie;
 
 /// <summary>
-/// Le gardien visuel : un overlay WPF topmost qui apparait des que
-/// l'Assistant pilote la souris ou le clavier, et qui reste jusqu'a
-/// la fin de la sequence.
+/// Bandeau "L'ASSISTANT PILOTE" en overlay Win32 natif (pas de WPF, pas de
+/// thread STA dedie, pas d'Application). Juste CreateWindowEx +
+/// UpdateLayeredWindow sur le thread principal qui est deja STA grace a
+/// <c>[STAThread]</c> dans Program.cs.
 /// </summary>
 /// <remarks>
-/// <b>Topmost, transparent autour, Echap pour interrompre.</b> La fenetre
-/// est toujours au-dessus, mais le bandeau ne prend que le haut de
-/// l'ecran : le reste reste transparent aux clics. Echap est intercepte
-/// pour permettre a l'utilisateur de couper net la sequence en cours.
+/// <b>Pourquoi pas WPF ici.</b> WPF exige une Application vivante et un
+/// dispatcher qui tourne. Dans un subprocess stdio comme mcp-saisie, le
+/// main thread est deja occupe par <c>await StreamReader.ReadLineAsync</c>
+/// (qui libere le thread entre les awaits, mais ne fait pas tourner un
+/// dispatcher WPF). Toute Window WPF appelee depuis ce contexte bloque
+/// sur Show() jusqu'au timeout. Win32 + UpdateLayeredWindow n'a pas ce
+/// probleme : on peint dans un memory DC et on pousse le bitmap alpha-
+/// blended vers le HWND en un seul appel, pas de message pump a faire
+/// tourner.
 ///
-/// <para><b>Souris et Clavier verchent <see cref="EstActif"/>.</b> Ce
-/// n'est pas un hack UI : c'est le seul moyen d'etre sur que l'Assistant
-/// ne bouge pas la souris pendant que tu tapes au clavier. Sans ce
-/// verrou, c'est le chaos.</para>
+/// <para><b>Topmost, click-through.</b> WS_EX_TOPMOST + WS_EX_LAYERED +
+/// WS_EX_TRANSPARENT : la fenetre reste au-dessus de tout mais laisse
+/// passer les clics (l'utilisateur peut continuer a utiliser l'app
+/// pilotee pendant que le bandeau est visible). WS_EX_NOACTIVATE :
+/// ShowWindow n'active pas la fenetre, donc pas de focus shift.</para>
 ///
-/// <para><b>Thread WPF dedie.</b> WPF exige une <see cref="Application"/>
-/// et un dispatcher actif pour creer et afficher des fenetres. mcp-saisie
-/// etant un subprocess stdio sans GUI, on heberge l'Application WPF sur
-/// un thread STA dedie (voir <see cref="WpfHost"/>). Toutes les operations
-/// WPF (Show, Close, BeginInvoke) sont marshalee sur ce thread.
-/// <see cref="Ouvrir"/> et <see cref="Fermer"/> bloquent l'appelant
-/// jusqu'a ce que l'operation soit terminee sur le thread WPF.</para>
+/// <para><b>Pas de reagir a Echap.</b> Le code precedent (WPF) avait un
+/// OnPreviewKeyDown qui interceptait Echap. La version Win32 ne le fait
+/// pas : l'interruption Echap se fait au niveau de Souris/Clavier (qui
+/// verifient <see cref="EstActif"/> avant d'agir). Si tu veux un vrai
+/// Echap interrupt, il faudra ajouter une message pump minimale ou
+/// intercepter via RegisterHotKey.</para>
 /// </remarks>
-public sealed class ModeExclusif
+public static class ModeExclusif
 {
-    private static ModeExclusif? _instance;
+    private const int WS_EX_TOPMOST = 0x00000008;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    private const int WS_POPUP = unchecked((int)0x80000000);
+    private const int WS_VISIBLE = 0x10000000;
+
+    private const int ULW_ALPHA = 0x00000002;
+    private const byte AC_SRC_OVER = 0x00;
+    private const byte AC_SRC_ALPHA = 0x01;
+
+    private const int TRANSPARENT = 1;
+
+    private const int HWND_TOPMOST = -1;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+
+    private const int SM_CXSCREEN = 0;
+
+    private static IntPtr _hwnd = IntPtr.Zero;
+    private static string _serveur = "";
+    private static string _sequence = "";
     private static readonly object _gate = new();
-    private static WpfHost? _host;
 
-    private readonly FenetreBandeau _fenetre;
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
 
-    private ModeExclusif(string serveur, string sequence)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE { public int W, H; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BLENDFUNCTION
     {
-        _fenetre = new FenetreBandeau(serveur, sequence);
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
     }
 
-    /// <summary>Une instance est-elle deja ouverte ?</summary>
-    public static bool EstActif => _instance is not null;
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateWindowExW(
+        int dwExStyle, string lpClassName, string lpWindowName,
+        int dwStyle, int X, int Y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
 
-    /// <summary>Ouvre l'overlay. Si une instance est deja ouverte, on remplace son texte.</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UpdateLayeredWindow(
+        IntPtr hWnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize,
+        IntPtr hdcSrc, ref POINT pptSrc, int crKey, ref BLENDFUNCTION pblend, int dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int w, int h);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr h);
+
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool TextOutW(IntPtr hdc, int x, int y, string lpString, int c);
+
+    [DllImport("gdi32.dll")]
+    private static extern int SetTextColor(IntPtr hdc, int crColor);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool SetBkMode(IntPtr hdc, int mode);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateSolidBrush(int crColor);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool FillRgn(IntPtr hdc, IntPtr hrgn, IntPtr hbrush);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int nLeft, int nTop, int nRight, int nBottom);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    /// <summary>Une fenetre est-elle deja ouverte ?</summary>
+    public static bool EstActif => _hwnd != IntPtr.Zero;
+
+    /// <summary>Ouvre l'overlay. Si une instance est deja ouverte, on ne fait rien
+    /// (le texte est fixe pour cette version Win32 ; pas de ChangerTexte).</summary>
     public static void Ouvrir(string serveur, string sequence)
     {
-        var host = ObtenirHost();
-        host.Run(() =>
+        lock (_gate)
         {
-            lock (_gate)
+            _serveur = serveur;
+            _sequence = sequence;
+            if (_hwnd != IntPtr.Zero) return; // deja ouvert
+
+            const int width = 600;
+            const int height = 60;
+            int screenW = GetSystemMetrics(SM_CXSCREEN);
+            int x = (screenW - width) / 2;
+            int y = 0;
+
+            _hwnd = CreateWindowExW(
+                WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+                "Static",
+                "Assistant pilote",
+                WS_POPUP | WS_VISIBLE,
+                x, y, width, height,
+                IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+
+            if (_hwnd == IntPtr.Zero)
             {
-                if (_instance is not null)
-                {
-                    _instance._fenetre.ChangerTexte(serveur, sequence);
-                    return;
-                }
-                _instance = new ModeExclusif(serveur, sequence);
-                _instance._fenetre.Show();
+                // Fallback : on n'a pas pu creer la fenetre, mais on continue
+                // (le mode exclusif est juste visuel ; les actions souris/clavier
+                // verifient quand meme EstActif).
+                return;
             }
-        });
+
+            Dessiner();
+            SetWindowPos(_hwnd, (IntPtr)HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
     }
 
     /// <summary>Ferme l'overlay et desabonne le mode exclusif.</summary>
     public static void Fermer()
     {
-        if (_instance is null) return;
-        if (_host is null) return;
-        _host.Run(() =>
-        {
-            lock (_gate)
-            {
-                if (_instance is null) return;
-                _instance._fenetre.Fermer();
-                _instance = null;
-            }
-        });
-    }
-
-    /// <summary>Demarre le thread WPF dedie a la demande, idempotent.</summary>
-    private static WpfHost ObtenirHost()
-    {
-        if (_host is not null) return _host;
         lock (_gate)
         {
-            if (_host is null)
+            if (_hwnd != IntPtr.Zero)
             {
-                _host = new WpfHost();
+                DestroyWindow(_hwnd);
+                _hwnd = IntPtr.Zero;
             }
-            return _host;
         }
     }
-}
 
-/// <summary>
-/// Un thread STA dedie qui heberge l'Application WPF et son dispatcher.
-/// Sans ca, mcp-saisie (stdio subprocess, pas de GUI) n'a pas d'
-/// Application WPF, et <c>Window.Show()</c> bloque indefiniment en
-/// attendant un dispatcher qui n'existe pas.
-/// </summary>
-/// <remarks>
-/// Le constructeur bloque jusqu'a ce que le thread ait demarre
-/// l'Application et le dispatcher (5 s max, ensuite timeout). Apres
-/// ca, <see cref="Run"/> peut etre appele depuis n'importe quel thread ;
-/// il marshale l'action sur le thread WPF et bloque jusqu'a la fin.
-///
-/// <para><b>Background thread.</b> Il est tue automatiquement quand le
-/// process mcp-saisie se termine (a la fermeture de stdin).</para>
-/// </remarks>
-internal sealed class WpfHost
-{
-    private readonly Thread _thread;
-    private readonly ManualResetEventSlim _ready = new(false);
-    private Dispatcher? _dispatcher;
-    private Exception? _initError;
-
-    public WpfHost()
+    private static void Dessiner()
     {
-        _thread = new Thread(InitializeAndRun)
-        {
-            Name = "mcp-saisie-wpf",
-            IsBackground = true,
-        };
-        _thread.SetApartmentState(ApartmentState.STA);
-        _thread.Start();
+        if (_hwnd == IntPtr.Zero) return;
 
-        if (!_ready.Wait(TimeSpan.FromSeconds(5)))
-        {
-            throw new TimeoutException("WPF host n'a pas reussi a demarrer en 5s");
-        }
-        if (_initError is not null) throw _initError;
-    }
+        const int width = 600;
+        const int height = 60;
 
-    private void InitializeAndRun()
-    {
+        IntPtr screenDc = GetDC(IntPtr.Zero);
+        if (screenDc == IntPtr.Zero) return;
+        IntPtr memDc = CreateCompatibleDC(screenDc);
+        if (memDc == IntPtr.Zero) { ReleaseDC(IntPtr.Zero, screenDc); return; }
+        IntPtr bmp = CreateCompatibleBitmap(screenDc, width, height);
+        if (bmp == IntPtr.Zero) { DeleteDC(memDc); ReleaseDC(IntPtr.Zero, screenDc); return; }
+        IntPtr oldBmp = SelectObject(memDc, bmp);
+        IntPtr region = IntPtr.Zero;
+        IntPtr brush = IntPtr.Zero;
+
         try
         {
-            var app = new System.Windows.Application();
-            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            _dispatcher = Dispatcher.CurrentDispatcher;
-            _ready.Set();
-            Dispatcher.Run();
+            // Fond orange BGR (0x002A6CFF = RGB(255, 108, 42) en little-endian 0x00BBGGRR)
+            region = CreateRectRgn(0, 0, width, height);
+            brush = CreateSolidBrush(0x002A6CFF);
+            FillRgn(memDc, region, brush);
+
+            // Texte blanc
+            SetTextColor(memDc, 0x00FFFFFF);
+            SetBkMode(memDc, TRANSPARENT);
+            string text = $"L'ASSISTANT PILOTE  |  {serveur_actuel()} / {sequence_actuelle()}";
+            TextOutW(memDc, 16, 22, text, text.Length);
+
+            var ptSrc = new POINT { X = 0, Y = 0 };
+            var ptDst = new POINT { X = 0, Y = 0 };
+            var sz = new SIZE { W = width, H = height };
+            var blend = new BLENDFUNCTION
+            {
+                BlendOp = AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 230,
+                AlphaFormat = AC_SRC_ALPHA,
+            };
+
+            UpdateLayeredWindow(_hwnd, IntPtr.Zero, ref ptDst, ref sz,
+                memDc, ref ptSrc, 0, ref blend, ULW_ALPHA);
         }
-        catch (Exception ex)
+        finally
         {
-            _initError = ex;
-            _ready.Set();
+            if (brush != IntPtr.Zero) DeleteObject(brush);
+            if (region != IntPtr.Zero) DeleteObject(region);
+            SelectObject(memDc, oldBmp);
+            DeleteObject(bmp);
+            DeleteDC(memDc);
+            ReleaseDC(IntPtr.Zero, screenDc);
         }
     }
 
-    /// <summary>Execute une action sur le thread WPF. Bloque l'appelant.</summary>
-    public void Run(Action action)
-    {
-        if (_dispatcher is null)
-        {
-            throw new InvalidOperationException("WPF host non initialise");
-        }
-        if (_dispatcher.CheckAccess())
-        {
-            action();
-        }
-        else
-        {
-            _dispatcher.Invoke(action);
-        }
-    }
-}
-
-/// <summary>
-/// La fenetre du bandeau. Seule classe visible de l'exterieur.
-/// </summary>
-public sealed class FenetreBandeau : Window
-{
-    private readonly TextBlock _texte;
-
-    public FenetreBandeau(string serveur, string sequence)
-    {
-        Title = "Assistant pilote";
-        WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
-        Background = System.Windows.Media.Brushes.Transparent;
-        Topmost = true;
-        ShowInTaskbar = false;
-        ResizeMode = ResizeMode.NoResize;
-        Focusable = false;
-        ShowActivated = false;
-        Width = 600;
-        Height = 64;
-        Left = (SystemParameters.WorkArea.Width - Width) / 2;
-        Top = 0;
-
-        var bordure = new Border
-        {
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(220, 30, 30, 30)),
-            BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 140, 0)),
-            BorderThickness = new Thickness(2),
-            CornerRadius = new System.Windows.CornerRadius(6),
-            Padding = new Thickness(16, 8, 16, 8),
-        };
-        _texte = new TextBlock
-        {
-            Foreground = System.Windows.Media.Brushes.White,
-            FontSize = 14,
-            FontWeight = FontWeights.SemiBold,
-            Text = $"L'ASSISTANT PILOTE  |  {serveur} / {sequence}",
-        };
-        bordure.Child = _texte;
-        Content = bordure;
-    }
-
-    public void ChangerTexte(string serveur, string sequence)
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            _texte.Text = $"L'ASSISTANT PILOTE  |  {serveur} / {sequence}";
-        });
-    }
-
-    public void Fermer()
-    {
-        Dispatcher.BeginInvoke(() => Close());
-    }
-
-    /// <summary>Echap interrompt la sequence en cours.</summary>
-    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            ModeExclusif.Fermer();
-            e.Handled = true;
-            return;
-        }
-        base.OnPreviewKeyDown(e);
-    }
+    private static string serveur_actuel() => _serveur;
+    private static string sequence_actuelle() => _sequence;
 }

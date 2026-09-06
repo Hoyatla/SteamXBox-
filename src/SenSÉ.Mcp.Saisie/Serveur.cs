@@ -302,9 +302,10 @@ public static class Serveur
 
     private static string OuvrirModeExclusif(string sequence)
     {
-        // ModeExclusif.Ouvrir demarre un thread WPF dedie a la demande
-        // (si pas deja fait) et y dispatche le Show() de la fenetre.
-        // Bloquant : on attend que la fenetre soit effectivement affichee
+        // ModeExclusif est un overlay Win32 (CreateWindowEx +
+        // UpdateLayeredWindow), pas de WPF. Il s'execute directement
+        // sur le main thread STA de mcp-saisie, sans thread dedie ni
+        // dispatcher. Synchrone : on attend que la fenetre soit peinte
         // avant de retourner au client MCP.
         ModeExclusif.Ouvrir("mcp-saisie", sequence);
         return $"mode exclusif ouvert: {sequence}";
