@@ -218,7 +218,16 @@ public sealed class AssistantLocal
         + "et que X n'est pas au premier plan, NE DUMP PAS la fenetre foreground. "
         + "Utilise debug_uia_list_windows d'abord pour trouver le bon hwnd, "
         + "puis debug_uia_dump_window(titre=X) pour avoir l'arbre UIA, "
-        + "puis debug_uia_set_text sur le bon automationId.";
+        + "puis debug_uia_set_text sur le bon automationId."
+
+        + "STRATEGIE ECRITURE. Pour 'ecris X dans la fenetre Y': "
+        + "1) debug_uia_list_windows pour trouver le hwnd de Y. "
+        + "2) debug_uia_focus_window(hwnd) pour la mettre au premier plan. "
+        + "3) debug_uia_find_main_edit(titre=Y) pour trouver le bon Edit. "
+        + "4) debug_uia_set_text(automationId, value=X). "
+        + "5) debug_uia_screenshot_window(titre=Y) + afficher_image pour confirmer. "
+        + "Si find_main_edit ne retourne rien, debug_uia_dump_window(titre=Y) et cherche "
+        + "le controle de type 'Document' ou le Pane le plus grand.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
