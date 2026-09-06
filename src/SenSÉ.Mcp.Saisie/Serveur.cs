@@ -26,10 +26,21 @@ namespace SenSÉ.Mcp.Saisie;
 /// d'autre sur la machine veut causer avec mcp-saisie, il peut, mais
 /// il n'y a aucun moyen d'echapper au sandbox user par ce canal.
 ///
-/// <para><b>Une connexion a la fois.</b> Le serveur accepte UN client
-/// puis bloque jusqu'a ce qu'il ferme. C'est suffisant pour SenSÉ.Desktop
-/// qui est le seul caller prevu. Si tu veux du multi-client, il faut
-/// passer a un pool de threads ou async AcceptTcpClient en boucle.</para>
+/// <para><b>Une requete par connexion, plusieurs connexions a la fois.</b>
+/// Chaque connexion acceptee part dans sa propre tache et le serveur retourne
+/// aussitot attendre la suivante ; la connexion est fermee des que la reponse
+/// est ecrite, puisque celle-ci annonce toujours "Connection: close".
+///
+/// La version precedente attendait, dans la boucle d'accept, que le client
+/// ferme son socket. HttpClient ouvrant une connexion par appel d'outil et ne
+/// la fermant pas toujours dans la seconde, chaque appel bloquait le suivant
+/// jusqu'a son timeout de 30 s : cote Assistant, un
+/// "HttpRequestException: Error while copying content to a stream" sans cause
+/// visible. Servir un seul client a la fois n'etait pas une simplification, mais
+/// le defaut lui-meme.
+///
+/// L'execution des outils reste, elle, serialisee par un verrou : un seul
+/// SendInput a la fois, sinon deux frappes s'entrelacent.</para>
 /// </remarks>
 public static class Serveur
 {
@@ -52,19 +63,36 @@ public static class Serveur
                 break;
             }
             await Console.Error.WriteLineAsync($"client connecte depuis {client.Client.RemoteEndPoint}").ConfigureAwait(false);
-            try
+
+            // Une tache par connexion, et on repart aussitot attendre la suivante.
+            //
+            // Auparavant la boucle attendait ici la fin de la connexion courante, et
+            // TraiterConnexionAsync ne rendait la main qu'a l'EOF du client. Tant que
+            // HttpClient n'avait pas ferme son socket, le serveur n'acceptait plus rien :
+            // l'appel d'outil suivant restait en attente jusqu'a son timeout de 30 s, et
+            // l'Assistant recevait « HttpRequestException: Error while copying content to
+            // a stream ». Un serveur qui ne sert qu'un client a la fois n'est pas une
+            // simplification quand le client, lui, en ouvre un par appel.
+            //
+            // L'execution des outils, elle, reste sequentielle : voir _executions plus
+            // bas. Ce qui devait cesser d'etre sequentiel, c'est la duree de vie des
+            // connexions, pas l'ordre des frappes.
+            var courant = client;
+            _ = Task.Run(async () =>
             {
-                await TraiterConnexionAsync(client, arret).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                await Console.Error.WriteLineAsync($"erreur connexion: {ex.Message}").ConfigureAwait(false);
-            }
-            finally
-            {
-                client.Dispose();
-            }
-            // Si le client ferme, on accepte le suivant.
+                try
+                {
+                    await TraiterConnexionAsync(courant, arret).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await Console.Error.WriteLineAsync($"erreur connexion: {ex.Message}").ConfigureAwait(false);
+                }
+                finally
+                {
+                    courant.Dispose();
+                }
+            }, arret);
         }
 
         listener.Stop();
@@ -75,14 +103,33 @@ public static class Serveur
         using var stream = client.GetStream();
         // HTTP/1.1 basique. On gere une requete par connexion (Connection: close)
         // pour eviter de devoir parser les headers keep-alive.
+        var remoteEp = client.Client.RemoteEndPoint?.ToString() ?? "?";
         while (!arret.IsCancellationRequested && client.Connected)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            string reqLog = "?";
             var request = await LireRequeteAsync(stream, arret).ConfigureAwait(false);
-            if (request is null) break; // EOF
+            if (request is null)
+            {
+                await Console.Error.WriteLineAsync("[mcp-saisie] connexion de " + remoteEp + " fermee par le client").ConfigureAwait(false);
+                break;
+            }
+            reqLog = request.Methode + " " + request.Path;
+            await Console.Error.WriteLineAsync("[mcp-saisie] connexion de " + remoteEp + ", requete " + reqLog).ConfigureAwait(false);
 
             await EcrireReponseAsync(stream, request).ConfigureAwait(false);
-            // Si le client a envoye Connection: close, on coupe.
-            if (request.CloseConnexion) break;
+            sw.Stop();
+            await Console.Error.WriteLineAsync("[mcp-saisie] connexion de " + remoteEp + ", requete " + reqLog + ", " + sw.ElapsedMilliseconds + "ms, OK").ConfigureAwait(false);
+
+            // On coupe apres avoir repondu, sans consulter request.CloseConnexion.
+            //
+            // La reponse annonce toujours « Connection: close » : le client ne reutilisera
+            // donc jamais cette connexion, et attendre son EOF ne servait qu'a garder un
+            // socket et une tache ouverts pour rien. Le test portait de toute facon sur le
+            // mauvais bout du fil — HttpClient parle en HTTP/1.1 keep-alive et n'envoie
+            // jamais « Connection: close » dans sa requete, si bien que la boucle ne
+            // s'arretait jamais par ce chemin.
+            break;
         }
     }
 
@@ -111,7 +158,7 @@ public static class Serveur
             headers[name] = value;
         }
 
-        // Lit le body si Content-Length
+        // Lit le body : soit une longueur annoncee, soit un corps decoupe en morceaux.
         var body = "";
         if (headers.TryGetValue("Content-Length", out var lenStr) && int.TryParse(lenStr, out var len) && len > 0)
         {
@@ -125,6 +172,11 @@ public static class Serveur
             }
             body = Encoding.UTF8.GetString(buf, 0, read);
         }
+        else if (headers.TryGetValue("Transfer-Encoding", out var encodage)
+                 && encodage.Contains("chunked", StringComparison.OrdinalIgnoreCase))
+        {
+            body = await LireCorpsDecoupeAsync(stream, arret).ConfigureAwait(false);
+        }
 
         var close = false;
         if (headers.TryGetValue("Connection", out var conn))
@@ -133,6 +185,75 @@ public static class Serveur
         }
 
         return new RequeteHttp(methode, path, headers, body, close);
+    }
+
+    /// <summary>Lit un corps envoye en <c>Transfer-Encoding: chunked</c>.</summary>
+    /// <remarks>
+    /// <b>Ce que son absence a coute.</b> Le serveur ne lisait le corps que sur presence
+    /// d'un <c>Content-Length</c>. Or l'Assistant appelle via
+    /// <c>HttpClient.PostAsJsonAsync</c>, et le <c>JsonContent</c> qu'il construit ne sait
+    /// pas calculer sa longueur a l'avance : HttpClient bascule alors en chunked. Le corps
+    /// etait donc jete en silence, et chaque appel arrivait sans ses arguments —
+    /// <c>clavier_taper</c> repondait « rien a taper », <c>souris_deplacer</c> « deplace a
+    /// (0,0) », <c>mode_exclusif_ouvrir</c> ouvrait un bandeau sans texte. Aucun de ces
+    /// retours ne ressemblait a une erreur, ce qui est le pire cas.
+    ///
+    /// <para>Pire encore, les octets non lus restaient dans le socket. Le serveur repondait
+    /// puis fermait la connexion, et le client recevait un RST en pleine lecture :
+    /// <c>SocketException 10054</c>, remontee en
+    /// <c>HttpRequestException: Error while copying content to a stream</c>. Un seul defaut,
+    /// les deux symptomes.</para>
+    ///
+    /// <para>Le format est celui de la RFC 9112 : une ligne de taille en hexadecimal
+    /// (eventuellement suivie d'un « ; » et d'extensions qu'on ignore), les octets, un CRLF,
+    /// et ainsi de suite jusqu'a une taille nulle — puis d'eventuels trailers, lus et jetes
+    /// jusqu'a la ligne vide. Les lire est ce qui laisse le flux propre pour la suite.</para>
+    /// </remarks>
+    private static async Task<string> LireCorpsDecoupeAsync(NetworkStream stream, CancellationToken arret)
+    {
+        var corps = new MemoryStream();
+
+        while (true)
+        {
+            var ligneTaille = await LireLigneAsync(stream, arret).ConfigureAwait(false);
+            if (ligneTaille is null) break; // EOF prematuree : on rend ce qu'on a.
+
+            // « 1a7 » ou « 1a7;nom=valeur » : seule la partie avant le « ; » compte.
+            var pointVirgule = ligneTaille.IndexOf(';');
+            if (pointVirgule >= 0) ligneTaille = ligneTaille.Substring(0, pointVirgule);
+            ligneTaille = ligneTaille.Trim();
+            if (ligneTaille.Length == 0) continue;
+
+            if (!int.TryParse(ligneTaille, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out var taille))
+            {
+                break; // Taille illisible : le flux n'est plus interpretable, on s'arrete.
+            }
+            if (taille <= 0) break; // Morceau de taille nulle : fin du corps.
+
+            var tampon = new byte[taille];
+            var lus = 0;
+            while (lus < taille)
+            {
+                var n = await stream.ReadAsync(tampon.AsMemory(lus, taille - lus), arret).ConfigureAwait(false);
+                if (n == 0) break;
+                lus += n;
+            }
+            corps.Write(tampon, 0, lus);
+            if (lus < taille) break;
+
+            // Le CRLF qui suit les octets du morceau, et qui n'en fait pas partie.
+            await LireLigneAsync(stream, arret).ConfigureAwait(false);
+        }
+
+        // Trailers eventuels, jusqu'a la ligne vide qui clot le message.
+        while (true)
+        {
+            var ligne = await LireLigneAsync(stream, arret).ConfigureAwait(false);
+            if (ligne is null || ligne.Length == 0) break;
+        }
+
+        return Encoding.UTF8.GetString(corps.ToArray());
     }
 
     private static async Task<string?> LireLigneAsync(NetworkStream stream, CancellationToken arret)
@@ -150,9 +271,23 @@ public static class Serveur
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Un outil a la fois, quel que soit le nombre de connexions ouvertes.
+    /// </summary>
+    /// <remarks>
+    /// Les connexions sont servies en parallele depuis que la boucle d'accept ne les
+    /// attend plus une par une, mais ce qu'elles declenchent — SendInput, capture GDI —
+    /// vise un seul ecran et un seul clavier. Deux frappes qui s'entrelacent ecrivent un
+    /// mot melange, et deux captures concurrentes se disputent le meme DC. La reponse
+    /// tient dans un verrou : la concurrence sert a ne pas bloquer l'accept, pas a
+    /// piloter deux choses a la fois.
+    /// </remarks>
+    private static readonly SemaphoreSlim _executions = new(1, 1);
+
     private static async Task EcrireReponseAsync(NetworkStream stream, RequeteHttp req)
     {
         ReponseHttp resp;
+        await _executions.WaitAsync().ConfigureAwait(false);
         try
         {
             resp = TraiterRequete(req);
@@ -161,6 +296,10 @@ public static class Serveur
         {
             resp = new ReponseHttp(500, "application/json",
                 $"{{\"ok\":false,\"error\":\"{ex.GetType().Name}: {ex.Message.Replace("\"", "\\\"")}\"}}");
+        }
+        finally
+        {
+            _executions.Release();
         }
 
         var headersStr = new StringBuilder();

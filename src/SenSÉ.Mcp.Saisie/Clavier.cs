@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SenSÉ.Mcp.Saisie;
@@ -13,8 +13,10 @@ namespace SenSÉ.Mcp.Saisie;
 /// Unicode SendInput (KEYEVENTF_UNICODE) qui passe par toutes les couches
 /// sans dependre du layout actif.
 ///
-/// <para><b>Mode exclusif obligatoire.</b> Meme regle que la souris :
-/// refuser l'action si <see cref="ModeExclusif.EstActif"/> est faux.</para>
+/// <para><b>Mode exclusif optionnel.</b> Le bandeau ModeExclusif est purement
+/// visuel (avertissement a l'utilisateur). Les actions clavier/souris
+/// marchent sans lui, pour permettre un tap rapide dans une webapp deja
+/// ouverte (cas frequent : ecrire dans le chat de MiniMax Code, OpenCode, etc.).</para>
 /// </remarks>
 public static class Clavier
 {
@@ -46,7 +48,6 @@ public static class Clavier
     /// <summary>Tape une chaine de caracteres, un caractere a la fois, via Unicode SendInput.</summary>
     public static string Taper(string texte)
     {
-        if (!ModeExclusif.EstActif) return "refuse: mode exclusif inactif";
         if (string.IsNullOrEmpty(texte)) return "rien a taper";
 
         foreach (var c in texte)
@@ -59,9 +60,28 @@ public static class Clavier
     }
 
     /// <summary>Appuie sur une touche speciale (Entree, Echap, Tab, F1..F12, fleches) avec modificateurs.</summary>
+    /// <remarks>
+    /// <b>« Ctrl+S » passe aussi.</b> Cette methode attend la touche et ses modificateurs
+    /// separement, alors que la capacite voisine debug_uia_press accepte la combinaison
+    /// ecrite d'un seul tenant. Deux verbes qui font la meme chose avec deux conventions,
+    /// et le modele choisit la mauvaise : le 6 septembre 2026 il a essaye
+    /// <c>touche="Ctrl+S"</c> deux fois, recu « touche inconnue » deux fois, puis a
+    /// renonce a enregistrer. Plutot que d'esperer qu'il retienne la difference, on
+    /// accepte les deux formes.
+    /// </remarks>
     public static string Toucher(string touche, IReadOnlyList<string> modificateurs)
     {
-        if (!ModeExclusif.EstActif) return "refuse: mode exclusif inactif";
+        // Une combinaison ecrite dans « touche » : on la scinde, le dernier morceau est la
+        // touche, les precedents s'ajoutent aux modificateurs recus par ailleurs.
+        if (touche.Contains('+'))
+        {
+            var morceaux = touche.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (morceaux.Length >= 2)
+            {
+                touche = morceaux[^1];
+                modificateurs = [.. modificateurs, .. morceaux[..^1]];
+            }
+        }
 
         var vk = ParseTouche(touche);
         if (vk == 0) return $"touche inconnue: {touche}";
@@ -89,7 +109,7 @@ public static class Clavier
         {
             EnvoyerTouche((ushort)mod, '\0', true);
         }
-        return $"touche {touche} avec {modificateurs.Count} modificateur(s)";
+        return $"touche {touche} avec {mods.Count} modificateur(s)";
     }
 
     private static ushort ParseTouche(string touche)

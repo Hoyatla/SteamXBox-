@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace SenSÉ.Mcp.Saisie;
 
@@ -11,11 +11,9 @@ namespace SenSÉ.Mcp.Saisie;
 /// raw input. SendInput est la voie documentee, supportee par toutes les
 /// applications Windows actuelles.
 ///
-/// <para><b>Mode exclusif obligatoire.</b> Cette classe refuse de bouger
-/// le curseur ou de cliquer si <see cref="ModeExclusif.EstActif"/> est
-/// faux. C'est le seul garde-fou entre l'Assistant et le reste de
-/// l'ordinateur : sans lui, l'Assistant deplacerait la souris pendant
-/// que l'utilisateur tape au clavier, et le bordel serait immediate.</para>
+/// <para><b>Mode exclusif optionnel.</b> Le bandeau ModeExclusif est purement
+/// visuel (avertissement a l'utilisateur). Les actions souris marchent sans
+/// lui, pour permettre un clic rapide dans une webapp deja ouverte.</para>
 /// </remarks>
 public static class Souris
 {
@@ -66,7 +64,6 @@ public static class Souris
     /// <summary>Deplace le curseur a une position absolue en coordonnees ecran.</summary>
     public static string Deplacer(int x, int y)
     {
-        if (!ModeExclusif.EstActif) return "refuse: mode exclusif inactif";
         SetCursorPos(x, y);
         return $"deplace a ({x},{y})";
     }
@@ -74,8 +71,6 @@ public static class Souris
     /// <summary>Clic a la position courante, ou aux coordonnees indiquees.</summary>
     public static string Cliquer(string bouton, bool doubles, int? x, int? y)
     {
-        if (!ModeExclusif.EstActif) return "refuse: mode exclusif inactif";
-
         if (x is not null && y is not null)
         {
             SetCursorPos(x.Value, y.Value);
@@ -105,7 +100,6 @@ public static class Souris
     /// <summary>Fait tourner la molette. delta positif = haut, negatif = bas. axe = "vertical" ou "horizontal".</summary>
     public static string Molette(int delta, string axe)
     {
-        if (!ModeExclusif.EstActif) return "refuse: mode exclusif inactif";
         var flag = axe.ToLowerInvariant() == "horizontal" ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL;
         Envoyer(flag, (uint)delta);
         return $"molette {axe} delta={delta}";

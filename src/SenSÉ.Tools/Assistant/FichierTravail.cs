@@ -68,6 +68,25 @@ public sealed class Travail
     [JsonPropertyName("acquis")]
     public List<string> Acquis { get; set; } = [];
 
+    /// <summary>
+    /// Ce que l'utilisateur a demandé, mot pour mot, quand ce travail est né.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> Les acquis dépendent du modèle : c'est à lui d'appeler
+    /// <c>travail_retenir</c>, et sur quatre milliards de paramètres c'est un espoir, pas une
+    /// garantie — la même réserve que porte déjà <see cref="Accepte"/>. Mesuré le 6 septembre
+    /// 2026 : le contexte sature en plein travail, le fil repart neuf, et l'assistant rappelle
+    /// <c>focus_and_type</c> avec <c>texte:""</c>. Le texte de deux cents caractères qu'on lui
+    /// avait demandé d'écrire n'existait plus nulle part — ni dans le fil élagué, ni dans un
+    /// acquis qu'il n'avait pas pensé à noter.
+    ///
+    /// <para>D'où un champ à part, rempli par le code au moment où le travail est créé, et jamais
+    /// par le modèle. Les étapes disent quoi faire, les acquis disent avec quoi, la demande dit
+    /// pourquoi — et elle est la seule des trois qu'on ne peut pas reconstituer après coup.</para>
+    /// </remarks>
+    [JsonPropertyName("demande")]
+    public string Demande { get; set; } = "";
+
     /// <summary>Tout est-il coché ?</summary>
     public bool Fini => Taches.Count > 0 && Taches.TrueForAll(t => t.Faite);
 }
@@ -119,6 +138,31 @@ public static class FichierTravail
     /// de semer des carnets à côté de leurs binaires.
     /// </remarks>
     public static string? Racine { get; set; }
+
+    /// <summary>
+    /// La demande de l'utilisateur pour le tour en cours, telle qu'il l'a écrite.
+    /// </summary>
+    /// <remarks>
+    /// Posée par <c>AssistantLocal.Repondre</c> au début de chaque tour, lue par
+    /// <see cref="Noter"/> quand un travail naît. Un statique parce que le carnet est écrit
+    /// depuis une Capacité, à laquelle le tour courant n'est pas passé — et que faire descendre
+    /// la demande jusque-là traverserait quatre signatures pour un seul lecteur.
+    ///
+    /// <para>Tronquée : ce champ voyage dans chaque rappel, et une demande de plusieurs milliers
+    /// de caractères mangerait le budget qu'elle est censée protéger.</para>
+    /// </remarks>
+    public static string DemandeCourante
+    {
+        get => _demandeCourante;
+        set
+        {
+            var texte = (value ?? "").Trim();
+            const int maximum = 1500;
+            _demandeCourante = texte.Length <= maximum ? texte : texte[..maximum] + "…";
+        }
+    }
+
+    private static string _demandeCourante = "";
 
     /// <summary>Où vivent les carnets, à côté du produit — donc portables avec lui.</summary>
     public static string Dossier
@@ -186,6 +230,14 @@ public static class FichierTravail
             // rend pas faux ce qu'on a appris en l'exécutant. Les perdre ici rendrait la reprise
             // impossible au moment précis où elle sert — quand le plan s'est révélé trop court.
             Acquis = ancien is null ? [] : [.. ancien.Acquis],
+
+            // La demande d'origine ne se remplace pas. Reviser un plan, ajouter une etape,
+            // reprendre apres un contexte plein : rien de tout cela ne change ce que
+            // l'utilisateur a demande au depart, et c'est justement au moment de la reprise
+            // que le tour courant ne porte plus qu'un « reprends le travail ».
+            Demande = string.IsNullOrWhiteSpace(ancien?.Demande)
+                ? DemandeCourante
+                : ancien!.Demande,
         };
 
         foreach (var texte in taches.Select(t => (t ?? "").Trim()).Where(t => t.Length > 0))
@@ -373,7 +425,28 @@ public static class FichierTravail
         return [.. carnets.OrderByDescending(t => t.Touche)];
     }
 
-    /// <summary>Efface un carnet. C'est la confirmation de l'utilisateur qui l'autorise.</summary>
+    /// <summary>Le dossier où sont rangés les carnets terminés.</summary>
+    public static string DossierFinis => Path.Combine(Dossier, "Finis");
+
+    /// <summary>
+    /// Range un carnet terminé. C'est la confirmation de l'utilisateur qui l'autorise.
+    /// </summary>
+    /// <remarks>
+    /// <b>Rangé, plus effacé.</b> Cette méthode supprimait le fichier. Un travail mené à son terme
+    /// est pourtant la seule trace de ce que l'assistant a su faire et par quel chemin — la
+    /// demande d'origine, les étapes, ce qui a été établi en route. C'est exactement la matière
+    /// qu'on veut relire quand on se demande pourquoi une manœuvre a marché, ou qu'on cherche à
+    /// refaire la même trois semaines plus tard.
+    ///
+    /// <para>Un sous-dossier plutôt qu'un drapeau dans le fichier : <see cref="Lister"/> et
+    /// <see cref="Purger"/> énumèrent <c>Dossier</c> sans descendre, si bien que ce qui est rangé
+    /// sort de leur vue sans qu'aucune des deux ait à connaître la notion de « fini ». Le carnet
+    /// disparaît de la fenêtre, et reste sur le disque.</para>
+    ///
+    /// <para>L'horodatage dans le nom sert au deuxième passage : le même titre peut revenir —
+    /// « Sauvegarde LibreOffice » reviendra — et le rangement ne doit pas écraser la fois
+    /// précédente, qui est justement celle qu'on voudra comparer.</para>
+    /// </remarks>
     public static bool Effacer(string titre, Action<string>? journal)
     {
         var fichier = Fichier(titre);
@@ -385,14 +458,20 @@ public static class FichierTravail
                 return false;
             }
 
-            File.Delete(fichier);
-            journal?.Invoke($"carnet effacé : {Path.GetFileName(fichier)}");
+            Directory.CreateDirectory(DossierFinis);
+
+            var horodatage = DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss", CultureInfo.InvariantCulture);
+            var range = Path.Combine(
+                DossierFinis, $"{Path.GetFileNameWithoutExtension(fichier)}-{horodatage}.json");
+
+            File.Move(fichier, range, overwrite: false);
+            journal?.Invoke($"carnet terminé, rangé dans Finis : {Path.GetFileName(range)}");
 
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            journal?.Invoke($"carnet non effacé : {exception.Message}");
+            journal?.Invoke($"carnet non rangé : {exception.Message}");
 
             return false;
         }
@@ -456,6 +535,13 @@ public static class FichierTravail
             .Append(travail.Taches.Count.ToString(CultureInfo.InvariantCulture))
             .Append(')')
             .AppendLine(travail.Accepte ? "" : "  — EN ATTENTE DE L'ACCORD DE L'UTILISATEUR");
+
+        // La demande avant les etapes : c'est la seule ligne qui dit ce qu'on cherche a
+        // obtenir, et apres un contexte plein c'est la seule qui reste pour le dire.
+        if (travail.Demande.Length > 0)
+        {
+            texte.Append("  DEMANDE DE L'UTILISATEUR, mot pour mot : ").AppendLine(travail.Demande);
+        }
 
         foreach (var tache in travail.Taches)
         {

@@ -27,6 +27,43 @@ public static class AssistantDebug
     private static readonly string? AgentToken =
         Environment.GetEnvironmentVariable("SENSE_DEBUG_AGENT_TOKEN");
 
+    /// <summary>Le PID du pc-agent, pour lui ceder le droit de premier plan.</summary>
+    private static readonly int AgentPid =
+        int.TryParse(Environment.GetEnvironmentVariable("SENSE_DEBUG_AGENT_PID"), out var pid) ? pid : 0;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    /// <summary>
+    /// Cede au pc-agent le droit de mettre une fenetre au premier plan.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pourquoi ce detour est la seule voie propre.</b> Windows refuse
+    /// <c>SetForegroundWindow</c> a un processus qui ne possede pas deja le premier plan :
+    /// c'est ce qui empeche n'importe quel programme d'arriere-plan de sauter devant celui
+    /// qu'on utilise. pc-agent, lance en subprocess, ne le possede jamais — et le 6
+    /// septembre 2026 son refus a envoye « Bonjour dans le nouveau systeme
+    /// d'exploitation! » dans la fenetre de l'Assistant au lieu de LibreOffice.
+    ///
+    /// <para>La regle a une porte, prevue pour exactement ce cas : le processus qui
+    /// possede le premier plan peut ceder son droit a un autre, par PID. Or quand
+    /// l'utilisateur vient de parler a l'Assistant, la fenetre au premier plan est
+    /// justement celle de SenSÉ.Desktop — et cette classe tourne dans ce processus-la.
+    /// Elle est donc au seul endroit d'ou la cession est possible.</para>
+    ///
+    /// <para>Le droit cede ne vaut que pour le prochain appel du beneficiaire, et il est
+    /// consomme meme s'il ne s'en sert pas : on le redonne avant chaque requete de focus,
+    /// jamais une fois pour toutes. Si SenSÉ n'a pas le premier plan, l'appel echoue sans
+    /// consequence et pc-agent rendra son refus habituel — ce qui reste la bonne reponse.</para>
+    /// </remarks>
+    private static void CederLePremierPlan()
+    {
+        if (AgentPid <= 0) return;
+        try { AllowSetForegroundWindow(AgentPid); }
+        catch { /* user32 absent ou appel refuse : pc-agent le dira lui-meme. */ }
+    }
+
     public static IReadOnlyList<AssistantLocal.Capacite> Creer()
     {
         return
@@ -42,6 +79,19 @@ public static class AssistantDebug
                 "Invoque un controle (clic logique, pas physique) identifie par son automationId. C'est 100x plus fiable qu'un clic souris parce qu'il n'y a pas de coordonnees. Trouve d'abord l'automationId avec debug_uia_dump, puis appelle cette capacite.",
                 [new AssistantLocal.Parametre("automationId", "L'automationId du controle, tel qu'il apparait dans le dump UIA", [])],
                 args => AppelerAsync("POST", "/v1/uia/invoke", new { automation_id = args.GetValueOrDefault("automationId") ?? "" })),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_invoke_par_nom",
+                "A PREFERER a debug_uia_invoke. Actionne un controle par le NOM ecrit dessus (le champ 'name' du dump), pas par son automationId. Dans beaucoup de boites de dialogue l'automationId est un simple numero d'ordre — LibreOffice expose 'Enregistrer' en '1' et 'Annuler' en '2' — et se tromper d'un rang annule au lieu de valider. La correspondance essaie exact, puis casse ignoree, puis sous-chaine, en preferant un controle actif. La reponse renvoie {invoked} : le nom reellement actionne, a relire. Si le nom n'existe pas, l'erreur liste les noms presents dans la fenetre : choisis dedans plutot que de deviner.",
+                [
+                    new AssistantLocal.Parametre("nom", "Le nom affiche sur le controle, tel qu'il apparait dans le champ 'name' du dump (ex: Enregistrer, Annuler, OK).", []),
+                    new AssistantLocal.Parametre("titre", "Titre (ou partie) de la fenetre ou chercher. Vide = fenetre au premier plan, ce qui est le cas d'une boite qui vient de s'ouvrir.", []),
+                ],
+                args => AppelerAsync("POST", "/v1/uia/invoke-by-name", new
+                {
+                    name = args.GetValueOrDefault("nom") ?? "",
+                    title = args.GetValueOrDefault("titre") ?? "",
+                })),
 
             new AssistantLocal.Capacite(
                 "debug_uia_set_text",
@@ -123,11 +173,24 @@ public static class AssistantDebug
 
             new AssistantLocal.Capacite(
                 "debug_uia_focus_window",
-                "Met au premier plan la fenetre identifiee par son HWND. Utilise apres debug_uia_list_windows pour amener la bonne fenetre au foreground avant debug_uia_find_main_edit et debug_uia_set_text. Le HWND vient de debug_uia_list_windows (decimal ou 0xABCD).",
+                "Met au premier plan la fenetre identifiee par son HWND, et VERIFIE que le focus a bien pris. Repond en erreur si Windows a refuse (un processus d'arriere-plan n'a pas le droit de voler le premier plan) : dans ce cas ne tape rien, la frappe irait dans une autre fenetre. Le HWND vient de debug_uia_list_windows (decimal ou 0xABCD).",
                 [new AssistantLocal.Parametre("hwnd", "Le HWND de la fenetre (decimal ou 0xABCD). Vient de debug_uia_list_windows.", [])],
                 args => AppelerAsync("POST", "/v1/uia/focus-window", new
                 {
                     hwnd = args.GetValueOrDefault("hwnd") ?? "",
+                })),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_focus_and_type",
+                "LE MOYEN PRIVILEGIE d'ecrire dans une application deja ouverte. Met la fenetre au premier plan, verifie que le focus a pris, puis tape le texte — le tout dans un seul appel et sur un seul thread, ce qui est la seule facon fiable sous Windows. Repond {hwnd, title, units_sent, still_foreground} : verifie que title est bien la fenetre visee. Si le focus est refuse, rien n'est tape et tu recois une erreur. A preferer a la sequence debug_uia_focus_window + saisie_clavier_taper, qui ne garantit pas que le focus tienne entre les deux appels.",
+                [
+                    new AssistantLocal.Parametre("hwnd", "Le HWND de la fenetre (decimal ou 0xABCD). Vient de debug_uia_list_windows. VERIFIE-LE : un HWND lu de travers ecrit dans la mauvaise application.", []),
+                    new AssistantLocal.Parametre("texte", "Le texte a taper. Envoye en Unicode, la disposition du clavier n'a pas d'importance.", []),
+                ],
+                args => AppelerAsync("POST", "/v1/uia/focus-and-type", new
+                {
+                    hwnd = args.GetValueOrDefault("hwnd") ?? "",
+                    text = args.GetValueOrDefault("texte") ?? "",
                 })),
 
             new AssistantLocal.Capacite(
@@ -145,6 +208,13 @@ public static class AssistantDebug
     {
         try
         {
+            // Tout ce qui va demander le premier plan doit d'abord en recevoir le droit,
+            // et le recevoir juste avant : la cession ne vaut que pour un appel.
+            if (path.StartsWith("/v1/uia/focus", StringComparison.Ordinal))
+            {
+                CederLePremierPlan();
+            }
+
             using var req = new HttpRequestMessage(
                 methode == "GET" ? HttpMethod.Get : HttpMethod.Post,
                 AgentUrl.TrimEnd('/') + path);

@@ -25,9 +25,18 @@ public class MultiTermSearchTests
         => Assert.NotNull(SearchRanking.Score(SenSÉ, SearchRanking.Terms(typed), pathMode: false, Now));
 
     // A bare letter becomes a drive, so "D" means D: and not every word containing a d.
+    //
+    // The terms come back normalised — lower case, accents dropped — because that is the form
+    // Score compares against SearchName and SearchPath, which are normalised once when the entry is
+    // built. Expecting "SenSÉ" here asserted the opposite of what the ranking needs.
+    //
+    // The expectation went unnoticed while the product was called SteamXBox: a name with no accent,
+    // written lower case in the expectation, survived normalising unchanged. Renaming to SenSÉ is
+    // what made the two forms differ, and the test was reading its own input rather than the
+    // contract.
     [Fact]
     public void ALoneLetterIsReadAsADrive()
-        => Assert.Equal(["d:", "SenSÉ"], SearchRanking.Terms("D, SenSÉ"));
+        => Assert.Equal(["d:", "sense"], SearchRanking.Terms("D, SenSÉ"));
 
     // All terms required, never any: a second word is how somebody narrows a search, so treating
     // the terms as alternatives would make the answer worse the more they typed.
@@ -75,9 +84,15 @@ public class MultiTermSearchTests
 
     // One term still behaves exactly as before: the whole point is that nothing regressed for the
     // ordinary case of typing a single word.
+    //
+    // The single-term overload documents its query as "already normalised", and it is the caller's
+    // job to have done it — Terms does exactly that for the other overload. Handing it the raw
+    // "SenSÉ" made it compare an accented query against a normalised name, find nothing, and return
+    // null, so the test was comparing a failure to a success and calling the difference a
+    // regression.
     [Fact]
     public void ASingleTermIsUnchanged()
         => Assert.Equal(
-            SearchRanking.Score(SenSÉ, "SenSÉ", pathMode: false, Now),
+            SearchRanking.Score(SenSÉ, SearchText.Normalize("SenSÉ"), pathMode: false, Now),
             SearchRanking.Score(SenSÉ, SearchRanking.Terms("SenSÉ"), pathMode: false, Now));
 }

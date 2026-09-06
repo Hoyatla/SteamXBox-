@@ -142,140 +142,14 @@ public partial class App : Application
                 UiLog.Failure("debug FIFO au boot", ex);
             }
 
-            // Demarre pc-agent (debug HTTP API) en subprocess loopback.
-            try
-            {
-                var cheminPcAgent = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "DebugAgent", "pc-agent.exe");
-                var cheminToken = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "DebugAgent", "token.txt");
-                if (System.IO.File.Exists(cheminPcAgent) && System.IO.File.Exists(cheminToken))
-                {
-                    var token = System.IO.File.ReadAllText(cheminToken).Trim();
-                    var psi = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = cheminPcAgent,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    };
-                    psi.ArgumentList.Add("--bind");
-                    psi.ArgumentList.Add("127.0.0.1");
-                    psi.ArgumentList.Add("--port");
-                    psi.ArgumentList.Add("8765");
-                    psi.ArgumentList.Add("--token");
-                    psi.ArgumentList.Add(token);
-                    psi.ArgumentList.Add("--roots");
-                    psi.ArgumentList.Add("C:\\\\");
-                    var proc = System.Diagnostics.Process.Start(psi);
-                    if (proc is not null)
-                    {
-                        _pcAgentProcess = proc;
-                        UiLog.Info($"pc-agent demarre: PID {proc.Id}, port 8765, token dans {cheminToken}");
-                    }
-                    else
-                    {
-                        UiLog.Warn("pc-agent demarre: Process.Start a renvoye null");
-                    }
-                    // Env vars mises a disposition de tous les subprocess SenSE.
-                    System.Environment.SetEnvironmentVariable("SENSE_DEBUG_AGENT_URL", "http://127.0.0.1:8765");
-                    System.Environment.SetEnvironmentVariable("SENSE_DEBUG_AGENT_TOKEN", token);
-                }
-                else
-                {
-                    UiLog.Warn($"pc-agent non demarre (binaire: {cheminPcAgent}, token: {cheminToken})");
-                }
-            }
-            catch (Exception ex)
-            {
-                UiLog.Failure("demarrage du pc-agent", ex);
-            }
+            // Les trois serveurs MCP — pc-agent, mcp-saisie, mcp-cdp — ne demarrent plus ici.
+            // Ils vivent avec la fenetre de l'Assistant, seule a s'en servir, et non avec
+            // l'environnement : voir ServeursMcp, et la meme regle deja tenue par
+            // ServeurModele pour le modele de langage.
 
             Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
             Tools.ToolRegistry.StartServices();
             
-            // Demarre mcp-saisie (HTTP loopback 127.0.0.1:8766) en subprocess.
-            try
-            {
-                var cheminSaisie = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "McpSaisie", "SenSÉ.Mcp.Saisie.exe");
-                if (System.IO.File.Exists(cheminSaisie))
-                {
-                    var psiSaisie = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = cheminSaisie,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    };
-                    psiSaisie.ArgumentList.Add("--port");
-                    psiSaisie.ArgumentList.Add("8766");
-                    var procSaisie = System.Diagnostics.Process.Start(psiSaisie);
-                    if (procSaisie is not null)
-                    {
-                        _saisieProcess = procSaisie;
-                        System.Environment.SetEnvironmentVariable("SENSE_SAISIE_URL", "http://127.0.0.1:8766");
-                        SenSÉ.Tools.Assistant.AssistantSaisie.Demarrer("http://127.0.0.1:8766");
-                        UiLog.Info($"mcp-saisie demarre: PID {procSaisie.Id}, port 8766");
-                    }
-                    else
-                    {
-                        UiLog.Warn("mcp-saisie: Process.Start a renvoye null");
-                    }
-                }
-                else
-                {
-                    UiLog.Warn($"mcp-saisie non demarre (binaire introuvable: {cheminSaisie})");
-                }
-            }
-            catch (Exception ex)
-            {
-                UiLog.Failure("demarrage de mcp-saisie", ex);
-            }
-
-            // Demarre mcp-cdp (CDP HTTP loopback 127.0.0.1:9224) en subprocess.
-            // Detecte Edge/Chrome au boot et le lance avec --remote-debugging-port=9223.
-            try
-            {
-                var cheminCdp = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "Cdp", "SenSÉ.Mcp.Cdp.exe");
-                if (System.IO.File.Exists(cheminCdp))
-                {
-                    // Log du chemin Edge/Chrome detecte pour debugging.
-                    var cheminBrowser = SenSÉ.Mcp.Cdp.BrowserLauncher.TrouverExe(out var nomBrowser);
-                    if (string.IsNullOrEmpty(cheminBrowser))
-                    {
-                        UiLog.Warn("mcp-cdp: aucun navigateur Chromium-compatible trouve (Edge/Chrome/Chromium). mcp-cdp va quand meme essayer.");
-                    }
-                    else
-                    {
-                        UiLog.Info($"mcp-cdp: navigateur detecte = {nomBrowser} ({cheminBrowser})");
-                    }
-
-                    var psiCdp = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = cheminCdp,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    };
-                    psiCdp.ArgumentList.Add("--port");
-                    psiCdp.ArgumentList.Add("9224");
-                    var procCdp = System.Diagnostics.Process.Start(psiCdp);
-                    if (procCdp is not null)
-                    {
-                        _cdpProcess = procCdp;
-                        System.Environment.SetEnvironmentVariable("SENSE_CDP_URL", "http://127.0.0.1:9224");
-                        SenSÉ.Tools.Assistant.AssistantCdp.Demarrer("http://127.0.0.1:9224");
-                        UiLog.Info($"mcp-cdp demarre: PID {procCdp.Id}, port 9224 (CDP debug sur 9223)");
-                    }
-                    else
-                    {
-                        UiLog.Warn("mcp-cdp: Process.Start a renvoye null");
-                    }
-                }
-                else
-                {
-                    UiLog.Warn($"mcp-cdp non demarre (binaire introuvable: {cheminCdp})");
-                }
-            }
-            catch (Exception ex)
-            {
-                UiLog.Failure("demarrage de mcp-cdp", ex);
-            }
 UiLog.Info("tool services started");
 
 
@@ -620,57 +494,16 @@ UiLog.Info("tool services started");
             ? "restarting for a theme change"
             : _quitting ? "closed by the user" : $"exited with code {e.ApplicationExitCode}");
 
-        // Arret du pc-agent avant la fermeture du process hote.
-        try
-        {
-            if (_pcAgentProcess is not null && !_pcAgentProcess.HasExited)
-            {
-                UiLog.Info($"arret de pc-agent (PID {_pcAgentProcess.Id})");
-                _pcAgentProcess.Kill(entireProcessTree: true);
-                _pcAgentProcess.Dispose();
-            }
-        }
-        catch (Exception ex)
-        {
-            UiLog.Failure("arret du pc-agent", ex);
-        }
-
-            // Arret de mcp-saisie (meme pattern que pc-agent).
-            try
-            {
-                if (_saisieProcess is not null && !_saisieProcess.HasExited)
-                {
-                    UiLog.Info($"arret de mcp-saisie (PID {_saisieProcess.Id})");
-                    _saisieProcess.Kill(entireProcessTree: true);
-                    _saisieProcess.Dispose();
-                }
-            }
-            catch (Exception ex2)
-            {
-                UiLog.Failure("arret de mcp-saisie", ex2);
-            }
-
-            // Arret de mcp-cdp (meme pattern que mcp-saisie).
-            try
-            {
-                if (_cdpProcess is not null && !_cdpProcess.HasExited)
-                {
-                    UiLog.Info($"arret de mcp-cdp (PID {_cdpProcess.Id})");
-                    _cdpProcess.Kill(entireProcessTree: true);
-                    _cdpProcess.Dispose();
-                }
-            }
-            catch (Exception ex3)
-            {
-                UiLog.Failure("arret de mcp-cdp", ex3);
-            }
+        // Les serveurs MCP s'arretent normalement a la fermeture de la fenetre de l'Assistant.
+        // Cet appel est le filet : l'environnement peut se fermer sans que cette fenetre ait
+        // jamais ete ouverte, ou pendant qu'elle l'est encore.
+        ServeursMcp.Arreter();
         base.OnExit(e);    }
 
     /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>
     public static SenSÉ.Mcp.Bus.EventBus? EventBus { get; private set; }
 
     private static ProactifRunner? _runnerProactif;
-    private static ProjetsWatcher? _watcherProjets;    private static System.Diagnostics.Process? _pcAgentProcess;
-    private static System.Diagnostics.Process? _saisieProcess;
-    private static System.Diagnostics.Process? _cdpProcess;
+    private static ProjetsWatcher? _watcherProjets;
+
 }

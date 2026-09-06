@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net;
+using SenSÉ.Mcp.Bus;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -44,14 +45,16 @@ public static class Serveur
         }
         catch
         {
-            await Console.Error.WriteLineAsync("aucun navigateur actif sur 9223, lancement d'Edge...");
+            // Sans nommer Edge : depuis que le Chromium du projet passe en premier, c'est lui
+            // qu'on lance dans le cas courant. BrowserLauncher dit ensuite lequel il a retenu.
+            await Console.Error.WriteLineAsync("aucun navigateur actif sur 9223, lancement du navigateur...");
         }
 
         if (!dejaActif)
         {
             try
             {
-                _browser = BrowserLauncher.Lancer(9223);
+                _browser = SenSÉ.Mcp.Bus.BrowserLauncher.Lancer(9223);
                 await Console.Error.WriteLineAsync($"navigateur lance, PID {_browser.Id} (port debug 9223)");
             }
             catch (Exception ex)
@@ -60,11 +63,11 @@ public static class Serveur
             }
         }
 
-        // 2) Probe loop : 30 iterations x 2s = 60s max, log a chaque essai
+        // 2) Probe loop : 60 iterations x 2s = 120s max, log a chaque essai
         CdpClient? client = null;
-        for (int i = 0; i < 30 && !arret.IsCancellationRequested; i++)
+        for (int i = 0; i < 60 && !arret.IsCancellationRequested; i++)
         {
-            await Console.Error.WriteLineAsync($"probe {i + 1}/30: test 127.0.0.1:9223...");
+            await Console.Error.WriteLineAsync($"probe {i + 1}/60: test 127.0.0.1:9223...");
             try
             {
                 client = new CdpClient();
@@ -80,8 +83,8 @@ public static class Serveur
         }
         if (client is null)
         {
-            await Console.Error.WriteLineAsync("ERREUR: impossible de se connecter a CDP apres 30 essais (60s)");
-            throw new InvalidOperationException("CDP non disponible sur 127.0.0.1:9223 apres 60s");
+            await Console.Error.WriteLineAsync("ERREUR: impossible de se connecter a CDP apres 60 essais (120s)");
+            throw new InvalidOperationException("CDP non disponible sur 127.0.0.1:9223 apres 120s");
         }
         _client = client;
         await Console.Error.WriteLineAsync("CDP connecte sur 127.0.0.1:9223");

@@ -54,6 +54,33 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Les portees qui ne sont pas un lecteur : le web et le courrier. Cliquer pose le
+                 prefixe dans le champ au lieu d'ouvrir quoi que ce soit — c'est un raccourci de
+                 frappe, pas un lancement, et c'est ce qui les distingue des pastilles au-dessus. -->
+            <ItemsControl x:Name="ScopeStrip" Margin="16,6,16,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Padding="0" Margin="0,0,12,0" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0"
+                                Click="Scope_Click" Tag="{Binding Prefixe}"
+                                ToolTip="{Binding Aide}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{Binding Icon}" Stretch="Uniform" Width="12" Height="12"
+                                      VerticalAlignment="Center" Margin="0,0,4,0"
+                                      Fill="{StaticResource TextDimBrush}"/>
+                                <TextBlock Text="{Binding Label}" FontSize="11"
+                                           Foreground="{StaticResource TextDimBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <TextBox x:Name="Query" FontSize="20" Padding="16,14"
                      Background="Transparent" BorderThickness="0"
                      Foreground="{StaticResource TextPrimaryBrush}"

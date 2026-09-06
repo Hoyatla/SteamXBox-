@@ -85,43 +85,45 @@ public class InputModeHandlerDesktopTests
 
     // The restored kill chord: Steam + Y stops the Steam process. It is a deliberate command and it
     // must not also fire the launch.
+    // Y is no longer a modifier, so holding it does not hold the launch back.
+    //
+    // This tested the kill chord, which 6077cd6f removed: since that commit "le launch Steam ne se
+    // déclenche plus que sur le bouton Steam physique". The chord went, the assertion that the
+    // chord suppressed the launch stayed, and it has been failing ever since — asserting the
+    // absence of a behaviour that had become the intended one.
+    //
+    // Kept rather than deleted, turned the right way round: it is the one test that says Y carries
+    // no special meaning any more, which is exactly what a future modifier would break.
     [Fact]
-    public void SteamAndYKillsSteam()
+    public void SteamWithYHeldStillLaunchesSteam()
     {
         var handler = Handler();
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
 
-        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
-
-        // Assert.True(handler.SteamKillRequested);
-        Assert.False(handler.SteamLaunchRequested);
+        Assert.True(handler.SteamLaunchRequested);
     }
 
-    // The kill works in Xbox mode too: a pad stuck in Xbox mode must still be able to stop Steam
-    // without the keyboard.
+    // And the same in Xbox mode: the output mode must not change what the Steam button means, or a
+    // pad left in Xbox mode would lose the one button that reaches Steam without a keyboard.
     [Fact]
-    public void SteamAndYKillsSteamInXboxMode()
+    public void SteamWithYHeldStillLaunchesSteamInXboxMode()
     {
         var handler = Handler(ControllerOutputMode.Xbox360);
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
 
-        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
-
-        // Assert.True(handler.SteamKillRequested);
-        Assert.False(handler.SteamLaunchRequested);
+        Assert.True(handler.SteamLaunchRequested);
     }
 
-    // A kill chord must not launch Steam later when the Y modifier is released while Steam is held.
+    // Releasing Y while Steam stays down must not launch Steam a second time: the request lasts the
+    // frame of the press, and holding a button is not pressing it again.
     [Fact]
-    public void ReleasingYAfterAKillDoesNotLaunchSteam()
+    public void ReleasingYWhileSteamIsHeldDoesNotLaunchAgain()
     {
         var handler = Handler();
         handler.Update(Frame(SteamControllerButtons.Y));
         handler.Update(Frame(SteamControllerButtons.Y | SteamControllerButtons.Steam, 10));
-        // SteamKillRequest retire commit 6077cd6f: assert retire (kill chord sans handler dedie)`n
-        // Assert.True(handler.SteamKillRequested);
 
         // Y comes up, Steam stays down.
         handler.Update(Frame(SteamControllerButtons.Steam, 20));

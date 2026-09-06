@@ -51,15 +51,33 @@ public static class Capture
     }
 
     /// <summary>Capture la fenetre identifiee par son titre (regex partielle). Retourne le chemin, ou vide.</summary>
+    /// <remarks>
+    /// <b>Un echec se dit, il ne se rend pas vide.</b> Cette methode rendait "" quand aucune
+    /// fenetre ne correspondait, et le serveur l'emballait en <c>{"ok":true,"data":""}</c> — un
+    /// succes annonce pour un travail non fait. L'Assistant n'avait aucun moyen de distinguer
+    /// « fenetre absente » de « capture prise », et c'est le genre de reponse qui le fait tourner
+    /// en rond : il enchaine sur l'etape suivante avec un chemin vide dans les mains.
+    ///
+    /// <para>Les exceptions remontent au serveur, qui les rend en HTTP 500 avec leur message.
+    /// C'est ce que fait deja pc-agent pour le meme cas, avec le meme texte.</para>
+    /// </remarks>
     public static string FenetreParTitre(string titre, string format)
     {
         var hwnd = TrouverFenetre(titre);
-        if (hwnd == IntPtr.Zero) return "";
+        if (hwnd == IntPtr.Zero)
+        {
+            throw new InvalidOperationException($"no window with title containing '{titre}'");
+        }
 
         GetWindowRect(hwnd, out var rect);
         var largeur = rect.Right - rect.Left;
         var hauteur = rect.Bottom - rect.Top;
-        if (largeur <= 0 || hauteur <= 0) return "";
+        if (largeur <= 0 || hauteur <= 0)
+        {
+            throw new InvalidOperationException(
+                $"la fenetre '{titre}' n'a pas de surface visible ({largeur}x{hauteur}) : "
+                + "elle est probablement reduite.");
+        }
 
         using var bitmap = new Bitmap(largeur, hauteur, PixelFormat.Format32bppArgb);
         using var graphics = Graphics.FromImage(bitmap);
@@ -132,7 +150,11 @@ public static class Capture
 
     private static string Ecrire(Bitmap bitmap, string format)
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "Captures");
+        // A la racine du produit, et non sous AppContext.BaseDirectory : mcp-saisie vit dans
+        // Outils\McpSaisie\, ou cette composition creait un Outils\McpSaisie\Captures que
+        // l'utilisateur ne trouve pas et que rien ne purge, pendant que pc-agent ecrivait dans
+        // Captures a la racine. Deux dossiers pour la meme chose. Voir Emplacements.
+        var dir = SenSÉ.Mcp.Bus.Emplacements.Captures();
         Directory.CreateDirectory(dir);
         var nom = $"capture-{DateTime.Now:yyyyMMdd-HHmmss-fff}.{NormaliserFormat(format)}";
         var path = Path.Combine(dir, nom);

@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -133,7 +133,21 @@ public static class AssistantSaisie
                 "saisie_clavier_taper",
                 "Tape une chaine de caracteres (un caractere a la fois). Mode Exclusif visuel obligatoire.",
                 [new AssistantLocal.Parametre("texte", "Le texte a taper", [])],
-                args => AppelerSaisie("clavier_taper", new { texte = args.GetValueOrDefault("texte") ?? "" })),
+                args => {
+                    // [DEBUG 2026-09-06] log temporaire pour diagnostiquer args vides
+                    try {
+                        var sb = new System.Text.StringBuilder();
+                        sb.Append("[sense-capacite] saisie_clavier_taper args_count=").Append(args.Count);
+                        foreach (var kv in args) {
+                            var v = kv.Value ?? "<null>";
+                            sb.Append(" | ").Append(kv.Key).Append("=[").Append(v.Length > 80 ? v.Substring(0, 80) + "..." : v).Append("]");
+                        }
+                        var logLine = sb.ToString();
+                        System.Console.Error.WriteLine(logLine);
+                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sense-capacite.log"), logLine + "\n"); } catch { }
+                    } catch { }
+                    return AppelerSaisie("clavier_taper", new { texte = args.GetValueOrDefault("texte") ?? "" });
+                }),
 
             new AssistantLocal.Capacite(
                 "saisie_clavier_touche",
@@ -174,9 +188,24 @@ public static class AssistantSaisie
             try
             {
                 var url = _urlBase + "/saisie/" + tool;
-                var task = body is null
-                    ? _http.GetAsync(url)
-                    : _http.PostAsJsonAsync(url, body);
+                // Toujours POST. Le serveur ne sert GET que sur "/" (status),
+                // pas sur /saisie/*. Un body vide est envoye en JSON.
+                //
+                // StringContent, et surtout PAS PostAsJsonAsync.
+                //
+                // Le JsonContent que PostAsJsonAsync construit ne sait pas calculer sa
+                // longueur a l'avance : sa ContentLength vaut null, et HttpClient envoie
+                // alors en Transfer-Encoding: chunked. mcp-saisie ne lisait le corps que
+                // sur presence d'un Content-Length — les arguments partaient donc dans le
+                // vide, et les octets non lus faisaient fermer la connexion sous le nez du
+                // client (« Error while copying content to a stream »).
+                //
+                // Le serveur sait desormais decoder le chunked, mais annoncer une longueur
+                // reste plus sur : une seule ecriture, un cadrage trivial, et rien qui
+                // depende du decodage a l'autre bout.
+                var charge = body is null ? "{}" : JsonSerializer.Serialize(body);
+                var contenu = new StringContent(charge, System.Text.Encoding.UTF8, "application/json");
+                var task = _http.PostAsync(url, contenu);
                 using var resp = task.GetAwaiter().GetResult();
                 var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 if (!resp.IsSuccessStatusCode)

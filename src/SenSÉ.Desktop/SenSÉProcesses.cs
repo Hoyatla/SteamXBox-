@@ -53,6 +53,11 @@ internal static class SenSÉProcesses
                 WindowStyle = ProcessWindowStyle.Minimized,
             });
 
+            // Le pont meurt avec l'environnement, y compris si celui-ci est tue : c'est la
+            // promesse que fait le commentaire en tete de cette classe, et un finally ne la
+            // tient pas. Voir JobEnfants.
+            JobEnfants.Inscrire(started);
+
             UiLog.Process(Core, started is null ? "start returned no process" : $"started, PID {started.Id}");
         }
         catch (Exception ex)

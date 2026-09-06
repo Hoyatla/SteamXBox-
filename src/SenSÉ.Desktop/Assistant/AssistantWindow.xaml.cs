@@ -119,6 +119,12 @@ public partial class AssistantWindow : Window
 
         Loaded += (_, _) =>
         {
+            // Les serveurs qui donnent prise sur la machine s'ouvrent avec cette fenetre, comme
+            // le modele de langage plus bas. Ils n'ont pas d'autre client, et les laisser tourner
+            // pour toute la session laissait de quoi injecter des frappes et un navigateur en
+            // ecoute sur un port de debogage, longtemps apres la derniere conversation.
+            ServeursMcp.Demarrer();
+
             Saisie.Focus();
             Rafraichir();
         };
@@ -131,7 +137,11 @@ public partial class AssistantWindow : Window
             var dump = AssistantMemoire.Consolider(_agent, message => _journal?.Invoke(message));
             _journal?.Invoke(dump);
         };
-        Closed += (_, _) => SenSÉ.Tools.Assistant.ServeurModele.Arreter(_journal);
+        Closed += (_, _) =>
+        {
+            SenSÉ.Tools.Assistant.ServeurModele.Arreter(_journal);
+            ServeursMcp.Arreter();
+        };
     }
 
     /// <summary>
@@ -307,7 +317,7 @@ public partial class AssistantWindow : Window
             Dire(
                 "systeme",
                 carnet.Accepte
-                    ? $"Travail « {carnet.Titre} » effacé."
+                    ? $"Travail « {carnet.Titre} » terminé, rangé dans Travaux\\Finis."
                     : $"Plan « {carnet.Titre} » abandonné.");
 
             Rafraichir();
@@ -809,6 +819,7 @@ public partial class AssistantWindow : Window
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantDebug.Creer());
         capacites.AddRange(AssistantSaisie.Creer());
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantCdp.Creer());
+        capacites.AddRange(AssistantRecherche.Creer(journal));
 
         return capacites;
     }

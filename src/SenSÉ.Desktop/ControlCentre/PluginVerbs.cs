@@ -118,7 +118,12 @@ public static class PluginVerbs
 
         try
         {
-            Process.Start(depart);
+            // Les outils du produit meurent avec lui. C'est par ce chemin que part le Moniteur,
+            // et c'est un Moniteur orphelin — crochet d'entree bas niveau toujours installe,
+            // parent disparu — qui a rendu le bureau poussif le 6 septembre 2026. Voir
+            // JobEnfants ; Ouvrir(), plus bas, en reste dehors : les fichiers de l'utilisateur
+            // ouverts dans leur application ne nous appartiennent pas.
+            JobEnfants.Inscrire(Process.Start(depart));
         }
         catch (System.ComponentModel.Win32Exception echec) when (echec.NativeErrorCode == 740)
         {
@@ -136,8 +141,47 @@ public static class PluginVerbs
             : $"Lancé dans son propre environnement : {Path.GetFileName(complet)}";
     }
 
+    /// <summary>
+    /// Ouvre un fichier, un dossier ou une adresse.
+    /// </summary>
+    /// <remarks>
+    /// <b>Une adresse web part dans le Chromium du projet</b>, quand il est installé. C'est une
+    /// page que SenSÉ ouvre de sa propre initiative, à partir d'un manifeste d'outil : elle
+    /// appartient au produit, et la faire atterrir dans le navigateur de l'utilisateur reviendrait
+    /// à déposer nos pages au milieu de ses onglets et de ses sessions.
+    ///
+    /// <para>Le reste ne change pas de main. Un <c>.odt</c>, un dossier, un <c>ms-settings:</c> —
+    /// ce sont les affaires de l'utilisateur, et son système sait mieux que nous avec quoi les
+    /// ouvrir. Router tout vers Chromium au motif qu'il est là ferait ouvrir un tableur dans un
+    /// navigateur.</para>
+    ///
+    /// <para>Sans Chromium installé, on retombe sur le shell : mieux vaut la page ouverte ailleurs
+    /// que pas ouverte du tout.</para>
+    ///
+    /// <para><b>Et il reste hors du job de <see cref="JobEnfants"/></b>, comme tout ce qui passe
+    /// par ici. Que ce soit notre navigateur ne change rien à qui regarde la page : la fermer parce
+    /// que l'environnement se ferme ferait disparaître ce que l'utilisateur était en train de lire.
+    /// Le job vaut pour l'infrastructure, pas pour ce qu'on a ouvert à quelqu'un.</para>
+    /// </remarks>
     private static string Ouvrir(string cible)
     {
+        var estAdresseWeb =
+            cible.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || cible.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+        if (estAdresseWeb && SenSÉ.Mcp.Bus.ChromiumEmbarque.Exe() is { } chromium)
+        {
+            var depart = new ProcessStartInfo
+            {
+                FileName = chromium,
+                UseShellExecute = false,
+            };
+            depart.ArgumentList.Add(cible);
+
+            Process.Start(depart)?.Dispose();
+            return $"Ouvert dans le navigateur du projet : {cible}";
+        }
+
         Process.Start(new ProcessStartInfo(cible) { UseShellExecute = true });
         return $"Ouvert : {cible}";
     }

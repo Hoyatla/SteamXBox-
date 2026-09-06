@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -129,7 +129,20 @@ public sealed class AssistantLocal
     /// <summary>Ce que le serveur a compté de jetons au dernier échange.</summary>
     private int _jetons;
 
-    private const string Consigne =
+    /// <summary>
+    /// La consigne du systeme : la partie fixe, suivie des chemins reels de cette machine.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pourquoi elle n'est plus une constante.</b> Elle disait « C:\Users\&lt;user&gt;\Downloads »
+    /// et attendait du modele qu'il resolve le marqueur. Il ne le peut pas : rien dans le fil ne
+    /// lui dit comment s'appelle le compte. Le 6 septembre 2026 il a comble le trou par
+    /// « C:\Users\Public\Downloads », un dossier qui existe mais qui n'est pas celui de
+    /// l'utilisateur, et l'enregistrement a echoue. Un marqueur a remplir est une devinette
+    /// deguisee ; la machine connait ces chemins, elle les donne.
+    /// </remarks>
+    private static readonly string Consigne = ConsigneFixe + Dossiers();
+
+    private const string ConsigneFixe =
         "Tu assistes l'utilisateur de SenSÉ tout entier, en français — quel que soit le domaine "
         + "des outils installés : images, documents, courrier, jeu, web. Tu disposes des outils "
         + "présents sur cette machine, chacun déclarant lui-même ce qu'il sait faire : sers-t'en dès "
@@ -240,32 +253,201 @@ public sealed class AssistantLocal
         + "(x + width/2, y + height/2). Si find_main_edit ne renvoie rien (Writer n'est pas UIA), "
         + "repere la zone visuellement apres un screenshot_ecran et calcule les coords a l'oeil. "
 
-        + "REGLE ABSOLUE : LES WEBAPPS DOIVENT ETRE PILOTEES AVEC CDP. "
-        + "Si l'application cible est un navigateur web, une webview, ou une app "
-        + "basee sur Chromium/Electron (MiniMax Code, OpenCode, Claude desktop, "
-        + "les dashboards web, les sites de streaming, etc.), tu DOIS utiliser "
-        + "les Capacites cdp_*, PAS debug_uia_*. L'UIA ne traverse PAS les "
-        + "frontieres webview."
+        + "REGLE ABSOLUE : pour ecrire dans une application DEJA OUVERTE, utilise "
+        + "debug_uia_focus_and_type(hwnd, texte). UN SEUL appel qui met la fenetre au "
+        + "premier plan, verifie que le focus a pris, puis tape. C'est la seule facon "
+        + "fiable sous Windows : le focus et la frappe doivent partir du meme processus "
+        + "et du meme thread, sinon la frappe atterrit dans la fenetre qui avait "
+        + "reellement le focus."
 
-        + "WORKFLOW CDP OBLIGATOIRE pour toute action sur une webapp : "
-        + "1) cdp_navigate(url) si l'URL est connue, OU cdp_eval("
-        + "    \"location.href\") pour la voir si l'URL n'est pas claire. "
-        + "2) cdp_wait(selector=\"body\", timeout=10000) pour attendre le chargement. "
-        + "3) cdp_eval(expression) pour lire le DOM si tu ne connais pas "
-        + "    les selecteurs (retourne du JSON avec les elements cles). "
-        + "4) cdp_click(selector) + cdp_type(selector, text) pour interagir. "
-        + "5) cdp_screenshot() pour confirmer visuellement."
+        + "LE HWND EST CRITIQUE. Prends-le dans debug_uia_list_windows en lisant "
+        + "l'objet ENTIER : chaque entree est {\"hwnd\":N,\"title\":\"...\"} et le hwnd "
+        + "precede son titre. Un hwnd lu de travers ecrit dans la mauvaise application. "
+        + "Apres l'appel, RELIS le champ title de la reponse : s'il ne correspond pas a "
+        + "la fenetre visee, tu as ecrit ailleurs, dis-le et arrete-toi."
+
+        + "CHERCHER. Tu disposes des memes sources que la barre de recherche : "
+        + "recherche_fichiers (nom d'un fichier, dossier, application, lecteur), "
+        + "recherche_documents (le CONTENU des documents indexes, quand tu cherches ce qu'un "
+        + "texte dit plutot que comment il s'appelle), recherche_courrier (les messages, qui ne "
+        + "quittent pas la machine), recherche_web (quand la reponse n'est pas ici). "
+        + "Chaque ligne rendue commence par sa NATURE entre crochets — [fichier], [dossier], "
+        + "[application], [lecteur], [document], [courriel], [web] — et c'est elle qui te dit quoi "
+        + "en faire : un [fichier] se passe par son chemin a un autre outil, une [application] se "
+        + "lance, un [web] se cite avec son adresse. Ne confonds pas « aucun resultat » avec "
+        + "« source non configuree » : quand une recherche te repond qu'elle est desactivee ou "
+        + "sans index, la question n'a pas ete posee, et tu ne peux rien conclure du sujet."
+
+        + "NE FERME JAMAIS UNE APPLICATION. Pas d'Alt+F4, pas de Ctrl+Q, pas de Ctrl+W, "
+        + "pas de bouton Fermer ou Quitter. Ce sont les fenetres de l'utilisateur, il y "
+        + "travaille, et un document ferme emporte ce qui n'etait pas enregistre. Si tu "
+        + "es bloque, dis-le et arrete-toi ; ne fais pas le menage."
+
+        + "SI LE FOCUS EST REFUSE (erreur 'focus refused by Windows'), NE TAPE PAS. "
+        + "Ni saisie_clavier_taper, ni autre chose : le texte irait dans la fenetre qui "
+        + "a garde le premier plan, souvent celle de l'Assistant lui-meme. Dis a "
+        + "l'utilisateur quelle fenetre a garde le focus, et demande-lui de cliquer sur "
+        + "la fenetre cible. Un refus est une information, pas un obstacle a contourner."
+
+        + "WORKFLOW par ordre de preference : "
+        + "1. debug_uia_focus_and_type pour ECRIRE dans une app deja ouverte, quelle "
+        + "   qu'elle soit — LibreOffice, webview/Electron (MiniMax Code, OpenCode), "
+        + "   dashboards web, Twitch. NE PAS ouvrir saisie_mode_exclusif_ouvrir pour un "
+        + "   simple tap, c'est juste visuel. "
+        + "2. debug_uia_set_text(automationId) si tu veux REMPLACER le contenu d'un champ "
+        + "   precis trouve par find_main_edit, et seulement s'il n'est pas en lecture "
+        + "   seule (0x80131509 = lecture seule -> reviens a focus_and_type). Si la "
+        + "   reponse dit que l'element ne supporte pas le motif Value, c'est un fait "
+        + "   etabli : n'insiste pas, passe a focus_and_type. "
+        + "3. debug_uia_invoke_par_nom pour ACTIONNER un bouton ou un menu, en visant le "
+        + "   NOM ecrit dessus. PAS debug_uia_invoke : l'automationId est souvent un "
+        + "   numero d'ordre — LibreOffice expose 'Enregistrer' en '1' et 'Annuler' en "
+        + "   '2' — et un rang de travers annule au lieu de valider. Relis le champ "
+        + "   'invoked' de la reponse pour confirmer ce que tu as actionne. "
+        + "4. CDP (cdp_*) UNIQUEMENT pour ouvrir une url dans un navigateur frais. "
+        + "   Le profil CDP est vierge : aucune application ou tu es deja connecte n'est "
+        + "   atteignable par ce chemin."
+
+        + "BOITES DE DIALOGUE (Enregistrer sous, Ouvrir, Imprimer). Une boite est une "
+        + "FENETRE A PART : elle apparait dans debug_uia_list_windows avec son propre "
+        + "titre et son propre hwnd (ex: 'Enregistrer sous')."
+
+        + "NE SUPPOSE PAS OU EST LE CURSEUR. Il n'est pas forcement dans le champ du nom : "
+        + "dans la boite de LibreOffice il est sur la liste des fichiers, et tout ce qu'on "
+        + "y tape est avale sans rien changer. Le 6 septembre 2026 un chemin complet a "
+        + "ainsi disparu, et l'Entree a valide le nom propose par defaut."
+
+        + "LA MARCHE A SUIVRE, sans deviner : "
+        + "1. debug_uia_list_windows pour VERIFIER que la boite est ouverte — elle met un "
+        + "   instant a apparaitre, et taper avant qu'elle existe envoie tout dans le "
+        + "   document. Si elle n'y est pas encore, refais la liste. "
+        + "2. debug_uia_dump_window sur le TITRE DE LA BOITE, pas celui de la fenetre "
+        + "   principale. "
+        + "3. Repere dans le dump le champ de type Edit destine au nom, et note son "
+        + "   automationId. "
+        + "4. debug_uia_set_text(automationId, chemin complet) : direct, sans dependre du "
+        + "   focus. "
+        + "5. debug_uia_invoke_par_nom(nom=Enregistrer) pour valider."
+
+        + "Et ne navigue pas dans l'arborescence des dossiers : c'est long, fragile, et "
+        + "inutile."
+
+        + "CE QUE TU TAPES EST UN CHEMIN DE FICHIER ENTIER, EN UNE SEULE FOIS : le "
+        + "dossier, PUIS le nom, PUIS l'extension, colles ensemble. Taper le dossier seul "
+        + "NE SAUVEGARDE RIEN — la boite entre dans le dossier et attend toujours un nom. "
+        + "C'est l'erreur a ne pas commettre : un seul saisie_clavier_taper, contenant "
+        + "les trois morceaux."
+
+        + "N'INVENTE JAMAIS un dossier : les chemins reels sont listes en fin de "
+        + "consigne, section DOSSIERS, avec un exemple complet a imiter. Recopie-les tels "
+        + "quels."
+
+        + "LE NOM DE FICHIER EST COURT. Trois a six mots tires du SUJET du document, "
+        + "separes par des tirets, plus l'extension. JAMAIS le contenu du document comme "
+        + "nom. Pas d'accents ni de ponctuation dans le nom, et moins de 60 caracteres."
+
+        + "APRES l'Entree, LibreOffice peut demander de confirmer le format : reponds "
+        + "avec debug_uia_invoke_par_nom en visant le bouton qui garde le format demande "
+        + "(souvent 'Utiliser le format ODF' ou 'Utiliser Word 2007-365!'). Verifie "
+        + "ensuite par une capture que le titre de la fenetre n'est plus 'Sans nom'."
 
         + "EXEMPLES : "
-        + "- 'ecris X dans le chat de MiniMax Code' -> cdp_navigate(url) puis cdp_type(selector=\"textarea, [contenteditable]\", text=X) puis Enter. "
-        + "- 'ouvre ce site' -> cdp_navigate(url) puis cdp_screenshot. "
-        + "- 'clique sur le bouton Login' -> cdp_eval pour trouver le selecteur, puis cdp_click(selector)."
+        + "- 'sauvegarde le document dans telechargements' -> debug_uia_press(Ctrl+S), "
+        + "  puis la MARCHE A SUIVRE des boites de dialogue ci-dessus : verifier que la "
+        + "  boite existe, la dumper par son titre, set_text du chemin complet dans son "
+        + "  champ Edit, invoke_par_nom(Enregistrer), invoke_par_nom pour le format s'il "
+        + "  est demande, puis une capture : le titre ne doit plus dire 'Sans nom'. "
+        + "- 'ecris X dans LibreOffice' -> debug_uia_list_windows, lis le hwnd de la "
+        + "  ligne LibreOffice, puis debug_uia_focus_and_type(hwnd, X), puis verifie le "
+        + "  champ title de la reponse. "
+        + "- 'ecris X dans le chat de MiniMax Code' -> pareil, puis "
+        + "  saisie_clavier_touche(touche=Return) pour envoyer. "
+        + "- 'ouvre code.minimax.com dans un navigateur' -> cdp_navigate(url) puis "
+        + "  cdp_screenshot pour confirmer. "
+        + "- 'clique sur Login dans une webapp deja ouverte' -> debug_uia_focus_window, "
+        + "  et SI ET SEULEMENT SI il repond ok, souris_deplacer/cliquer aux coords du "
+        + "  rect UIA.";
 
-        + "Ne JAMAIS utiliser debug_uia_dump, debug_uia_set_text, debug_uia_invoke "
-        + "pour une webapp. Si tu vois que l'app est dans Firefox/Edge/Chrome "
-        + "ou un titre comme 'Code', 'OpenCode', 'Claude', 'MiniMax' etc., bascule CDP. "
-        + "Si debug_uia_renvoie un tree plat (1-2 noeuds) avec une Custom/Pane "
-        + "racine vide, c'est une webview -> bascule CDP immediatement.";
+    /// <summary>
+    /// Les chemins reels des dossiers de l'utilisateur, ajoutes en fin de consigne.
+    /// </summary>
+    /// <remarks>
+    /// Telechargements n'a pas de <c>SpecialFolder</c> : il faut passer par
+    /// <c>SHGetKnownFolderPath</c>. Ca vaut le detour, parce que c'est le dossier qu'on
+    /// demande le plus souvent et celui qu'on deplace le plus volontiers — le deduire du
+    /// profil marcherait presque toujours, et se tromperait exactement chez qui l'a
+    /// range ailleurs. Le repli sur le profil reste la si l'appel echoue.
+    ///
+    /// <para>Un dossier qui n'existe pas n'est pas annonce : mieux vaut une liste courte
+    /// et vraie qu'une liste complete dont une entree envoie ecrire dans le vide.</para>
+    /// </remarks>
+    private static string Dossiers()
+    {
+        var profil = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var lignes = new List<string>();
+
+        void Ajouter(string nom, string? chemin)
+        {
+            if (string.IsNullOrWhiteSpace(chemin)) return;
+            if (!System.IO.Directory.Exists(chemin)) return;
+            lignes.Add($"{nom} = {chemin}");
+        }
+
+        Ajouter("Telechargements (Downloads)", Telechargements(profil));
+        Ajouter("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        Ajouter("Bureau (Desktop)", Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+        Ajouter("Images (Pictures)", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
+        Ajouter("Musique (Music)", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
+        Ajouter("Videos", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
+        Ajouter("Dossier personnel", profil);
+
+        if (lignes.Count == 0) return "";
+
+        // Un exemple entierement forme, pas un gabarit a completer. Un marqueur comme
+        // <nom> ou <user> se fait remplir de travers ou sauter : le 6 septembre 2026 le
+        // modele a mis le texte du document a la place de <nom>, puis a tape le dossier
+        // sans nom du tout. Une phrase qu'il n'a qu'a imiter ne laisse pas ce trou.
+        var exemple = System.IO.Path.Combine(
+            Telechargements(profil), "prochaine-etape-recherche.odt");
+
+        return " DOSSIERS — les chemins reels de cette machine, a recopier tels quels, "
+             + "sans jamais en inventer un autre : "
+             + string.Join(" ; ", lignes) + ". "
+             + "EXEMPLE COMPLET d'un chemin a taper pour enregistrer dans "
+             + "Telechargements, dossier et nom et extension d'un seul tenant : "
+             + exemple + " — c'est cette forme-la qu'il faut produire, jamais le dossier "
+             + "tout seul.";
+    }
+
+    private static readonly Guid FolderIdDownloads = new("374DE290-123F-4565-9164-39C4925E467B");
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int SHGetKnownFolderPath(
+        ref Guid rfid, uint dwFlags, IntPtr hToken, out IntPtr ppszPath);
+
+    private static string Telechargements(string profil)
+    {
+        var repli = System.IO.Path.Combine(profil, "Downloads");
+        var ptr = IntPtr.Zero;
+        try
+        {
+            var id = FolderIdDownloads;
+            if (SHGetKnownFolderPath(ref id, 0, IntPtr.Zero, out ptr) == 0 && ptr != IntPtr.Zero)
+            {
+                var chemin = System.Runtime.InteropServices.Marshal.PtrToStringUni(ptr);
+                if (!string.IsNullOrWhiteSpace(chemin)) return chemin;
+            }
+        }
+        catch
+        {
+            // shell32 indisponible ou appel refuse : le repli fait l'affaire.
+        }
+        finally
+        {
+            if (ptr != IntPtr.Zero) System.Runtime.InteropServices.Marshal.FreeCoTaskMem(ptr);
+        }
+        return repli;
+    }
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
@@ -488,6 +670,16 @@ public sealed class AssistantLocal
         CancellationToken arret = default,
         bool autonome = false)
     {
+        // La demande est mise a disposition du carnet avant tout le reste : si le modele
+        // ouvre un travail dans ce tour, c'est cette phrase-la qui y sera inscrite, et
+        // c'est elle qui survivra au contexte plein. Les tours de reprise portent
+        // « reprends le travail » et rien d'autre — les ecrire par-dessus effacerait
+        // justement ce qu'on cherche a garder, d'ou le filtre sur les marques internes.
+        if (!demande.StartsWith(MarqueTravaux, StringComparison.Ordinal))
+        {
+            FichierTravail.DemandeCourante = demande;
+        }
+
         // Avant le chargement du modèle, et pas après.
         //
         // Le chargement prend 90 secondes à chaud et plus de cinq minutes à froid. Vérifier l'arrêt
@@ -1225,13 +1417,26 @@ public sealed class AssistantLocal
     {
         var lus = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        // [DEBUG 2026-09-06] log temporaire du JSON brut pour diagnostiquer args vides
+        try {
+            var dbg = "[sense-capacite] Lire raw=" + arguments;
+            System.Console.Error.WriteLine(dbg);
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sense-capacite.log"), dbg + "\n"); } catch { }
+        } catch { }
+
         try
         {
             if (JsonNode.Parse(arguments) is JsonObject objet)
             {
                 foreach (var paire in objet)
                 {
-                    lus[paire.Key] = paire.Value?.ToString() ?? "";
+                    var valStr = paire.Value?.ToString() ?? "";
+                    lus[paire.Key] = valStr;
+                    try {
+                        var dbg2 = "[sense-capacite]   cle=" + paire.Key + " valeur=[" + (valStr.Length > 80 ? valStr.Substring(0, 80) + "..." : valStr) + "] type=" + (paire.Value?.GetType().Name ?? "?");
+                        System.Console.Error.WriteLine(dbg2);
+                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sense-capacite.log"), dbg2 + "\n"); } catch { }
+                    } catch { }
                 }
             }
         }

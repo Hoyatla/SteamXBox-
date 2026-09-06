@@ -54,6 +54,13 @@ public static class QueryPrefix
             ["web"] = QueryRoute.Web,
             ["docs"] = QueryRoute.Docs,
             ["mail"] = QueryRoute.Mail,
+
+            // Les deux orthographes françaises du même mot. Le bouton de la barre pose
+            // « e-mail: », et quelqu'un qui tape le préfixe à la main écrira l'un ou l'autre
+            // sans se demander lequel SenSÉ attend — c'est une entrée chacun, exactement ce que
+            // cette table est faite pour absorber.
+            ["e-mail"] = QueryRoute.Mail,
+            ["email"] = QueryRoute.Mail,
         };
 
     /// <summary>Reads a raw query and says where it goes.</summary>

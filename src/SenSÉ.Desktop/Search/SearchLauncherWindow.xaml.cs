@@ -24,7 +24,11 @@ public partial class SearchLauncherWindow : Window
     private readonly Action<string>? _log;
 
     /// <summary>Everything on disk. Built once: walking it again would take seconds.</summary>
-    private IReadOnlyList<SearchItem> _files = [];
+    /// <remarks>
+    /// Held by <see cref="IndexRecherche"/> rather than here since the Assistant searches the same
+    /// index. Building a second one would walk every drive again for the same answers.
+    /// </remarks>
+    private static IReadOnlyList<SearchItem> _files => IndexRecherche.Fichiers;
 
     /// <summary>
     /// The volumes, kept apart because they change while the session runs.
@@ -34,7 +38,7 @@ public partial class SearchLauncherWindow : Window
     /// anything else. Merged into the search at the moment of the query, which costs a handful of
     /// entries and saves the only part of the index that goes stale.
     /// </remarks>
-    private IReadOnlyList<SearchItem> _volumes = [];
+    private static IReadOnlyList<SearchItem> _volumes => IndexRecherche.Volumes;
 
     private bool _indexing;
 
@@ -44,7 +48,7 @@ public partial class SearchLauncherWindow : Window
     /// something to do because a launcher happened to open: somebody who never types the prefix
     /// should find that SenSÉ never went near their correspondence.
     /// </remarks>
-    private MailIndex _mail = MailIndex.Empty;
+    private static MailIndex _mail => IndexRecherche.Courrier;
 
     private bool _mailIndexing;
     private bool _mailAsked;
@@ -140,7 +144,7 @@ public partial class SearchLauncherWindow : Window
     {
         try
         {
-            _volumes = Volumes.AsSearchItems(_log);
+            IndexRecherche.RafraichirVolumes(_log);
         }
         catch (Exception exception)
         {
@@ -166,7 +170,7 @@ public partial class SearchLauncherWindow : Window
 
         Task.Run(() => SearchIndexBuilder.Build(_log)).ContinueWith(built =>
         {
-            _files = built.IsCompletedSuccessfully ? built.Result : [];
+            IndexRecherche.PoserFichiers(built.IsCompletedSuccessfully ? built.Result : []);
             _indexing = false;
 
             if (!built.IsCompletedSuccessfully)
@@ -200,7 +204,7 @@ public partial class SearchLauncherWindow : Window
         }
 
         _mailAsked = true;
-        _mail = MailIndex.Load(_log);
+        IndexRecherche.PoserCourrier(MailIndex.Load(_log));
 
         if (_mail.Count > 0)
         {
@@ -217,7 +221,7 @@ public partial class SearchLauncherWindow : Window
 
         Task.Run(() => MailIndexBuilder.Build(_log)).ContinueWith(built =>
         {
-            _mail = built.IsCompletedSuccessfully ? built.Result : MailIndex.Empty;
+            IndexRecherche.PoserCourrier(built.IsCompletedSuccessfully ? built.Result : MailIndex.Empty);
             _mailIndexing = false;
 
             if (built.IsCompletedSuccessfully)
@@ -275,6 +279,7 @@ public partial class SearchLauncherWindow : Window
         Activate();
         WindowForeground.Take(this);
         ShowVolumes();
+        ShowScopes();
 
         // Asked for here as well as on activation, because a summon that finds the window already
         // active raises no activation at all. Both routes end in the same idempotent call.
@@ -401,6 +406,59 @@ public partial class SearchLauncherWindow : Window
         System.Windows.Media.Geometry? Icon,
         System.Windows.Media.Geometry? EjectIcon,
         Visibility EjectVisibility);
+
+    /// <summary>One scope in the strip: a prefix to type, not a place to open.</summary>
+    private sealed record ScopeChip(
+        string Label,
+        string Prefixe,
+        string Aide,
+        System.Windows.Media.Geometry? Icon);
+
+    /// <summary>
+    /// Shows the scopes that are not a drive: the web and the mail.
+    /// </summary>
+    /// <remarks>
+    /// The prefixes have been typeable from the start; what was missing was any sign that they
+    /// exist. A drive announces itself in the strip above, so somebody discovers <c>D:</c> without
+    /// being told — while <c>web:</c> and <c>e-mail:</c> could only be found by having read the
+    /// code. Two chips put them on the same footing as the drives.
+    ///
+    /// <para>Fixed rather than built from the prefix table: a scope needs a label, an icon and a
+    /// sentence saying what it searches, none of which belong in a routing table whose whole merit
+    /// is to be one line per entry.</para>
+    /// </remarks>
+    private void ShowScopes()
+    {
+        ScopeStrip.ItemsSource = new List<ScopeChip>
+        {
+            new("web:", "web:", "Chercher sur le web", IconLibrary.Get(IconLibrary.Web)),
+            new("e-mail:", "e-mail:", "Chercher dans le courrier indexé sur cette machine",
+                IconLibrary.Get(IconLibrary.Mail)),
+        };
+    }
+
+    /// <summary>
+    /// Puts a scope prefix into the field, and leaves the caret after it.
+    /// </summary>
+    /// <remarks>
+    /// It types for the user rather than searching: the point of the chip is to spare the prefix,
+    /// not to guess the query. Anything already typed is kept and re-scoped, which is the natural
+    /// gesture — one types a few words, then decides where to look for them.
+    /// </remarks>
+    private void Scope_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string prefixe })
+        {
+            return;
+        }
+
+        // Ce qui est deja tape survit au changement de portee, prefixe precedent retire.
+        var reste = QueryPrefix.Parse(Query.Text).Rest;
+
+        Query.Text = reste.Length > 0 ? $"{prefixe} {reste}" : $"{prefixe} ";
+        Query.CaretIndex = Query.Text.Length;
+        FocusQuery();
+    }
 
     private void Query_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => Refresh();
 
