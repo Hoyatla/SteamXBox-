@@ -81,6 +81,29 @@ public partial class App : Application
             UiLog.Stop("process terminating on an unhandled exception");
         };
 
+        // Genere ou lit le token du pc-agent debug. Stocke dans Outils\\DebugAgent\\token.txt.
+        // Si le fichier n'existe pas, genere 32 octets aleatoires en base64.
+        try
+        {
+            var cheminToken = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "DebugAgent", "token.txt");
+            var dossierDebug = System.IO.Path.GetDirectoryName(cheminToken);
+            if (!string.IsNullOrEmpty(dossierDebug))
+            {
+                System.IO.Directory.CreateDirectory(dossierDebug);
+            }
+            if (!System.IO.File.Exists(cheminToken))
+            {
+                var buffer = new byte[32];
+                System.Security.Cryptography.RandomNumberGenerator.Fill(buffer);
+                System.IO.File.WriteAllText(cheminToken, Convert.ToBase64String(buffer));
+            }
+            UiLog.Info($"debug-agent token dans {cheminToken}");
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("init du token du debug-agent", ex);
+        }
+
         SettingsSvc = new SettingsService();
         try
         {
@@ -117,6 +140,52 @@ public partial class App : Application
             catch (Exception ex)
             {
                 UiLog.Failure("debug FIFO au boot", ex);
+            }
+
+            // Demarre pc-agent (debug HTTP API) en subprocess loopback.
+            try
+            {
+                var cheminPcAgent = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "DebugAgent", "pc-agent.exe");
+                var cheminToken = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "DebugAgent", "token.txt");
+                if (System.IO.File.Exists(cheminPcAgent) && System.IO.File.Exists(cheminToken))
+                {
+                    var token = System.IO.File.ReadAllText(cheminToken).Trim();
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = cheminPcAgent,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    psi.ArgumentList.Add("--bind");
+                    psi.ArgumentList.Add("127.0.0.1");
+                    psi.ArgumentList.Add("--port");
+                    psi.ArgumentList.Add("8765");
+                    psi.ArgumentList.Add("--token");
+                    psi.ArgumentList.Add(token);
+                    psi.ArgumentList.Add("--roots");
+                    psi.ArgumentList.Add("C:\\\\");
+                    var proc = System.Diagnostics.Process.Start(psi);
+                    if (proc is not null)
+                    {
+                        _pcAgentProcess = proc;
+                        UiLog.Info($"pc-agent demarre: PID {proc.Id}, port 8765, token dans {cheminToken}");
+                    }
+                    else
+                    {
+                        UiLog.Warn("pc-agent demarre: Process.Start a renvoye null");
+                    }
+                    // Env vars mises a disposition de tous les subprocess SenSE.
+                    System.Environment.SetEnvironmentVariable("SENSE_DEBUG_AGENT_URL", "http://127.0.0.1:8765");
+                    System.Environment.SetEnvironmentVariable("SENSE_DEBUG_AGENT_TOKEN", token);
+                }
+                else
+                {
+                    UiLog.Warn($"pc-agent non demarre (binaire: {cheminPcAgent}, token: {cheminToken})");
+                }
+            }
+            catch (Exception ex)
+            {
+                UiLog.Failure("demarrage du pc-agent", ex);
             }
 
             Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
@@ -465,12 +534,25 @@ public partial class App : Application
             ? "restarting for a theme change"
             : _quitting ? "closed by the user" : $"exited with code {e.ApplicationExitCode}");
 
-        base.OnExit(e);
-    }
+        // Arret du pc-agent avant la fermeture du process hote.
+        try
+        {
+            if (_pcAgentProcess is not null && !_pcAgentProcess.HasExited)
+            {
+                UiLog.Info($"arret de pc-agent (PID {_pcAgentProcess.Id})");
+                _pcAgentProcess.Kill(entireProcessTree: true);
+                _pcAgentProcess.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            UiLog.Failure("arret du pc-agent", ex);
+        }
+        base.OnExit(e);    }
 
     /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>
     public static SenSÉ.Mcp.Bus.EventBus? EventBus { get; private set; }
 
     private static ProactifRunner? _runnerProactif;
-    private static ProjetsWatcher? _watcherProjets;
+    private static ProjetsWatcher? _watcherProjets;    private static System.Diagnostics.Process? _pcAgentProcess;
 }

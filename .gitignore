@@ -93,3 +93,13 @@ Library/archive/
 
 # Runtime data created by the Assistant (v0.7.2+). NOT source code.
 Memoire/
+
+# Bundle pc-agent (construit separement depuis ScreenViewerOnTablet/pc-agent)
+Outils/DebugAgent/pc-agent.exe
+Outils/DebugAgent/*
+!Outils/DebugAgent/
+!Outils/DebugAgent/.gitkeep
+
+# Vieux binaire obsolete, remplace par Outils/DebugAgent/pc-agent.exe
+SenSÉ.DebugAgent.exe
+SenSÉ.DebugAgent.*.exe
