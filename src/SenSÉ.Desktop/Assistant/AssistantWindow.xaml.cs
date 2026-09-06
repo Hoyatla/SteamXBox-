@@ -807,6 +807,7 @@ public partial class AssistantWindow : Window
         // Memoire 3 niveaux, branchee sur le disque.
         capacites.AddRange(AssistantMemoire.Creer());
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantDebug.Creer());
+        capacites.AddRange(AssistantSaisie.Creer());
 
         return capacites;
     }

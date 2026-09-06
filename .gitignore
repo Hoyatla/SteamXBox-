@@ -103,3 +103,10 @@ Outils/DebugAgent/*
 # Vieux binaire obsolete, remplace par Outils/DebugAgent/pc-agent.exe
 SenSÉ.DebugAgent.exe
 SenSÉ.DebugAgent.*.exe
+
+# mcp-saisie bundle (binaires C# auto-extractibles, meme pattern que DebugAgent)
+Outils/McpSaisie/*
+!Outils/McpSaisie/
+!Outils/McpSaisie/.gitkeep
+Outils/McpSaisie/SenSÉ.Mcp.Saisie.exe
+Outils/McpSaisie/SenSÉ.Mcp.Saisie.pdb

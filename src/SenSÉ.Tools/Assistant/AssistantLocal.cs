@@ -227,7 +227,18 @@ public sealed class AssistantLocal
         + "4) debug_uia_set_text(automationId, value=X). "
         + "5) debug_uia_screenshot_window(titre=Y) + afficher_image pour confirmer. "
         + "Si find_main_edit ne retourne rien, debug_uia_dump_window(titre=Y) et cherche "
-        + "le controle de type 'Document' ou le Pane le plus grand.";
+        + "le controle de type 'Document' ou le Pane le plus grand. "
+
+        + "MODE SOURIS. Quand UIA ne marche pas (apps comme LibreOffice Writer, vieux logiciels, "
+        + "apps qui utilisent UNO/AT-SPI au lieu de UI Automation), bascule en mode souris : "
+        + "1) saisie_mode_exclusif_ouvrir pour prevenir l'utilisateur. "
+        + "2) clic au centre de la zone de texte via saisie_souris_deplacer(x, y) + saisie_souris_cliquer. "
+        + "3) saisie_clavier_taper pour ecrire le texte. "
+        + "4) screenshot + afficher_image pour confirmer ce qui a ete ecrit. "
+        + "5) saisie_mode_exclusif_fermer. "
+        + "Le centre de la zone peut etre calcule depuis le rect retourne par find_main_edit "
+        + "(x + width/2, y + height/2). Si find_main_edit ne renvoie rien (Writer n'est pas UIA), "
+        + "repere la zone visuellement apres un screenshot_ecran et calcule les coords a l'oeil.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
