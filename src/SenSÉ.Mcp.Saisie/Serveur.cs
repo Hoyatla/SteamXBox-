@@ -1,296 +1,271 @@
-﻿using System.Text.Json;
+﻿using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.IO;
-using System.Windows;
-using SenSÉ.Mcp.Bus;
 
 namespace SenSÉ.Mcp.Saisie;
 
 /// <summary>
-/// Le serveur MCP mcp-saisie : expose les verbes de capture, souris,
-/// clavier et screenshot sur stdio, en JSON-RPC 2.0 newline-delimited.
+/// Le serveur HTTP mcp-saisie : expose les verbes de capture, souris,
+/// clavier et screenshot sur un socket TCP en loopback (127.0.0.1).
 /// </summary>
 /// <remarks>
-/// <b>Stdio, pas HTTP.</b> Pour un client in-process, stdio est plus
-/// simple (pas de port, pas de pare-feu, pas de conflit). Le transport
-/// est le standard MCP : une requete par ligne, une reponse par ligne.
+/// <b>Pourquoi HTTP et pas stdio.</b> Le binaire etant self-contained
+/// single-file (PublishSingleFile=true) avec UseWindowsForms=true, la
+/// redirection stdin/stdout sous PowerShell ou via Process.Start avec
+/// RedirectStandardInput est instable : le pipe ne recoit pas les
+/// donnees du parent, ou le StreamReader buffered ne les voit pas.
+/// Un socket TCP loopback n'a pas ce probleme : c'est un flux reseau
+/// classique que HttpClient consomme sans surprise.
 ///
-/// <para><b>Le Dispatcher WPF.</b> WPF exige un thread STA pour creer
-/// des fenetres. Le serveur tourne sur le thread principal qui n'est
-/// pas forcement STA. On utilise <see cref="Application"/> sur le
-/// thread courant, et tout le code UI (ModeExclusif) est dispatche
-/// dessus.</para>
+/// <para><b>Pas d'auth en loopback.</b> On accepte toutes les requetes
+/// venant de 127.0.0.1 sans token. Loopback = confiance sur Windows :
+/// seul l'utilisateur local peut atteindre ce port. Si quelqu'un
+/// d'autre sur la machine veut causer avec mcp-saisie, il peut, mais
+/// il n'y a aucun moyen d'echapper au sandbox user par ce canal.
+///
+/// <para><b>Une connexion a la fois.</b> Le serveur accepte UN client
+/// puis bloque jusqu'a ce qu'il ferme. C'est suffisant pour SenSÉ.Desktop
+/// qui est le seul caller prevu. Si tu veux du multi-client, il faut
+/// passer a un pool de threads ou async AcceptTcpClient en boucle.</para>
 /// </remarks>
 public static class Serveur
 {
-    /// <summary>Demarre le serveur sur stdio. Bloque jusqu'a EOF ou erreur.</summary>
-    public static async Task DemarrerAsync(CancellationToken arret = default)
+    /// <summary>Demarre le serveur HTTP sur 127.0.0.1:port. Bloque jusqu'a EOF ou arret demande.</summary>
+    public static async Task DemarrerAsync(int port, CancellationToken arret = default)
     {
-        var outils = ListeOutils();
-        using var lecteur = new StreamReader(Console.OpenStandardInput());
-        using var ecrivain = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
-
-        await ecrivain.WriteLineAsync(RepondrePret()).ConfigureAwait(false);
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        await Console.Error.WriteLineAsync($"mcp-saisie en ecoute sur 127.0.0.1:{port}").ConfigureAwait(false);
 
         while (!arret.IsCancellationRequested)
         {
-            var ligne = await lecteur.ReadLineAsync(arret).ConfigureAwait(false);
-            if (ligne is null) break;
-            if (string.IsNullOrWhiteSpace(ligne)) continue;
-
-            var reponse = Traiter(ligne, outils);
-            if (reponse is not null)
+            TcpClient client;
+            try
             {
-                await ecrivain.WriteLineAsync(reponse).ConfigureAwait(false);
+                client = await listener.AcceptTcpClientAsync(arret).ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            await Console.Error.WriteLineAsync($"client connecte depuis {client.Client.RemoteEndPoint}").ConfigureAwait(false);
+            try
+            {
+                await TraiterConnexionAsync(client, arret).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                await Console.Error.WriteLineAsync($"erreur connexion: {ex.Message}").ConfigureAwait(false);
+            }
+            finally
+            {
+                client.Dispose();
+            }
+            // Si le client ferme, on accepte le suivant.
+        }
+
+        listener.Stop();
+    }
+
+    private static async Task TraiterConnexionAsync(TcpClient client, CancellationToken arret)
+    {
+        using var stream = client.GetStream();
+        // HTTP/1.1 basique. On gere une requete par connexion (Connection: close)
+        // pour eviter de devoir parser les headers keep-alive.
+        while (!arret.IsCancellationRequested && client.Connected)
+        {
+            var request = await LireRequeteAsync(stream, arret).ConfigureAwait(false);
+            if (request is null) break; // EOF
+
+            await EcrireReponseAsync(stream, request).ConfigureAwait(false);
+            // Si le client a envoye Connection: close, on coupe.
+            if (request.CloseConnexion) break;
         }
     }
 
-    private static string RepondrePret()
+    private static async Task<RequeteHttp?> LireRequeteAsync(NetworkStream stream, CancellationToken arret)
     {
-        var n = new JsonObject
+        // Lit la request line
+        var requestLine = await LireLigneAsync(stream, arret).ConfigureAwait(false);
+        if (requestLine is null) return null;
+
+        var parts = requestLine.Split(' ', 3);
+        if (parts.Length < 3) return null;
+        var methode = parts[0];
+        var path = parts[1];
+
+        // Lit les headers
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        while (true)
         {
-            ["jsonrpc"] = "2.0",
-            ["method"] = "notifications/ready",
-            ["params"] = new JsonObject
+            var ligne = await LireLigneAsync(stream, arret).ConfigureAwait(false);
+            if (ligne is null) return null;
+            if (ligne.Length == 0) break; // fin des headers
+            var idx = ligne.IndexOf(':');
+            if (idx < 0) continue;
+            var name = ligne.Substring(0, idx).Trim();
+            var value = ligne.Substring(idx + 1).Trim();
+            headers[name] = value;
+        }
+
+        // Lit le body si Content-Length
+        var body = "";
+        if (headers.TryGetValue("Content-Length", out var lenStr) && int.TryParse(lenStr, out var len) && len > 0)
+        {
+            var buf = new byte[len];
+            var read = 0;
+            while (read < len)
             {
-                ["serveur"] = "mcp-saisie",
-                ["version"] = "1.0.0",
-                ["outils"] = ListeOutils().Count,
-            },
-        };
-        return n.ToJsonString();
-    }
+                var n = await stream.ReadAsync(buf.AsMemory(read, len - read), arret).ConfigureAwait(false);
+                if (n == 0) break;
+                read += n;
+            }
+            body = Encoding.UTF8.GetString(buf, 0, read);
+        }
 
-    private static IReadOnlyList<JsonObject> ListeOutils()
-    {
-        return
-        [
-            Outil("saisie.screenshot_ecran",
-                "Capture l'ecran entier, ou un moniteur precis. Retourne le chemin du fichier ecrit.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = new JsonObject
-                    {
-                        ["moniteur"] = new JsonObject { ["type"] = "integer", ["description"] = "0 = tous, 1+ = ecran precis" },
-                        ["format"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("png", "jpg", "bmp") },
-                    },
-                }),
-            Outil("saisie.screenshot_fenetre",
-                "Capture la fenetre identifiee par titre (regex partielle) ou handle (HWND).",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = new JsonObject
-                    {
-                        ["titre"] = new JsonObject { ["type"] = "string" },
-                        ["handle"] = new JsonObject { ["type"] = "integer" },
-                        ["format"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("png", "jpg", "bmp") },
-                    },
-                }),
-            Outil("saisie.lister_fenetres",
-                "Liste les fenetres visibles avec leur titre, pour que l'Assistant puisse choisir.",
-                new JsonObject { ["type"] = "object" }),
-            Outil("saisie.souris_deplacer",
-                "Deplace le curseur a une position absolue (coords ecran). Mode exclusif obligatoire.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("x", "y"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["x"] = new JsonObject { ["type"] = "integer" },
-                        ["y"] = new JsonObject { ["type"] = "integer" },
-                    },
-                }),
-            Outil("saisie.souris_cliquer",
-                "Clic a la position courante, ou aux coordonnees indiquees.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("bouton"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["bouton"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("gauche", "droit", "milieu") },
-                        ["doubles"] = new JsonObject { ["type"] = "boolean" },
-                        ["x"] = new JsonObject { ["type"] = "integer" },
-                        ["y"] = new JsonObject { ["type"] = "integer" },
-                    },
-                }),
-            Outil("saisie.souris_molette",
-                "Fait tourner la molette. delta positif = haut, negatif = bas.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("delta"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["delta"] = new JsonObject { ["type"] = "integer" },
-                        ["axe"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("vertical", "horizontal") },
-                    },
-                }),
-            Outil("saisie.clavier_taper",
-                "Tape une chaine de caracteres, un caractere a la fois.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("texte"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["texte"] = new JsonObject { ["type"] = "string" },
-                    },
-                }),
-            Outil("saisie.clavier_touche",
-                "Appuie sur une touche speciale (Entree, Echap, Tab, F1..F12, fleches) avec modificateurs.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("touche"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["touche"] = new JsonObject { ["type"] = "string" },
-                        ["modificateurs"] = new JsonObject
-                        {
-                            ["type"] = "array",
-                            ["items"] = new JsonObject
-                            {
-                                ["type"] = "string",
-                                ["enum"] = new JsonArray("Ctrl", "Shift", "Alt", "Win"),
-                            },
-                        },
-                    },
-                }),
-            Outil("saisie.mode_exclusif_ouvrir",
-                "Ouvre l'overlay 'L'ASSISTANT PILOTE'. A appeler avant toute action souris/clavier.",
-                new JsonObject
-                {
-                    ["type"] = "object",
-                    ["required"] = new JsonArray("sequence"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["sequence"] = new JsonObject { ["type"] = "string", ["description"] = "Description courte, ex: 'clic dans VS Code'" },
-                    },
-                }),
-            Outil("saisie.mode_exclusif_fermer",
-                "Ferme l'overlay. A appeler apres la derniere action souris/clavier.",
-                new JsonObject { ["type"] = "object" }),
-        ];
-    }
-
-    private static JsonObject Outil(string nom, string description, JsonObject schema)
-    {
-        return new JsonObject
+        var close = false;
+        if (headers.TryGetValue("Connection", out var conn))
         {
-            ["name"] = nom,
-            ["description"] = description,
-            ["inputSchema"] = schema,
-        };
+            close = conn.Equals("close", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return new RequeteHttp(methode, path, headers, body, close);
     }
 
-    private static string? Traiter(string ligne, IReadOnlyList<JsonObject> outils)
+    private static async Task<string?> LireLigneAsync(NetworkStream stream, CancellationToken arret)
     {
+        var sb = new StringBuilder();
+        var buf = new byte[1];
+        while (true)
+        {
+            var n = await stream.ReadAsync(buf.AsMemory(0, 1), arret).ConfigureAwait(false);
+            if (n == 0) return sb.Length == 0 ? null : sb.ToString();
+            var c = (char)buf[0];
+            if (c == '\n') break;
+            if (c != '\r') sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    private static async Task EcrireReponseAsync(NetworkStream stream, RequeteHttp req)
+    {
+        ReponseHttp resp;
         try
         {
-            var noeud = JsonNode.Parse(ligne);
-            if (noeud is null) return null;
-
-            var echange = noeud.Deserialize<EchangeJsonRpc>();
-            if (echange is null) return null;
-
-            if (echange.EstNotification)
-            {
-                TraiterNotification(echange, outils);
-                return null;
-            }
-
-            if (echange.EstRequete)
-            {
-                var id = echange.Id ?? "";
-                try
-                {
-                    var resultat = ExecuterMethode(echange.Method ?? "", echange.Params, outils);
-                    return EchangeJsonRpc.ReponseSucces(id, resultat);
-                }
-                catch (Exception ex)
-                {
-                    return EchangeJsonRpc.ReponseErreur(id, -32000, ex.Message);
-                }
-            }
-
-            return null;
+            resp = TraiterRequete(req);
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
-            return EchangeJsonRpc.ReponseErreur(null, -32700, $"JSON invalide: {ex.Message}");
+            resp = new ReponseHttp(500, "application/json",
+                $"{{\"ok\":false,\"error\":\"{ex.GetType().Name}: {ex.Message.Replace("\"", "\\\"")}\"}}");
         }
+
+        var headersStr = new StringBuilder();
+        headersStr.Append($"HTTP/1.1 {resp.Status} {StatusText(resp.Status)}\r\n");
+        headersStr.Append($"Content-Type: {resp.ContentType}\r\n");
+        headersStr.Append($"Content-Length: {Encoding.UTF8.GetByteCount(resp.Body)}\r\n");
+        headersStr.Append("Connection: close\r\n");
+        headersStr.Append("Access-Control-Allow-Origin: *\r\n");
+        headersStr.Append("\r\n");
+
+        var headerBytes = Encoding.UTF8.GetBytes(headersStr.ToString());
+        await stream.WriteAsync(headerBytes).ConfigureAwait(false);
+        var bodyBytes = Encoding.UTF8.GetBytes(resp.Body);
+        await stream.WriteAsync(bodyBytes).ConfigureAwait(false);
+        await stream.FlushAsync().ConfigureAwait(false);
     }
 
-    private static void TraiterNotification(EchangeJsonRpc echange, IReadOnlyList<JsonObject> outils)
+    private static string StatusText(int code) => code switch
     {
-        // Rien a faire pour l'instant. Une notification est un "fire and forget".
-        // Si le client veut nous informer de quelque chose, on pourrait le traiter ici.
-    }
+        200 => "OK",
+        400 => "Bad Request",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        500 => "Internal Server Error",
+        _ => "Unknown",
+    };
 
-    private static JsonNode? ExecuterMethode(string methode, JsonNode? parametres, IReadOnlyList<JsonObject> outils)
+    private static ReponseHttp TraiterRequete(RequeteHttp req)
     {
-        return methode switch
+        // GET /  -> liste des outils (compatibilite debug)
+        if (req.Methode == "GET" && req.Path == "/")
         {
-            "initialize" => new JsonObject
+            return new ReponseHttp(200, "application/json",
+                JsonSerializer.Serialize(new
+                {
+                    ok = true,
+                    serveur = "mcp-saisie",
+                    version = "1.0.0",
+                    outils = 10,
+                }));
+        }
+
+        // POST /saisie/<tool> -> appelle l'outil avec le body JSON comme args
+        if (req.Methode == "POST" && req.Path.StartsWith("/saisie/"))
+        {
+            var tool = req.Path.Substring("/saisie/".Length);
+            return AppelerOutil(tool, req.Body);
+        }
+
+        return new ReponseHttp(404, "application/json",
+            "{\"ok\":false,\"error\":\"route inconnue: " + req.Methode + " " + req.Path + "\"}");
+    }
+
+    private static ReponseHttp AppelerOutil(string tool, string bodyJson)
+    {
+        JsonNode? args = null;
+        if (!string.IsNullOrWhiteSpace(bodyJson))
+        {
+            try { args = JsonNode.Parse(bodyJson); }
+            catch (Exception ex) { return Erreur(400, "JSON invalide: " + ex.Message); }
+        }
+        var argsObj = args as JsonObject ?? new JsonObject();
+
+        string sortie;
+        try
+        {
+            sortie = tool switch
             {
-                ["protocolVersion"] = "2024-11-05",
-                ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
-                ["serverInfo"] = new JsonObject { ["name"] = "mcp-saisie", ["version"] = "1.0.0" },
-            },
-            "tools/list" => new JsonObject { ["tools"] = new JsonArray(outils.Select(o => o).ToArray()) },
-            "tools/call" => AppelerOutil(parametres),
-            _ => throw new InvalidOperationException($"methode inconnue: {methode}"),
-        };
-    }
-
-    private static JsonNode? AppelerOutil(JsonNode? parametres)
-    {
-        if (parametres is null) throw new InvalidOperationException("params requis");
-        var nom = parametres["name"]?.GetValue<string>() ?? "";
-        var args = parametres["arguments"] as JsonObject ?? new JsonObject();
-
-        var sortie = nom switch
+                "screenshot_ecran" => Capture.Ecran(
+                    argsObj["moniteur"]?.GetValue<int>() ?? 0,
+                    argsObj["format"]?.GetValue<string>() ?? "png"),
+                "screenshot_fenetre" => Capture.FenetreParTitre(
+                    argsObj["titre"]?.GetValue<string>() ?? "",
+                    argsObj["format"]?.GetValue<string>() ?? "png"),
+                "lister_fenetres" => string.Join("\n",
+                    Capture.ListerFenetres().Select(f => $"0x{f.Handle.ToInt64():X} {f.Titre}")),
+                "souris_deplacer" => Souris.Deplacer(
+                    argsObj["x"]?.GetValue<int>() ?? 0,
+                    argsObj["y"]?.GetValue<int>() ?? 0),
+                "souris_cliquer" => Souris.Cliquer(
+                    argsObj["bouton"]?.GetValue<string>() ?? "gauche",
+                    argsObj["doubles"]?.GetValue<bool>() ?? false,
+                    argsObj["x"]?.GetValue<int?>(),
+                    argsObj["y"]?.GetValue<int?>()),
+                "souris_molette" => Souris.Molette(
+                    argsObj["delta"]?.GetValue<int>() ?? 0,
+                    argsObj["axe"]?.GetValue<string>() ?? "vertical"),
+                "clavier_taper" => Clavier.Taper(
+                    argsObj["texte"]?.GetValue<string>() ?? ""),
+                "clavier_touche" => Clavier.Toucher(
+                    argsObj["touche"]?.GetValue<string>() ?? "",
+                    ArgsStringArray(argsObj, "modificateurs")),
+                "mode_exclusif_ouvrir" => OuvrirModeExclusif(
+                    argsObj["sequence"]?.GetValue<string>() ?? ""),
+                "mode_exclusif_fermer" => FermerModeExclusif(),
+                _ => throw new InvalidOperationException($"outil inconnu: {tool}"),
+            };
+        }
+        catch (Exception ex)
         {
-            "saisie.screenshot_ecran" => Capture.Ecran(
-                args["moniteur"]?.GetValue<int>() ?? 0,
-                args["format"]?.GetValue<string>() ?? "png"),
-            "saisie.screenshot_fenetre" => Capture.FenetreParTitre(
-                args["titre"]?.GetValue<string>() ?? "",
-                args["format"]?.GetValue<string>() ?? "png"),
-            "saisie.lister_fenetres" => string.Join("\n",
-                Capture.ListerFenetres().Select(f => $"0x{f.Handle.ToInt64():X} {f.Titre}")),
-            "saisie.souris_deplacer" => Souris.Deplacer(
-                args["x"]?.GetValue<int>() ?? 0,
-                args["y"]?.GetValue<int>() ?? 0),
-            "saisie.souris_cliquer" => Souris.Cliquer(
-                args["bouton"]?.GetValue<string>() ?? "gauche",
-                args["doubles"]?.GetValue<bool>() ?? false,
-                args["x"]?.GetValue<int>(),
-                args["y"]?.GetValue<int>()),
-            "saisie.souris_molette" => Souris.Molette(
-                args["delta"]?.GetValue<int>() ?? 0,
-                args["axe"]?.GetValue<string>() ?? "vertical"),
-            "saisie.clavier_taper" => Clavier.Taper(args["texte"]?.GetValue<string>() ?? ""),
-            "saisie.clavier_touche" => Clavier.Toucher(
-                args["touche"]?.GetValue<string>() ?? "",
-                ArgsStringArray(args, "modificateurs")),
-            "saisie.mode_exclusif_ouvrir" => OuvrirModeExclusif(args["sequence"]?.GetValue<string>() ?? ""),
-            "saisie.mode_exclusif_fermer" => FermerModeExclusif(),
-            _ => throw new InvalidOperationException($"outil inconnu: {nom}"),
-        };
+            return Erreur(500, $"{ex.GetType().Name}: {ex.Message}");
+        }
 
-        return new JsonObject
-        {
-            ["content"] = new JsonArray
-            {
-                new JsonObject { ["type"] = "text", ["text"] = sortie },
-            },
-        };
+        return new ReponseHttp(200, "application/json",
+            JsonSerializer.Serialize(new { ok = true, data = sortie }));
     }
 
     private static IReadOnlyList<string> ArgsStringArray(JsonObject args, string cle)
@@ -302,11 +277,6 @@ public static class Serveur
 
     private static string OuvrirModeExclusif(string sequence)
     {
-        // ModeExclusif est un overlay Win32 (CreateWindowEx +
-        // UpdateLayeredWindow), pas de WPF. Il s'execute directement
-        // sur le main thread STA de mcp-saisie, sans thread dedie ni
-        // dispatcher. Synchrone : on attend que la fenetre soit peinte
-        // avant de retourner au client MCP.
         ModeExclusif.Ouvrir("mcp-saisie", sequence);
         return $"mode exclusif ouvert: {sequence}";
     }
@@ -316,4 +286,11 @@ public static class Serveur
         ModeExclusif.Fermer();
         return "mode exclusif ferme";
     }
+
+    private static ReponseHttp Erreur(int status, string message) => new(status, "application/json",
+        JsonSerializer.Serialize(new { ok = false, error = message }));
+
+    private sealed record RequeteHttp(string Methode, string Path, Dictionary<string, string> Headers, string Body, bool CloseConnexion);
+
+    private sealed record ReponseHttp(int Status, string ContentType, string Body);
 }

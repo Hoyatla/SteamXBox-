@@ -190,7 +190,44 @@ public partial class App : Application
 
             Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
             Tools.ToolRegistry.StartServices();
-            UiLog.Info("tool services started");
+            
+            // Demarre mcp-saisie (HTTP loopback 127.0.0.1:8766) en subprocess.
+            try
+            {
+                var cheminSaisie = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "McpSaisie", "SenSÉ.Mcp.Saisie.exe");
+                if (System.IO.File.Exists(cheminSaisie))
+                {
+                    var psiSaisie = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = cheminSaisie,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    psiSaisie.ArgumentList.Add("--port");
+                    psiSaisie.ArgumentList.Add("8766");
+                    var procSaisie = System.Diagnostics.Process.Start(psiSaisie);
+                    if (procSaisie is not null)
+                    {
+                        _saisieProcess = procSaisie;
+                        System.Environment.SetEnvironmentVariable("SENSE_SAISIE_URL", "http://127.0.0.1:8766");
+                        SenSÉ.Tools.Assistant.AssistantSaisie.Demarrer("http://127.0.0.1:8766");
+                        UiLog.Info($"mcp-saisie demarre: PID {procSaisie.Id}, port 8766");
+                    }
+                    else
+                    {
+                        UiLog.Warn("mcp-saisie: Process.Start a renvoye null");
+                    }
+                }
+                else
+                {
+                    UiLog.Warn($"mcp-saisie non demarre (binaire introuvable: {cheminSaisie})");
+                }
+            }
+            catch (Exception ex)
+            {
+                UiLog.Failure("demarrage de mcp-saisie", ex);
+            }
+UiLog.Info("tool services started");
 
 
             // Bus d'evenements pour la proactivite. In-process, thread-safe, demarre une fois
@@ -548,6 +585,21 @@ public partial class App : Application
         {
             UiLog.Failure("arret du pc-agent", ex);
         }
+
+            // Arret de mcp-saisie (meme pattern que pc-agent).
+            try
+            {
+                if (_saisieProcess is not null && !_saisieProcess.HasExited)
+                {
+                    UiLog.Info($"arret de mcp-saisie (PID {_saisieProcess.Id})");
+                    _saisieProcess.Kill(entireProcessTree: true);
+                    _saisieProcess.Dispose();
+                }
+            }
+            catch (Exception ex2)
+            {
+                UiLog.Failure("arret de mcp-saisie", ex2);
+            }
         base.OnExit(e);    }
 
     /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>
@@ -555,4 +607,5 @@ public partial class App : Application
 
     private static ProactifRunner? _runnerProactif;
     private static ProjetsWatcher? _watcherProjets;    private static System.Diagnostics.Process? _pcAgentProcess;
+    private static System.Diagnostics.Process? _saisieProcess;
 }
