@@ -4,6 +4,7 @@ using SenSÉ.Shell.Configuration;
 using SenSÉ.Core.Diagnostics;
 using SenSÉ.Mcp.Bus;
 using SenSÉ.Desktop.Observateurs;
+using SenSÉ.Desktop.Debug;
 using SenSÉ.Shell.Localization;
 using SenSÉ.Shell.Theming;
 
@@ -105,6 +106,18 @@ public partial class App : Application
             // thing the user is looking at — and the only thing that knows about it is a marker on
             // disk that nothing else reads.
             Input.DesktopWindows.RepairOnStart(message => UiLog.Info(message));
+
+            // FIFO 1 mois sur les fichiers de diagnostic (.osk/.signal/.debug)
+            // dans Outils\Debug\{osk,signal,debug}\. Tourne au boot.
+            try
+            {
+                var purges = DebugFifo.Purger(message => UiLog.Info(message));
+                UiLog.Info($"debug FIFO au boot: {purges} fichier(s) purge(s)");
+            }
+            catch (Exception ex)
+            {
+                UiLog.Failure("debug FIFO au boot", ex);
+            }
 
             Tools.ToolRegistry.LogTo(message => UiLog.Info(message));
             Tools.ToolRegistry.StartServices();

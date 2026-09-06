@@ -124,6 +124,7 @@ public partial class AssistantWindow : Window
         // Le modèle vit aussi longtemps que cette fenêtre, et pas une seconde de plus. Le garder
         // au-delà retiendrait cinq gigaoctets de mémoire vive pour une conversation refermée ; le
         // décharger plus tôt — ce qui arrivait — coupe la parole à un assistant en plein travail.
+        Closing += (_, _) => AssistantMemoire.Consolider(message => _journal?.Invoke(message));
         Closed += (_, _) => SenSÉ.Tools.Assistant.ServeurModele.Arreter(_journal);
     }
 
@@ -796,6 +797,9 @@ public partial class AssistantWindow : Window
             journal?.Invoke(
                 "assistant: pas de recherche web, aucune instance configurée dans les réglages.");
         }
+
+        // Memoire 3 niveaux, branchee sur le disque.
+        capacites.AddRange(AssistantMemoire.Creer());
 
         return capacites;
     }
