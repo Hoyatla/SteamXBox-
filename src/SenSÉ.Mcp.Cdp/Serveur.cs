@@ -30,51 +30,61 @@ public static class Serveur
 
     public static async Task DemarrerAsync(int port = 9224, CancellationToken arret = default)
     {
-        // 1) Lance le navigateur (si pas deja lance)
+        // 1) Verifie si un navigateur compatible tourne deja avec le port debug
+        using var httpCheck = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        bool dejaActif = false;
         try
         {
-            _browser = BrowserLauncher.Lancer(9223);
-            await Console.Error.WriteLineAsync($"navigateur lance, PID {_browser.Id} (port debug 9223)");
+            var json = await httpCheck.GetStringAsync("http://127.0.0.1:9223/json/version", arret);
+            dejaActif = !string.IsNullOrEmpty(json);
+            if (dejaActif)
+            {
+                await Console.Error.WriteLineAsync("navigateur detecte deja actif sur 9223, on ne lance pas Edge");
+            }
         }
-        catch (Exception ex)
+        catch
         {
-            await Console.Error.WriteLineAsync($"impossible de lancer le navigateur: {ex.Message}");
-            // On continue quand meme ; l'utilisateur peut le lancer a la main.
+            await Console.Error.WriteLineAsync("aucun navigateur actif sur 9223, lancement d'Edge...");
         }
 
-        // 2) Attend que le port debug soit pret (max 10s)
-        using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        var pret = false;
-        for (int i = 0; i < 20 && !arret.IsCancellationRequested; i++)
+        if (!dejaActif)
         {
             try
             {
-                var v = await probe.GetStringAsync("http://127.0.0.1:9223/json/version", arret);
-                if (!string.IsNullOrEmpty(v)) { pret = true; break; }
-            }
-            catch
-            {
-                await Task.Delay(500, arret);
-            }
-        }
-        if (!pret)
-        {
-            await Console.Error.WriteLineAsync("port debug 9223 pas pret apres 10s ; demarrage sans CDP");
-        }
-        else
-        {
-            // 3) Connecte CDP
-            _client = new CdpClient();
-            try
-            {
-                await _client.ConnectAsync(9223, arret);
-                await Console.Error.WriteLineAsync("CDP connecte sur 127.0.0.1:9223");
+                _browser = BrowserLauncher.Lancer(9223);
+                await Console.Error.WriteLineAsync($"navigateur lance, PID {_browser.Id} (port debug 9223)");
             }
             catch (Exception ex)
             {
-                await Console.Error.WriteLineAsync("CDP connexion echouee: " + ex.Message);
+                await Console.Error.WriteLineAsync($"impossible de lancer le navigateur: {ex.Message}");
             }
         }
+
+        // 2) Probe loop : 30 iterations x 2s = 60s max, log a chaque essai
+        CdpClient? client = null;
+        for (int i = 0; i < 30 && !arret.IsCancellationRequested; i++)
+        {
+            await Console.Error.WriteLineAsync($"probe {i + 1}/30: test 127.0.0.1:9223...");
+            try
+            {
+                client = new CdpClient();
+                await client.ConnectAsync(9223, arret);
+                break;
+            }
+            catch
+            {
+                if (client is not null) await client.DisposeAsync();
+                client = null;
+                await Task.Delay(2000, arret);
+            }
+        }
+        if (client is null)
+        {
+            await Console.Error.WriteLineAsync("ERREUR: impossible de se connecter a CDP apres 30 essais (60s)");
+            throw new InvalidOperationException("CDP non disponible sur 127.0.0.1:9223 apres 60s");
+        }
+        _client = client;
+        await Console.Error.WriteLineAsync("CDP connecte sur 127.0.0.1:9223");
 
         // 4) Ecoute HTTP loopback
         var listener = new HttpListener();
