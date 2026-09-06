@@ -1213,4 +1213,49 @@ public sealed class AssistantLocal
 
         return Task.FromResult(reponse);
     }
+
+    /// <summary>
+    /// Dump de toute la conversation au format Markdown, pour la memoire long terme.
+    /// Chaque message est horodate. Le sujet est extrait du premier message user
+    /// (premiers 60 caracteres).
+    /// </summary>
+    public string DumpConversationMarkdown()
+    {
+        var sb = new System.Text.StringBuilder();
+        var messages = _messages;
+        var debut = DateTime.Now;
+        sb.AppendLine($"# Session {debut:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+        string? sujet = null;
+        var count = 0;
+        foreach (var noeud in messages)
+        {
+            if (noeud is not System.Text.Json.Nodes.JsonObject obj) continue;
+            var role = obj["role"]?.GetValue<string>();
+            if (role is null or "system") continue;
+            count++;
+            var contenu = obj["content"];
+            string texte;
+            if (contenu is System.Text.Json.Nodes.JsonValue val && val.TryGetValue<string>(out var t)) texte = t;
+            else if (contenu is System.Text.Json.Nodes.JsonArray arr)
+            {
+                var parts = new List<string>();
+                foreach (var item in arr)
+                {
+                    if (item is System.Text.Json.Nodes.JsonObject io && io["text"] is System.Text.Json.Nodes.JsonValue iv && iv.TryGetValue<string>(out var it)) parts.Add(it);
+                }
+                texte = string.Join(" ", parts);
+            }
+            else texte = "";
+            if (role == "user" && sujet is null && texte.Length > 0) sujet = texte.Length > 60 ? texte.Substring(0, 60) : texte;
+            var label = role == "user" ? "Vous" : "Assistant";
+            sb.AppendLine($"**{label}**");
+            sb.AppendLine();
+            sb.AppendLine(texte);
+            sb.AppendLine();
+        }
+        if (sujet is not null) sb.Insert(sb.ToString().IndexOf('\n') + 1, $"Sujet: {sujet}\n\n");
+        sb.Insert(sb.ToString().IndexOf('\n') + 1, $"Messages: {count}\n\n");
+        return sb.ToString();
+    }
 }

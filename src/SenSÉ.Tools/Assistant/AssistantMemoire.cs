@@ -107,13 +107,33 @@ public static class AssistantMemoire
     /// Appelé a la fermeture de la fenetre. Fait la promotion automatique
     /// (court -> moyen apres 2 jours) et purge les notes oubliees.
     /// </summary>
-    public static string Consolider(Action<string>? journal = null)
+    public static string Consolider(SenSÉ.Tools.Assistant.AssistantLocal? assistant, Action<string>? journal = null)
     {
         Memoire.AssurerDossiers();
         var promus = Memoire.Promouvoir();
         var oublies = Memoire.Purger(journal);
         var msg = $"consolidation: {promus} note(s) promue(s) en moyen terme, {oublies} oubliee(s)";
         journal?.Invoke(msg);
+
+        if (assistant is not null)
+        {
+            try
+            {
+                var dossier = Path.Combine(AppContext.BaseDirectory, "Memoire", "Long", "Sessions");
+                Directory.CreateDirectory(dossier);
+                var maintenant = DateTime.Now;
+                var nom = $"session-{maintenant:yyyy-MM-dd-HH-mm-ss}.md";
+                var chemin = Path.Combine(dossier, nom);
+                var contenu = assistant.DumpConversationMarkdown();
+                File.WriteAllText(chemin, contenu);
+                var rel = Path.Combine("Memoire", "Long", "Sessions", nom);
+                journal?.Invoke($"conversation sauvegardee: {rel} ({contenu.Length} octets)");
+            }
+            catch (Exception ex)
+            {
+                journal?.Invoke($"dump conversation echoue: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
         return msg;
     }
 
