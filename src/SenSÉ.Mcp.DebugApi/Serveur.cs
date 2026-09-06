@@ -130,6 +130,17 @@ public static class Serveur
                         ["keys"] = new JsonObject { ["type"] = "string" },
                     },
                 }),
+            Outil("debug.uia_screenshot_window",
+                "Capture UNIQUEMENT la fenetre identifiee par son titre (pas tout l'ecran). Renvoie le chemin du PNG dans Captures\\. Utilise pour 'capture de cette fenetre', 'screenshot de la fenetre X'.",
+                new JsonObject
+                {
+                    ["type"] = "object",
+                    ["required"] = new JsonArray("title"),
+                    ["properties"] = new JsonObject
+                    {
+                        ["title"] = new JsonObject { ["type"] = "string" },
+                    },
+                }),
         ];
     }
 
@@ -216,6 +227,10 @@ public static class Serveur
             "debug.uia_press" => AppelerAgentPostAsync("/v1/uia/press", new
             {
                 keys = args["keys"]?.GetValue<string>() ?? "",
+            }),
+            "debug.uia_screenshot_window" => AppelerAgentPostAsync("/v1/uia/screenshot-window", new
+            {
+                title = args["title"]?.GetValue<string>() ?? "",
             }),
             _ => throw new InvalidOperationException($"outil inconnu: {nom}"),
         };

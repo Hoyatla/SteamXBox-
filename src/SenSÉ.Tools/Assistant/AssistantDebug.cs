@@ -77,6 +77,31 @@ public static class AssistantDebug
                 {
                     keys = args.GetValueOrDefault("keys") ?? "",
                 })),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_screenshot_window",
+                "Prend un screenshot UNIQUEMENT de la fenetre identifiee par son titre (pas tout l'ecran). Le resultat est un fichier PNG sauvegarde dans C:\\Program Files\\SenSÉ\\Captures\\. Renvoie le chemin. Utilise cette capacite quand l'utilisateur veut 'une capture de cette fenetre', 'screenshot de la fenetre X', 'montre-moi la fenetre active', etc.",
+                [new AssistantLocal.Parametre("titre", "Le titre exact (ou une partie) de la fenetre a capturer", [])],
+                args => AppelerAsync("POST", "/v1/uia/screenshot-window", new
+                {
+                    title = args.GetValueOrDefault("titre") ?? "",
+                })),
+
+            new AssistantLocal.Capacite(
+                "afficher_image",
+                "Affiche une image dans la conversation. Le modele multimodal la voit. Le user la voit. Utilise apres un screenshot pour montrer ce que tu as capture.",
+                [new AssistantLocal.Parametre("chemin", "Le chemin absolu du fichier PNG", [])],
+                args =>
+                {
+                    var chemin = args.GetValueOrDefault("chemin") ?? "";
+                    if (string.IsNullOrWhiteSpace(chemin) || !File.Exists(chemin))
+                    {
+                        return "fichier introuvable: " + chemin;
+                    }
+                    var info = new FileInfo(chemin);
+                    return $"image ajoutee a la conversation: {chemin} ({info.Length / 1024} Ko)";
+                },
+                Interne: true),
         ];
     }
 

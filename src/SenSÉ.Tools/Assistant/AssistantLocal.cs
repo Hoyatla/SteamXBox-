@@ -203,7 +203,13 @@ public sealed class AssistantLocal
         + "ou toute action sur une autre fenetre : utilise debug_uia_dump en premier, "
         + "PAS ouvrir_outil qui ouvre l'outil de capture SenSÉ (different). "
         + "Le pipeline : debug_uia_dump -> lire automationId -> debug_uia_invoke(automationId) ou debug_uia_press(keys). "
-        + "C'est 5 a 20 fois plus rapide qu'un clic souris.";
+        + "C'est 5 a 20 fois plus rapide qu'un clic souris."
+        + "\n\n"
+        + "CAPTURE FENETRE. Pour 'capture de cette fenetre', 'screenshot de la fenetre X', 'montre-moi la fenetre active': "
+        + "utilise debug_uia_screenshot_window avec le titre de la fenetre, "
+        + "PAS debug_uia_press(Impr) qui prend tout l'ecran. "
+        + "Apres le screenshot, appelle afficher_image avec le chemin recu, "
+        + "pour que l'image apparaisse dans la conversation.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
