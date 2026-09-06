@@ -166,44 +166,63 @@ public static class AssistantSaisie
         {
             return "mcp-saisie: client non initialise (AssistantSaisie.Demarrer pas appele)";
         }
-        try
+        // Retry sur HttpRequestException : le serveur coupe la connexion
+        // apres chaque requete (Connection: close), donc la 1ere requete
+        // apres un idle long peut echouer. On reessaie 2 fois de plus.
+        for (int essai = 0; essai < 3; essai++)
         {
-            var url = _urlBase + "/saisie/" + tool;
-            var task = body is null
-                ? _http.GetAsync(url)
-                : _http.PostAsJsonAsync(url, body);
-            using var resp = task.GetAwaiter().GetResult();
-            var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            if (!resp.IsSuccessStatusCode)
-            {
-                return $"mcp-saisie: HTTP {(int)resp.StatusCode}: {json}";
-            }
-            // Parse la reponse JSON : { "ok": true, "data": "..." } ou { "ok": false, "error": "..." }
             try
             {
-                var node = JsonNode.Parse(json);
-                if (node is JsonObject obj)
+                var url = _urlBase + "/saisie/" + tool;
+                var task = body is null
+                    ? _http.GetAsync(url)
+                    : _http.PostAsJsonAsync(url, body);
+                using var resp = task.GetAwaiter().GetResult();
+                var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                if (!resp.IsSuccessStatusCode)
                 {
-                    if (obj["ok"]?.GetValue<bool>() == false)
+                    return $"mcp-saisie: HTTP {(int)resp.StatusCode}: {json}";
+                }
+                // Parse la reponse JSON : { "ok": true, "data": "..." } ou { "ok": false, "error": "..." }
+                try
+                {
+                    var node = JsonNode.Parse(json);
+                    if (node is JsonObject obj)
                     {
-                        return $"mcp-saisie: {obj["error"]?.GetValue<string>() ?? json}";
-                    }
-                    var data = obj["data"];
-                    if (data is not null)
-                    {
-                        return data.GetValue<string>() ?? data.ToJsonString();
+                        if (obj["ok"]?.GetValue<bool>() == false)
+                        {
+                            return $"mcp-saisie: {obj["error"]?.GetValue<string>() ?? json}";
+                        }
+                        var data = obj["data"];
+                        if (data is not null)
+                        {
+                            return data.GetValue<string>() ?? data.ToJsonString();
+                        }
                     }
                 }
+                catch
+                {
+                    // pas du JSON, on retourne le body brut
+                }
+                return json;
             }
-            catch
+            catch (HttpRequestException) when (essai < 2)
             {
-                // pas du JSON, on retourne le body brut
+                // Connexion coupee par le serveur (idle trop long, ou
+                // restart du serveur). On attend un peu et on reessaie.
+                System.Threading.Thread.Sleep(150);
             }
-            return json;
+            catch (TaskCanceledException) when (essai < 2)
+            {
+                // Timeout. On reessaie.
+                System.Threading.Thread.Sleep(150);
+            }
+            catch (Exception ex) when (essai >= 2)
+            {
+                // Dernier essai : on remonte l'erreur.
+                return $"erreur mcp-saisie: {ex.GetType().Name}: {ex.Message}";
+            }
         }
-        catch (Exception ex)
-        {
-            return $"erreur mcp-saisie: {ex.GetType().Name}: {ex.Message}";
-        }
+        return "erreur mcp-saisie: connexion perdue apres 3 essais";
     }
 }

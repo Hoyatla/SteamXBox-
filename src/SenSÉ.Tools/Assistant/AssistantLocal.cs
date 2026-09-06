@@ -240,14 +240,32 @@ public sealed class AssistantLocal
         + "(x + width/2, y + height/2). Si find_main_edit ne renvoie rien (Writer n'est pas UIA), "
         + "repere la zone visuellement apres un screenshot_ecran et calcule les coords a l'oeil. "
 
-        + "CDP. Pour piloter des webapps (MiniMax Code, dashboards, sites web modernes) : "
-        + "1) cdp_navigate(url) pour ouvrir. "
-        + "2) cdp_wait(selector) pour attendre que la page charge. "
-        + "3) cdp_click(selector) et cdp_type(selector, text) pour interagir. "
-        + "4) cdp_screenshot() pour voir. "
-        + "5) cdp_eval(js) pour scripter. "
-        + "Le navigateur integre (Edge par defaut) est lance automatiquement au boot de SenSÉ.Desktop "
-        + "sur 127.0.0.1:9223. mcp-cdp expose une API HTTP loopback sur 127.0.0.1:9224.";
+        + "REGLE ABSOLUE : LES WEBAPPS DOIVENT ETRE PILOTEES AVEC CDP. "
+        + "Si l'application cible est un navigateur web, une webview, ou une app "
+        + "basee sur Chromium/Electron (MiniMax Code, OpenCode, Claude desktop, "
+        + "les dashboards web, les sites de streaming, etc.), tu DOIS utiliser "
+        + "les Capacites cdp_*, PAS debug_uia_*. L'UIA ne traverse PAS les "
+        + "frontieres webview."
+
+        + "WORKFLOW CDP OBLIGATOIRE pour toute action sur une webapp : "
+        + "1) cdp_navigate(url) si l'URL est connue, OU cdp_eval("
+        + "    \"location.href\") pour la voir si l'URL n'est pas claire. "
+        + "2) cdp_wait(selector=\"body\", timeout=10000) pour attendre le chargement. "
+        + "3) cdp_eval(expression) pour lire le DOM si tu ne connais pas "
+        + "    les selecteurs (retourne du JSON avec les elements cles). "
+        + "4) cdp_click(selector) + cdp_type(selector, text) pour interagir. "
+        + "5) cdp_screenshot() pour confirmer visuellement."
+
+        + "EXEMPLES : "
+        + "- 'ecris X dans le chat de MiniMax Code' -> cdp_navigate(url) puis cdp_type(selector=\"textarea, [contenteditable]\", text=X) puis Enter. "
+        + "- 'ouvre ce site' -> cdp_navigate(url) puis cdp_screenshot. "
+        + "- 'clique sur le bouton Login' -> cdp_eval pour trouver le selecteur, puis cdp_click(selector)."
+
+        + "Ne JAMAIS utiliser debug_uia_dump, debug_uia_set_text, debug_uia_invoke "
+        + "pour une webapp. Si tu vois que l'app est dans Firefox/Edge/Chrome "
+        + "ou un titre comme 'Code', 'OpenCode', 'Claude', 'MiniMax' etc., bascule CDP. "
+        + "Si debug_uia_renvoie un tree plat (1-2 noeuds) avec une Custom/Pane "
+        + "racine vide, c'est une webview -> bascule CDP immediatement.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.

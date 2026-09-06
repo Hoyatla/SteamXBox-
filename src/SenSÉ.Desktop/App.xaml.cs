@@ -235,6 +235,17 @@ public partial class App : Application
                 var cheminCdp = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "Cdp", "SenSÉ.Mcp.Cdp.exe");
                 if (System.IO.File.Exists(cheminCdp))
                 {
+                    // Log du chemin Edge/Chrome detecte pour debugging.
+                    var cheminBrowser = SenSÉ.Mcp.Cdp.BrowserLauncher.TrouverExe(out var nomBrowser);
+                    if (string.IsNullOrEmpty(cheminBrowser))
+                    {
+                        UiLog.Warn("mcp-cdp: aucun navigateur Chromium-compatible trouve (Edge/Chrome/Chromium). mcp-cdp va quand meme essayer.");
+                    }
+                    else
+                    {
+                        UiLog.Info($"mcp-cdp: navigateur detecte = {nomBrowser} ({cheminBrowser})");
+                    }
+
                     var psiCdp = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = cheminCdp,
