@@ -191,7 +191,19 @@ public sealed class AssistantLocal
         + "avant qu'il ait choisi. S'il accepte, appelle travail_accepter puis commence ; s'il "
         + "demande un changement, réécris le carnet avec travail_noter et redemande. Une génération "
         + "d'image prend cinq minutes : six étapes lancées sur une intention mal comprise coûtent "
-        + "une demi-heure, et cela ne se découvre qu'à la fin.";
+        + "une demi-heure, et cela ne se découvre qu'à la fin."
+        + "\n\n"
+        + "DEBUG UIA. Tu as CINQ Capacites qui parlent au pc-agent (un subprocess Rust sur 127.0.0.1:8765 qui expose l'API UI Automation de Windows) : "
+        + "debug_uia_dump (l'arbre UIA de la fenetre au premier plan : nom, type, automationId, rectangle), "
+        + "debug_uia_invoke (clic logique sur un bouton par automationId, 100% fiable, pas de coordonnees), "
+        + "debug_uia_set_text (ecrire dans un champ par automationId), "
+        + "debug_uia_select (selectionner dans une ComboBox/ListBox par automationId), "
+        + "debug_uia_press (combinaison de touches, ex: 'Ctrl+S', 'Return'). "
+        + "QUAND l'utilisateur demande une 'capture', un 'screenshot', un 'dump de l'ecran', 'regarde mon ecran', "
+        + "ou toute action sur une autre fenetre : utilise debug_uia_dump en premier, "
+        + "PAS ouvrir_outil qui ouvre l'outil de capture SenSÉ (different). "
+        + "Le pipeline : debug_uia_dump -> lire automationId -> debug_uia_invoke(automationId) ou debug_uia_press(keys). "
+        + "C'est 5 a 20 fois plus rapide qu'un clic souris.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
