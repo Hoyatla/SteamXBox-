@@ -18,15 +18,24 @@ namespace SenSÉ.Mcp.Saisie;
 /// l'ecran : le reste reste transparent aux clics. Echap est intercepte
 /// pour permettre a l'utilisateur de couper net la sequence en cours.
 ///
-/// <para><b>Souris et Clavier verifient <see cref="EstActif"/>.</b> Ce
+/// <para><b>Souris et Clavier verchent <see cref="EstActif"/>.</b> Ce
 /// n'est pas un hack UI : c'est le seul moyen d'etre sur que l'Assistant
 /// ne bouge pas la souris pendant que tu tapes au clavier. Sans ce
 /// verrou, c'est le chaos.</para>
+///
+/// <para><b>Thread WPF dedie.</b> WPF exige une <see cref="Application"/>
+/// et un dispatcher actif pour creer et afficher des fenetres. mcp-saisie
+/// etant un subprocess stdio sans GUI, on heberge l'Application WPF sur
+/// un thread STA dedie (voir <see cref="WpfHost"/>). Toutes les operations
+/// WPF (Show, Close, BeginInvoke) sont marshalee sur ce thread.
+/// <see cref="Ouvrir"/> et <see cref="Fermer"/> bloquent l'appelant
+/// jusqu'a ce que l'operation soit terminee sur le thread WPF.</para>
 /// </remarks>
 public sealed class ModeExclusif
 {
     private static ModeExclusif? _instance;
     private static readonly object _gate = new();
+    private static WpfHost? _host;
 
     private readonly FenetreBandeau _fenetre;
 
@@ -41,26 +50,123 @@ public sealed class ModeExclusif
     /// <summary>Ouvre l'overlay. Si une instance est deja ouverte, on remplace son texte.</summary>
     public static void Ouvrir(string serveur, string sequence)
     {
-        lock (_gate)
+        var host = ObtenirHost();
+        host.Run(() =>
         {
-            if (_instance is not null)
+            lock (_gate)
             {
-                _instance._fenetre.ChangerTexte(serveur, sequence);
-                return;
+                if (_instance is not null)
+                {
+                    _instance._fenetre.ChangerTexte(serveur, sequence);
+                    return;
+                }
+                _instance = new ModeExclusif(serveur, sequence);
+                _instance._fenetre.Show();
             }
-            _instance = new ModeExclusif(serveur, sequence);
-            _instance._fenetre.Show();
-        }
+        });
     }
 
     /// <summary>Ferme l'overlay et desabonne le mode exclusif.</summary>
     public static void Fermer()
     {
+        if (_instance is null) return;
+        if (_host is null) return;
+        _host.Run(() =>
+        {
+            lock (_gate)
+            {
+                if (_instance is null) return;
+                _instance._fenetre.Fermer();
+                _instance = null;
+            }
+        });
+    }
+
+    /// <summary>Demarre le thread WPF dedie a la demande, idempotent.</summary>
+    private static WpfHost ObtenirHost()
+    {
+        if (_host is not null) return _host;
         lock (_gate)
         {
-            if (_instance is null) return;
-            _instance._fenetre.Fermer();
-            _instance = null;
+            if (_host is null)
+            {
+                _host = new WpfHost();
+            }
+            return _host;
+        }
+    }
+}
+
+/// <summary>
+/// Un thread STA dedie qui heberge l'Application WPF et son dispatcher.
+/// Sans ca, mcp-saisie (stdio subprocess, pas de GUI) n'a pas d'
+/// Application WPF, et <c>Window.Show()</c> bloque indefiniment en
+/// attendant un dispatcher qui n'existe pas.
+/// </summary>
+/// <remarks>
+/// Le constructeur bloque jusqu'a ce que le thread ait demarre
+/// l'Application et le dispatcher (5 s max, ensuite timeout). Apres
+/// ca, <see cref="Run"/> peut etre appele depuis n'importe quel thread ;
+/// il marshale l'action sur le thread WPF et bloque jusqu'a la fin.
+///
+/// <para><b>Background thread.</b> Il est tue automatiquement quand le
+/// process mcp-saisie se termine (a la fermeture de stdin).</para>
+/// </remarks>
+internal sealed class WpfHost
+{
+    private readonly Thread _thread;
+    private readonly ManualResetEventSlim _ready = new(false);
+    private Dispatcher? _dispatcher;
+    private Exception? _initError;
+
+    public WpfHost()
+    {
+        _thread = new Thread(InitializeAndRun)
+        {
+            Name = "mcp-saisie-wpf",
+            IsBackground = true,
+        };
+        _thread.SetApartmentState(ApartmentState.STA);
+        _thread.Start();
+
+        if (!_ready.Wait(TimeSpan.FromSeconds(5)))
+        {
+            throw new TimeoutException("WPF host n'a pas reussi a demarrer en 5s");
+        }
+        if (_initError is not null) throw _initError;
+    }
+
+    private void InitializeAndRun()
+    {
+        try
+        {
+            var app = new System.Windows.Application();
+            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _dispatcher = Dispatcher.CurrentDispatcher;
+            _ready.Set();
+            Dispatcher.Run();
+        }
+        catch (Exception ex)
+        {
+            _initError = ex;
+            _ready.Set();
+        }
+    }
+
+    /// <summary>Execute une action sur le thread WPF. Bloque l'appelant.</summary>
+    public void Run(Action action)
+    {
+        if (_dispatcher is null)
+        {
+            throw new InvalidOperationException("WPF host non initialise");
+        }
+        if (_dispatcher.CheckAccess())
+        {
+            action();
+        }
+        else
+        {
+            _dispatcher.Invoke(action);
         }
     }
 }

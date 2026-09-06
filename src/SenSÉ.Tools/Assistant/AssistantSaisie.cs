@@ -302,7 +302,7 @@ public static class AssistantSaisie
                 _stdin.Flush();
             }
 
-            if (!attente.Wait(TimeSpan.FromSeconds(15)))
+            if (!attente.Wait(TimeSpan.FromSeconds(30)))
             {
                 _pending.TryRemove(id, out _);
                 return $"mcp-saisie: timeout (15s) sur {nomOutil}";

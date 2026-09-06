@@ -302,31 +302,17 @@ public static class Serveur
 
     private static string OuvrirModeExclusif(string sequence)
     {
-        // Le bandeau est WPF, donc on doit l'ouvrir sur le thread STA.
-        // Si on n'est pas sur le bon thread, on dispatche.
-        var application = System.Windows.Application.Current;
-        if (application is null)
-        {
-            new System.Windows.Application().Dispatcher.Invoke(() => ModeExclusif.Ouvrir("mcp-saisie", sequence));
-        }
-        else
-        {
-            application.Dispatcher.Invoke(() => ModeExclusif.Ouvrir("mcp-saisie", sequence));
-        }
+        // ModeExclusif.Ouvrir demarre un thread WPF dedie a la demande
+        // (si pas deja fait) et y dispatche le Show() de la fenetre.
+        // Bloquant : on attend que la fenetre soit effectivement affichee
+        // avant de retourner au client MCP.
+        ModeExclusif.Ouvrir("mcp-saisie", sequence);
         return $"mode exclusif ouvert: {sequence}";
     }
 
     private static string FermerModeExclusif()
     {
-        var application = System.Windows.Application.Current;
-        if (application is null)
-        {
-            new System.Windows.Application().Dispatcher.Invoke(() => ModeExclusif.Fermer());
-        }
-        else
-        {
-            application.Dispatcher.Invoke(() => ModeExclusif.Fermer());
-        }
+        ModeExclusif.Fermer();
         return "mode exclusif ferme";
     }
 }
