@@ -99,7 +99,10 @@ public static class AssistantDebug
                         return "fichier introuvable: " + chemin;
                     }
                     var info = new FileInfo(chemin);
-                    return $"image ajoutee a la conversation: {chemin} ({info.Length / 1024} Ko)";
+                    // Le marqueur [IMAGE:chemin] est detecte par Repondre (Executer) qui
+                    // charge alors le PNG, l'encode en base64, et transforme le "content"
+                    // du message tool en tableau multimodal (text + image_url data:base64).
+                    return $"[IMAGE:{chemin}] image affichee ({info.Length / 1024} Ko)";
                 },
                 Interne: true),
         ];

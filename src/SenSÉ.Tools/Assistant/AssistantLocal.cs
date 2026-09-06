@@ -209,7 +209,10 @@ public sealed class AssistantLocal
         + "utilise debug_uia_screenshot_window avec le titre de la fenetre, "
         + "PAS debug_uia_press(Impr) qui prend tout l'ecran. "
         + "Apres le screenshot, appelle afficher_image avec le chemin recu, "
-        + "pour que l'image apparaisse dans la conversation.";
+        + "pour que l'image apparaisse dans la conversation."
+        + "Les Capacites qui retournent [IMAGE:chemin] injectent AUTOMATIQUEMENT l'image dans la conversation. "
+        + "Tu vois l'image (toi = le modele multimodal), l'user voit l'image (le PNG affiche dans le chat). "
+        + "Apres un screenshot, tu peux raisonner sur ce que tu as capture.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
@@ -890,11 +893,60 @@ public sealed class AssistantLocal
                 + "autre outil.";
         }
 
+        // Detection d'un marqueur [IMAGE:chemin] dans le resultat d'une
+        // Capacite. Si trouve, on charge le PNG, on l'encode en base64, et
+        // on transforme le "content" du message tool en un tableau
+        // multimodal (text + image_url data:base64) que le modele
+        // multimodal Qwen VL peut voir et que le client peut afficher.
+        System.Text.Json.Nodes.JsonNode? contentNode = resultat;
+        if (resultat.Contains("[IMAGE:"))
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(resultat, @"\[IMAGE:(.+?)\]");
+            if (m.Success)
+            {
+                var chemin = m.Groups[1].Value.Trim();
+                if (System.IO.File.Exists(chemin))
+                {
+                    try
+                    {
+                        var bytes = System.IO.File.ReadAllBytes(chemin);
+                        var base64 = Convert.ToBase64String(bytes);
+                        var mime = (chemin.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                            || chemin.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                            ? "image/jpeg" : "image/png";
+                        var texteRestant = resultat.Replace(m.Value, "").Trim();
+                        contentNode = new System.Text.Json.Nodes.JsonArray
+                        {
+                            new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["type"] = "text",
+                                ["text"] = string.IsNullOrEmpty(texteRestant)
+                                    ? "image capturee par l'Assistant"
+                                    : texteRestant,
+                            },
+                            new System.Text.Json.Nodes.JsonObject
+                            {
+                                ["type"] = "image_url",
+                                ["image_url"] = new System.Text.Json.Nodes.JsonObject
+                                {
+                                    ["url"] = $"data:{mime};base64,{base64}",
+                                },
+                            },
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        journal?.Invoke($"[IMAGE] injection echouee pour {chemin}: {ex.GetType().Name}: {ex.Message}");
+                    }
+                }
+            }
+        }
+
         return new JsonObject
         {
             ["role"] = "tool",
             ["tool_call_id"] = identifiant,
-            ["content"] = resultat,
+            ["content"] = contentNode,
         };
     }
 
