@@ -48,7 +48,7 @@ public enum NiveauMemoire
 public static class Memoire
 {
     private static string Racine
-        => Path.Combine(AppContext.BaseDirectory, "Outils", "Memoire");
+        => Path.Combine(AppContext.BaseDirectory, "Memoire");
 
     private static string DossierCourt => Path.Combine(Racine, "Court");
     private static string DossierMoyen => Path.Combine(Racine, "Moyen");
@@ -132,7 +132,7 @@ public static class Memoire
             File.WriteAllText(chemin, entete + paragraphe);
         }
 
-        var cheminRelatif = Path.Combine("Outils", "Memoire", niveau.ToString(), nom + ".md");
+        var cheminRelatif = Path.Combine("Memoire", niveau.ToString(), nom + ".md");
         journal?.Invoke($"memoire notee : {cheminRelatif}");
         return cheminRelatif;
     }

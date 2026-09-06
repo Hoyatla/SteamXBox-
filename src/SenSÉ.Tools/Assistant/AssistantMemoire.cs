@@ -1,4 +1,4 @@
-namespace SenSÉ.Tools.Assistant;
+﻿namespace SenSÉ.Tools.Assistant;
 
 /// <summary>
 /// Les Capacite de memoire que l'Assistant peut appeler pendant la
@@ -94,7 +94,7 @@ public static class AssistantMemoire
                     var nom = args.GetValueOrDefault("sujet") ?? "";
                     if (string.IsNullOrWhiteSpace(nom)) return "sujet vide";
                     var chemin = Path.Combine(
-                        AppContext.BaseDirectory, "Outils", "Memoire", niveau.ToString(),
+                        AppContext.BaseDirectory, "Memoire", niveau.ToString(),
                         nom.ToLowerInvariant().Replace(" ", "-") + ".md");
                     if (!File.Exists(chemin)) return "sujet inconnu";
                     File.Delete(chemin);

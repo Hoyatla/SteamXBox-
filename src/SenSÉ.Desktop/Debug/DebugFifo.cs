@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 
 namespace SenSÉ.Desktop.Debug;
 
@@ -22,7 +22,6 @@ namespace SenSÉ.Desktop.Debug;
 public static class DebugFifo
 {
     private const string Racine = "Debug";
-    private const string Outils = "Outils";
     private const string ExtensionOsk = ".osk";
     private const string ExtensionSignal = ".signal";
     private const string ExtensionDebug = ".debug";
@@ -34,7 +33,7 @@ public static class DebugFifo
     /// </summary>
     public static int Purger(Action<string>? journal = null)
     {
-        var racine = Path.Combine(AppContext.BaseDirectory, Outils, Racine);
+        var racine = Path.Combine(AppContext.BaseDirectory, Racine);
         Directory.CreateDirectory(racine);
 
         var effaces = PurgerSousDossier(Path.Combine(racine, "osk"), ExtensionOsk, journal);
