@@ -212,7 +212,13 @@ public sealed class AssistantLocal
         + "pour que l'image apparaisse dans la conversation."
         + "Les Capacites qui retournent [IMAGE:chemin] injectent AUTOMATIQUEMENT l'image dans la conversation. "
         + "Tu vois l'image (toi = le modele multimodal), l'user voit l'image (le PNG affiche dans le chat). "
-        + "Apres un screenshot, tu peux raisonner sur ce que tu as capture.";
+        + "Apres un screenshot, tu peux raisonner sur ce que tu as capture."
+
+        + "FENETRE NON-FOREGROUND. Si l'utilisateur dit 'ecris dans la fenetre X' "
+        + "et que X n'est pas au premier plan, NE DUMP PAS la fenetre foreground. "
+        + "Utilise debug_uia_list_windows d'abord pour trouver le bon hwnd, "
+        + "puis debug_uia_dump_window(titre=X) pour avoir l'arbre UIA, "
+        + "puis debug_uia_set_text sur le bon automationId.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.

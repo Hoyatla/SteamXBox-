@@ -105,6 +105,21 @@ public static class AssistantDebug
                     return $"[IMAGE:{chemin}] image affichee ({info.Length / 1024} Ko)";
                 },
                 Interne: true),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_list_windows",
+                "Liste toutes les fenetres top-level visibles (titre + HWND). Utilise cette capacite en premier pour trouver la fenetre cible avant de la dumper ou de la capturer.",
+                [],
+                args => AppelerAsync("GET", "/v1/uia/list-windows", null)),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_dump_window",
+                "Dump l'arbre UIA d'une fenetre specifique identifiee par son titre (substring, case-insensitive). Utilise cette capacite apres debug_uia_list_windows quand la fenetre cible n'est PAS au premier plan.",
+                [new AssistantLocal.Parametre("titre", "Le titre (ou partie du titre) de la fenetre a dumper", [])],
+                args => AppelerAsync("POST", "/v1/uia/dump-window", new
+                {
+                    title = args.GetValueOrDefault("titre") ?? "",
+                })),
         ];
     }
 
