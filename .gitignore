@@ -110,3 +110,8 @@ Outils/McpSaisie/*
 !Outils/McpSaisie/.gitkeep
 Outils/McpSaisie/SenSÉ.Mcp.Saisie.exe
 Outils/McpSaisie/SenSÉ.Mcp.Saisie.pdb
+# mcp-cdp bundle (binaire C# self-contained, meme pattern que McpSaisie)
+Outils/Cdp/*
+!Outils/Cdp/
+!Outils/Cdp/.gitkeep
+Outils/CdpUserData/

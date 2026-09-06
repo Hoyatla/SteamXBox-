@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SenSÉ.Mcp.Cdp</AssemblyName>
+    <RootNamespace>SenSÉ.Mcp.Cdp</RootNamespace>
+    <Product>SenSÉ</Product>
+    <AssemblyTitle>SenSÉ MCP CDP</AssemblyTitle>
+    <Description>Chrome DevTools Protocol - pilote des webapps via Edge/Chrome deja installes.</Description>
+  </PropertyGroup>
+
+</Project>

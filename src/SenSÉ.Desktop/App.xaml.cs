@@ -227,6 +227,44 @@ public partial class App : Application
             {
                 UiLog.Failure("demarrage de mcp-saisie", ex);
             }
+
+            // Demarre mcp-cdp (CDP HTTP loopback 127.0.0.1:9224) en subprocess.
+            // Detecte Edge/Chrome au boot et le lance avec --remote-debugging-port=9223.
+            try
+            {
+                var cheminCdp = System.IO.Path.Combine(AppContext.BaseDirectory, "Outils", "Cdp", "SenSÉ.Mcp.Cdp.exe");
+                if (System.IO.File.Exists(cheminCdp))
+                {
+                    var psiCdp = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = cheminCdp,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    psiCdp.ArgumentList.Add("--port");
+                    psiCdp.ArgumentList.Add("9224");
+                    var procCdp = System.Diagnostics.Process.Start(psiCdp);
+                    if (procCdp is not null)
+                    {
+                        _cdpProcess = procCdp;
+                        System.Environment.SetEnvironmentVariable("SENSE_CDP_URL", "http://127.0.0.1:9224");
+                        SenSÉ.Tools.Assistant.AssistantCdp.Demarrer("http://127.0.0.1:9224");
+                        UiLog.Info($"mcp-cdp demarre: PID {procCdp.Id}, port 9224 (CDP debug sur 9223)");
+                    }
+                    else
+                    {
+                        UiLog.Warn("mcp-cdp: Process.Start a renvoye null");
+                    }
+                }
+                else
+                {
+                    UiLog.Warn($"mcp-cdp non demarre (binaire introuvable: {cheminCdp})");
+                }
+            }
+            catch (Exception ex)
+            {
+                UiLog.Failure("demarrage de mcp-cdp", ex);
+            }
 UiLog.Info("tool services started");
 
 
@@ -600,6 +638,21 @@ UiLog.Info("tool services started");
             {
                 UiLog.Failure("arret de mcp-saisie", ex2);
             }
+
+            // Arret de mcp-cdp (meme pattern que mcp-saisie).
+            try
+            {
+                if (_cdpProcess is not null && !_cdpProcess.HasExited)
+                {
+                    UiLog.Info($"arret de mcp-cdp (PID {_cdpProcess.Id})");
+                    _cdpProcess.Kill(entireProcessTree: true);
+                    _cdpProcess.Dispose();
+                }
+            }
+            catch (Exception ex3)
+            {
+                UiLog.Failure("arret de mcp-cdp", ex3);
+            }
         base.OnExit(e);    }
 
     /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>
@@ -608,4 +661,5 @@ UiLog.Info("tool services started");
     private static ProactifRunner? _runnerProactif;
     private static ProjetsWatcher? _watcherProjets;    private static System.Diagnostics.Process? _pcAgentProcess;
     private static System.Diagnostics.Process? _saisieProcess;
+    private static System.Diagnostics.Process? _cdpProcess;
 }

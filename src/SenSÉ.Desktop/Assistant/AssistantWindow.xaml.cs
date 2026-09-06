@@ -808,6 +808,7 @@ public partial class AssistantWindow : Window
         capacites.AddRange(AssistantMemoire.Creer());
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantDebug.Creer());
         capacites.AddRange(AssistantSaisie.Creer());
+        capacites.AddRange(SenSÉ.Tools.Assistant.AssistantCdp.Creer());
 
         return capacites;
     }

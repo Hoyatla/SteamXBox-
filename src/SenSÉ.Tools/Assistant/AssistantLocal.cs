@@ -238,7 +238,16 @@ public sealed class AssistantLocal
         + "5) saisie_mode_exclusif_fermer. "
         + "Le centre de la zone peut etre calcule depuis le rect retourne par find_main_edit "
         + "(x + width/2, y + height/2). Si find_main_edit ne renvoie rien (Writer n'est pas UIA), "
-        + "repere la zone visuellement apres un screenshot_ecran et calcule les coords a l'oeil.";
+        + "repere la zone visuellement apres un screenshot_ecran et calcule les coords a l'oeil. "
+
+        + "CDP. Pour piloter des webapps (MiniMax Code, dashboards, sites web modernes) : "
+        + "1) cdp_navigate(url) pour ouvrir. "
+        + "2) cdp_wait(selector) pour attendre que la page charge. "
+        + "3) cdp_click(selector) et cdp_type(selector, text) pour interagir. "
+        + "4) cdp_screenshot() pour voir. "
+        + "5) cdp_eval(js) pour scripter. "
+        + "Le navigateur integre (Edge par defaut) est lance automatiquement au boot de SenSÉ.Desktop "
+        + "sur 127.0.0.1:9223. mcp-cdp expose une API HTTP loopback sur 127.0.0.1:9224.";
 
     /// <summary>
     /// La consigne, suivie des travaux ouverts.
