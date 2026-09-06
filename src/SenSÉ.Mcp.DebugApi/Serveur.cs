@@ -141,6 +141,27 @@ public static class Serveur
                         ["title"] = new JsonObject { ["type"] = "string" },
                     },
                 }),
+            Outil("debug.uia_focus_window",
+                "Met au premier plan la fenetre identifiee par son HWND (decimal ou 0xABCD). Utilise apres debug.uia_list_windows pour cibler la bonne fenetre avant une edition. Repond 'ok' ou une erreur.",
+                new JsonObject
+                {
+                    ["type"] = "object",
+                    ["required"] = new JsonArray("hwnd"),
+                    ["properties"] = new JsonObject
+                    {
+                        ["hwnd"] = new JsonObject { ["type"] = "string" },
+                    },
+                }),
+            Outil("debug.uia_find_main_edit",
+                "Heuristique pour trouver le champ d'edition principal d'une fenetre (titre en option). Priorite: Document > Pane le plus grand > Edit le plus grand. Renvoie l'automationId a passer a debug.uia_set_text, ou un message si rien ne matche.",
+                new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["title"] = new JsonObject { ["type"] = "string" },
+                    },
+                }),
         ];
     }
 
@@ -229,6 +250,14 @@ public static class Serveur
                 keys = args["keys"]?.GetValue<string>() ?? "",
             }),
             "debug.uia_screenshot_window" => AppelerAgentPostAsync("/v1/uia/screenshot-window", new
+            {
+                title = args["title"]?.GetValue<string>() ?? "",
+            }),
+            "debug.uia_focus_window" => AppelerAgentPostAsync("/v1/uia/focus-window", new
+            {
+                hwnd = args["hwnd"]?.GetValue<string>() ?? "",
+            }),
+            "debug.uia_find_main_edit" => AppelerAgentPostAsync("/v1/uia/find-main-edit", new
             {
                 title = args["title"]?.GetValue<string>() ?? "",
             }),

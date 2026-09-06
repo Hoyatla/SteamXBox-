@@ -120,6 +120,24 @@ public static class AssistantDebug
                 {
                     title = args.GetValueOrDefault("titre") ?? "",
                 })),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_focus_window",
+                "Met au premier plan la fenetre identifiee par son HWND. Utilise apres debug_uia_list_windows pour amener la bonne fenetre au foreground avant debug_uia_find_main_edit et debug_uia_set_text. Le HWND vient de debug_uia_list_windows (decimal ou 0xABCD).",
+                [new AssistantLocal.Parametre("hwnd", "Le HWND de la fenetre (decimal ou 0xABCD). Vient de debug_uia_list_windows.", [])],
+                args => AppelerAsync("POST", "/v1/uia/focus-window", new
+                {
+                    hwnd = args.GetValueOrDefault("hwnd") ?? "",
+                })),
+
+            new AssistantLocal.Capacite(
+                "debug_uia_find_main_edit",
+                "Heuristique qui retourne le champ d'edition principal d'une fenetre (Document > Pane le plus grand > Edit le plus grand, scoring par surface). Renvoie {automationId, name, type, rect}. Si elle ne retourne rien, fais debug_uia_dump_window et cherche manuellement un Document ou un Pane avec le plus grand rectangle.",
+                [new AssistantLocal.Parametre("titre", "Titre (ou partie) de la fenetre. Vide = fenetre foreground.", [])],
+                args => AppelerAsync("POST", "/v1/uia/find-main-edit", new
+                {
+                    title = args.GetValueOrDefault("titre") ?? "",
+                })),
         ];
     }
 
