@@ -49,6 +49,7 @@
     <ProjectReference Include="..\SenSÉ.Shell\SenSÉ.Shell.csproj" />
     <ProjectReference Include="..\SenSÉ.Core\SenSÉ.Core.csproj" />
     <ProjectReference Include="..\SenSÉ.Tools\SenSÉ.Tools.csproj" />
+  <ProjectReference Include="..\SenSÉ.Mcp.DebugApi\SenSÉ.Mcp.DebugApi.csproj" />
   </ItemGroup>
 
   <ItemGroup>
