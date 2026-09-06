@@ -43,6 +43,8 @@ public partial class AssistantWindow : Window
     {
         InitializeComponent();
 
+        SenSÉ.Tools.Assistant.Memoire.AssurerDossiers();
+
         // La taille et la place que l'utilisateur lui a donnees, d'une session a l'autre.
         SuiviFenetre.Suivre(this, "assistant");
 
