@@ -11,6 +11,8 @@ namespace SenSÉ.Atelier.UI;
 
 public partial class Palette : UserControl
 {
+    public const string DragFormatNoeud = "Atelier.NoeudDef";
+
     public event Action<DefinitionNoeud>? NoeudChoisi;
 
     public Palette()
@@ -26,11 +28,6 @@ public partial class Palette : UserControl
     public void AppliquerEspace(Espace e)
     {
         var types = CatalogueNoeuds.ParEspace(e).ToList();
-        var groupe = types.GroupBy(t => t.Categorie).OrderBy(g => g.Key);
-        Liste.ItemsSource = groupe.SelectMany(g => g.Select(t => new { Nom = t.Nom, Description = t.Description, Def = t, Categorie = g.Key }))
-            .ToList();
-        // Regroupement : ItemsSource n'a pas de CollectionViewSource ici, on simplifie
-        // en mettant les items sans groupement et en montrant la categorie dans le template
         var items = types.Select(t => new PaletteItem
         {
             Nom = t.Nom, Description = t.Description, Def = t, Categorie = t.Categorie,
@@ -42,10 +39,42 @@ public partial class Palette : UserControl
 
     private void Item_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        // Si un drag vient d'avoir lieu, on ignore le click (sinon double creation)
+        if (e.Handled) return;
         if (sender is FrameworkElement fe && fe.DataContext is PaletteItem pi)
         {
             NoeudChoisi?.Invoke(pi.Def);
         }
+    }
+
+    private void Item_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        if (fe.DataContext is not PaletteItem pi) return;
+        if (pi.Def is null) return;
+
+        // Demarre un drag&drop natif WPF avec le DefinitionNoeud dans le DataObject.
+        var data = new DataObject();
+        data.SetData(DragFormatNoeud, pi.Def);
+        try
+        {
+            DragDrop.DoDragDrop(fe, data, DragDropEffects.Copy);
+        }
+        catch (Exception ex)
+        {
+            // En cas d'echec du drag, on fallback sur l'ajout via click
+            System.Diagnostics.Debug.WriteLine("DragDrop echoue: " + ex.Message);
+        }
+    }
+
+    private void BtnNouveauCustom_Click(object sender, RoutedEventArgs e)
+    {
+        var espace = Espace.Codage;
+        if (Application.Current is App app) espace = app.EspaceCourant;
+        var w = new FenetreNoeudCustom();
+        w.Owner = Window.GetWindow(this);
+        var ok = w.ShowDialog() == true;
+        if (ok) AppliquerEspace(espace); // rafraichit la palette apres CatalogueCustom.Recharger
     }
 
     private class PaletteItem

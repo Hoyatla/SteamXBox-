@@ -67,7 +67,7 @@ public static class CatalogueCustom
             portsEntree,
             portsSortie,
             paramsNoeud,
-            ctx => ExecuterPython(ctx, code, sorties)
+            async ctx => ExecuterPython(ctx, code, sorties)
         );
         CatalogueNoeuds.Enregistrer(def);
     }

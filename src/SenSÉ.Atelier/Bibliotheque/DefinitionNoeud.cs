@@ -27,7 +27,7 @@ public sealed record DefinitionNoeud(
     IReadOnlyList<Port> PortsEntree,
     IReadOnlyList<Port> PortsSortie,
     IReadOnlyList<ParametreNoeud> Params,
-    Func<ContexteExecution, ResultatExecution> Executeur
+    Func<ContexteExecution, Task<ResultatExecution>> Executeur
 );
 
 /// <summary>

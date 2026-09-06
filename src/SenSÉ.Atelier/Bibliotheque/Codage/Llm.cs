@@ -32,7 +32,7 @@ public static class Llm
                     new List<string> { "python", "rust", "javascript", "typescript", "csharp", "cpp", "c", "go", "java", "kotlin", "swift", "shell" }),
                 new("temperature", "Temperature", "nombre", 0.2, Min: 0.0, Max: 1.0),
             },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -54,7 +54,7 @@ public static class Llm
             new List<Port> { new("code_partiel", TypePort.Texte, true) },
             new List<Port> { new("code", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java","kotlin","swift","shell" }) },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -76,7 +76,7 @@ public static class Llm
             new List<Port> { new("code", TypePort.Texte, true) },
             new List<Port> { new("explication", TypePort.Texte, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -100,7 +100,7 @@ public static class Llm
                 new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java","kotlin","swift","shell" }),
                 new("focus", "Focus", "liste", "qualite", new List<string> { "qualite","performance","securite","style","bugs" }),
             },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -127,7 +127,7 @@ public static class Llm
                 new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","java","go" }),
                 new("framework", "Framework", "liste", "auto", new List<string> { "auto","pytest","unittest","xunit","jest","vitest","rust" }),
             },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -154,7 +154,7 @@ public static class Llm
                 new("langage_source", "Langage source", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java","kotlin","swift" }),
                 new("langage_cible", "Langage cible", "liste", "rust", new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java","kotlin","swift" }),
             },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -177,7 +177,7 @@ public static class Llm
             new List<Port> { new("code", TypePort.Texte, true) },
             new List<Port> { new("code_documente", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","java","go" }) },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -203,7 +203,7 @@ public static class Llm
             },
             new List<Port> { new("code_refactore", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java" }) },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -227,7 +227,7 @@ public static class Llm
             new List<Port> { new("description", TypePort.Texte, true) },
             new List<Port> { new("nom", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("style", "Style", "liste", "snake_case", new List<string> { "snake_case","camelCase","PascalCase","kebab-case" }) },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -253,7 +253,7 @@ public static class Llm
             },
             new List<Port> { new("reponse", TypePort.Texte, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 try
                 {

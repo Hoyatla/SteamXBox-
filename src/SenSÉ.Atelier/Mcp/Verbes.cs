@@ -29,6 +29,7 @@ public sealed class Verbes
     {
         try
         {
+            body ??= new JsonObject();
             return verbe switch
             {
                 "catalogue/espaces"        => CatalogueEspaces(),
@@ -223,6 +224,7 @@ public sealed class Verbes
         if (def is null) return new { ok = false, error = "type inconnu: " + type };
         var g = _persistance.ChargerGraphe(gid);
         if (g is null) return new { ok = false, error = "graphe introuvable" };
+        Historique.Pousser(g);
         var n = new Noeud
         {
             Type = type,
@@ -248,6 +250,7 @@ public sealed class Verbes
         {
             if (g.TrouverNoeud(nid) is not null)
             {
+                Historique.Pousser(g);
                 g.Noeuds.RemoveAll(n => n.Id == nid);
                 g.Liens.RemoveAll(l => l.NoeudSourceId == nid || l.NoeudCibleId == nid);
                 _persistance.SauvegarderGraphe(g);
@@ -333,6 +336,7 @@ public sealed class Verbes
         if (srcPort is null || cblPort is null) return new { ok = false, error = "port introuvable" };
         if (!srcPort.Type.Compatible(cblPort.Type))
             return new { ok = false, error = $"types incompatibles: {srcPort.Type} -> {cblPort.Type}" };
+        Historique.Pousser(g);
         var lien = new Lien
         {
             NoeudSourceId = srcId, PortSourceNom = srcNom,
@@ -351,6 +355,7 @@ public sealed class Verbes
         {
             if (g.TrouverLien(lid) is not null)
             {
+                Historique.Pousser(g);
                 g.Liens.RemoveAll(l => l.Id == lid);
                 _persistance.SauvegarderGraphe(g);
                 return new { ok = true, data = new { } };
@@ -423,10 +428,29 @@ public sealed class Verbes
         return new { ok = true, data = new { } };
     }
 
-    // =============== UNDO/REDO (simplifie : pas implemente) ===============
+    // =============== UNDO/REDO ===============
 
-    private object Annuler(JsonObject body) => new { ok = false, error = "undo/redo non implemente MVP" };
-    private object Refaire(JsonObject body) => new { ok = false, error = "undo/redo non implemente MVP" };
+    private object Annuler(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (gid is null) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        if (!Historique.Annuler(g)) return new { ok = false, error = "rien a annuler" };
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { peut_annuler = Historique.PeutAnnuler(gid), peut_refaire = Historique.PeutRefaire(gid) } };
+    }
+
+    private object Refaire(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (gid is null) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        if (!Historique.Refaire(g)) return new { ok = false, error = "rien a refaire" };
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { peut_annuler = Historique.PeutAnnuler(gid), peut_refaire = Historique.PeutRefaire(gid) } };
+    }
 
     // =============== CUSTOM ===============
 

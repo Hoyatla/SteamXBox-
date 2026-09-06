@@ -5,10 +5,12 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Style="{StaticResource EnteteSection}" Text="Palette" Margin="8,8,8,4" />
-            <ListView x:Name="Liste" Grid.Row="1" Background="Transparent" BorderThickness="0"
+            <Button Grid.Row="1" x:Name="BtnNouveauCustom" Content="+ Noeud custom" Click="BtnNouveauCustom_Click" Margin="8,0,8,4" />
+            <ListView x:Name="Liste" Grid.Row="2" Background="Transparent" BorderThickness="0"
                       Foreground="{StaticResource TexteBrush}"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListView.GroupStyle>
@@ -41,7 +43,7 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Border Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="#2D2D40" Background="Transparent"
-                                MouseLeftButtonUp="Item_MouseLeftButtonUp" Cursor="Hand">
+                                PreviewMouseLeftButtonDown="Item_PreviewMouseLeftButtonDown" MouseLeftButtonUp="Item_MouseLeftButtonUp" Cursor="Hand">
                             <StackPanel>
                                 <TextBlock Text="{Binding Nom}" Foreground="{StaticResource TexteBrush}" FontSize="12" />
                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource TexteSecondaireBrush}" FontSize="10" TextWrapping="Wrap" />

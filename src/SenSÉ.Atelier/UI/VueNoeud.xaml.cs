@@ -29,6 +29,39 @@ public partial class VueNoeud : UserControl
         Canvas.SetLeft(this, n.X);
         Canvas.SetTop(this, n.Y);
         MouseLeftButtonDown += (s, e) => { Selectionnee?.Invoke(n); e.Handled = true; };
+        // Attache le Noeud parent a chaque VuePort genere
+        ListeEntrees.ItemContainerGenerator.StatusChanged += (s, e) => AttacherPorts(ListeEntrees);
+        ListeSorties.ItemContainerGenerator.StatusChanged += (s, e) => AttacherPorts(ListeSorties);
+        Loaded += (s, e) => { AttacherPorts(ListeEntrees); AttacherPorts(ListeSorties); };
+    }
+
+    private void AttacherPorts(ItemsControl liste)
+    {
+        if (liste.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated) return;
+        for (int i = 0; i < liste.Items.Count; i++)
+        {
+            var c = liste.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
+            if (c is null) continue;
+            var port = liste.Items[i] as Port;
+            if (port is null) continue;
+            // Trouver le VuePort dans l'arbre visuel
+            var vp = Descendre<VuePort>(c);
+            if (vp is null) continue;
+            vp.AttacherParent(Noeud, port);
+        }
+    }
+
+    private static T? Descendre<T>(DependencyObject d) where T : DependencyObject
+    {
+        int n = VisualTreeHelper.GetChildrenCount(d);
+        for (int i = 0; i < n; i++)
+        {
+            var c = VisualTreeHelper.GetChild(d, i);
+            if (c is T t) return t;
+            var r = Descendre<T>(c);
+            if (r is not null) return r;
+        }
+        return null;
     }
 
     private void Entete_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -41,7 +74,6 @@ public partial class VueNoeud : UserControl
         _origY = Noeud.Y;
         ((UIElement)VisualParent).CaptureMouse();
         e.Handled = true;
-        // On ecoute le mouvement au niveau parent
         if (VisualParent is UIElement parent)
         {
             parent.PreviewMouseMove -= Parent_MouseMove;

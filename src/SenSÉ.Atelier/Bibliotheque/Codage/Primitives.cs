@@ -24,7 +24,7 @@ public static class Primitives
             new List<Port>(),
             new List<Port> { new("valeur", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("contenu", "Contenu", "multiligne", "") },
-            ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.Ch("contenu") })
+            async ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.Ch("contenu") })
         ));
 
         // 2. nombre
@@ -34,7 +34,7 @@ public static class Primitives
             new List<Port>(),
             new List<Port> { new("valeur", TypePort.Nombre, false) },
             new List<ParametreNoeud> { new("valeur", "Valeur", "nombre", 0.0) },
-            ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.ChDouble("valeur") })
+            async ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.ChDouble("valeur") })
         ));
 
         // 3. booleen
@@ -44,7 +44,7 @@ public static class Primitives
             new List<Port>(),
             new List<Port> { new("valeur", TypePort.Booleen, false) },
             new List<ParametreNoeud> { new("valeur", "Valeur", "booleen", false) },
-            ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.ChBool("valeur") })
+            async ctx => ResultatExecution.Ok(new() { ["valeur"] = ctx.ChBool("valeur") })
         ));
 
         // 4. fichier_lire
@@ -54,7 +54,7 @@ public static class Primitives
             new List<Port> { new("chemin", TypePort.Fichier, true) },
             new List<Port> { new("contenu", TypePort.Texte, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 var chemin = ctx.Entree("chemin") ?? ctx.Ch("chemin");
                 if (string.IsNullOrEmpty(chemin)) return ResultatExecution.Fail("chemin vide");
@@ -74,7 +74,7 @@ public static class Primitives
             },
             new List<Port> { new("ok", TypePort.Booleen, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 var contenu = ctx.Entree("contenu") ?? "";
                 var chemin = ctx.Entree("chemin") ?? ctx.Ch("chemin");
@@ -93,7 +93,7 @@ public static class Primitives
             new List<Port> { new("dossier", TypePort.Fichier, true) },
             new List<Port> { new("liste", TypePort.Liste, false) },
             new List<ParametreNoeud> { new("motif", "Motif (ex: *.cs)", "texte", "*") },
-            ctx =>
+            async ctx =>
             {
                 var dossier = ctx.Entree("dossier") ?? ctx.Ch("dossier");
                 var motif = ctx.Ch("motif", "*");
@@ -111,7 +111,7 @@ public static class Primitives
             new List<Port> { new("textes", TypePort.Liste, true) },
             new List<Port> { new("texte", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("separateur", "Séparateur", "texte", "\n") },
-            ctx =>
+            async ctx =>
             {
                 var sep = ctx.Ch("separateur", "\n");
                 var raw = ctx.Entree("textes");
@@ -135,7 +135,7 @@ public static class Primitives
                 new("stderr", TypePort.Texte, false),
             },
             new List<ParametreNoeud> { new("python", "Chemin python.exe", "chemin", "python") },
-            ctx =>
+            async ctx =>
             {
                 var code = ctx.Entree("code") ?? ctx.Ch("code");
                 if (string.IsNullOrEmpty(code)) return ResultatExecution.Fail("code vide");
@@ -175,7 +175,7 @@ public static class Primitives
             },
             new List<Port> { new("stdout", TypePort.Texte, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 var cmd = ctx.Entree("commande") ?? ctx.Ch("commande");
                 var args = ctx.Entree("args") ?? ctx.Ch("args");

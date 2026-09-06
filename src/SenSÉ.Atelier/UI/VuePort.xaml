@@ -4,6 +4,10 @@
              Width="14" Height="14"
              HorizontalAlignment="Center" VerticalAlignment="Center">
     <Grid>
-        <Ellipse x:Name="Cercle" Width="12" Height="12" StrokeThickness="2" />
+        <Ellipse x:Name="Cercle" Width="12" Height="12" StrokeThickness="2"
+                 AllowDrop="True"
+                 PreviewMouseLeftButtonDown="Cercle_PreviewMouseLeftButtonDown"
+                 DragEnter="Cercle_DragEnter" DragOver="Cercle_DragEnter"
+                 Drop="Cercle_Drop" />
     </Grid>
 </UserControl>

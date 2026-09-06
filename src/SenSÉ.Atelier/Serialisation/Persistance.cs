@@ -150,6 +150,27 @@ public sealed class Persistance
         if (File.Exists(p)) File.Delete(p);
     }
 
+
+    // ============== SERIALISATION INLINE (pour Historique undo/redo) ==============
+
+    /// <summary>Serialise un graphe en JSON (DTO interne).</summary>
+    public static string ToJson(Graphe g)
+        => JsonSerializer.Serialize(ToDto(g), Opt);
+
+    /// <summary>Restaure l'etat d'un graphe existant depuis JSON (preserve l'instance).</summary>
+    public static void FromJson(Graphe g, string json)
+    {
+        var n = JsonNode.Parse(json)!.AsObject();
+        var src = FromDto(n);
+        g.Id = src.Id;
+        g.Nom = src.Nom;
+        g.Espace = src.Espace;
+        g.ModifieLe = src.ModifieLe;
+        g.Noeuds.Clear();
+        g.Noeuds.AddRange(src.Noeuds);
+        g.Liens.Clear();
+        g.Liens.AddRange(src.Liens);
+    }
     // ============== DTO ==============
 
     private static object ToDto(Graphe g) => new

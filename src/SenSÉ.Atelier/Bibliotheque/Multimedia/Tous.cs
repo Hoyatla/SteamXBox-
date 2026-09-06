@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
 using SenSÉ.Atelier.Mcp;
@@ -9,58 +10,52 @@ using SenSÉ.Atelier.ModeleLocal;
 namespace SenSÉ.Atelier.Bibliotheque.Multimedia;
 
 /// <summary>
-/// Les 10 noeuds multimedia : generation image/video/audio via
-/// ComfyUI, OCR/description via le LLM, transformations via ffmpeg.
+/// Les 10 noeuds multimedia. Toutes les lambdas sont async pour permettre
+/// l'await sur les clients HTTP et Process.
 /// </summary>
 public static class Tous
 {
-    private static string Awaiter(System.Threading.Tasks.Task<string> t) => t.GetAwaiter().GetResult();
-    private static System.Threading.Tasks.Task AwaiterTask(System.Threading.Tasks.Task t) => t;
-
     public static void Enregistrer()
     {
-        // 26. texte_vers_image
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "texte_vers_image", "Texte vers Image", "Genere une image a partir d'un prompt (via ComfyUI).",
+            "texte_vers_image", "Texte vers Image", "Genere une image a partir d'un prompt (ComfyUI).",
             Espace.Multimedia, "Generation",
             new List<Port> { new("prompt", TypePort.Texte, true) },
             new List<Port> { new("image", TypePort.Image, false) },
             new List<ParametreNoeud> { new("modele", "Modele", "texte", "sdxl_base") },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
                     var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
                     var modele = ctx.Ch("modele");
-                    var path = Awaiter(new ClientComfyui().TexteVersImageAsync(prompt, modele));
+                    var path = await new ClientComfyui().TexteVersImageAsync(prompt, modele);
                     return ResultatExecution.Ok(new() { ["image"] = path });
                 }
                 catch (Exception ex) { return ResultatExecution.Fail("ComfyUI: " + ex.Message); }
             }
         ));
 
-        // 27. texte_vers_video
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "texte_vers_video", "Texte vers Vidéo", "Genere une video a partir d'un prompt (ComfyUI, modele video).",
+            "texte_vers_video", "Texte vers Vidéo", "Genere une video a partir d'un prompt.",
             Espace.Multimedia, "Generation",
             new List<Port> { new("prompt", TypePort.Texte, true) },
             new List<Port> { new("video", TypePort.Video, false) },
             new List<ParametreNoeud> { new("duree", "Duree (s)", "nombre", 4.0) },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
                     var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
-                    var path = Awaiter(new ClientComfyui().TexteVersImageAsync(prompt));
+                    var path = await new ClientComfyui().TexteVersImageAsync(prompt);
                     return ResultatExecution.Ok(new() { ["video"] = path });
                 }
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
 
-        // 28. image_vers_video
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "image_vers_video", "Image vers Vidéo", "Anime une image avec un prompt (img2vid via ComfyUI).",
+            "image_vers_video", "Image vers Vidéo", "Anime une image (img2vid ComfyUI).",
             Espace.Multimedia, "Generation",
             new List<Port>
             {
@@ -69,17 +64,16 @@ public static class Tous
             },
             new List<Port> { new("video", TypePort.Video, false) },
             new List<ParametreNoeud> { new("duree", "Duree (s)", "nombre", 4.0) },
-            ctx => ResultatExecution.Fail("non implemente MVP - necessite workflow ComfyUI img2vid")
+            async ctx => ResultatExecution.Fail("non implemente MVP - necessite workflow ComfyUI img2vid")
         ));
 
-        // 29. texte_vers_son
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "texte_vers_son", "Texte vers Son", "Synthese vocale (TTS) locale via SAPI.",
+            "texte_vers_son", "Texte vers Son", "Synthese vocale SAPI locale.",
             Espace.Multimedia, "Generation",
             new List<Port> { new("texte", TypePort.Texte, true) },
             new List<Port> { new("audio", TypePort.Audio, false) },
             new List<ParametreNoeud> { new("voix", "Voix", "texte", "fr-FR") },
-            ctx =>
+            async ctx =>
             {
                 var texte = ctx.Entree("texte") ?? ctx.Ch("texte");
                 if (string.IsNullOrEmpty(texte)) return ResultatExecution.Fail("texte vide");
@@ -99,24 +93,22 @@ public static class Tous
             }
         ));
 
-        // 30. audio_vers_texte
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "audio_vers_texte", "Audio vers Texte", "Transcription audio via whisper.cpp local.",
+            "audio_vers_texte", "Audio vers Texte", "Transcription audio via whisper.cpp.",
             Espace.Multimedia, "Generation",
             new List<Port> { new("audio", TypePort.Audio, true) },
             new List<Port> { new("transcription", TypePort.Texte, false) },
             new List<ParametreNoeud>(),
-            ctx => ResultatExecution.Fail("whisper non disponible - installe llama.cpp ou un autre ASR")
+            async ctx => ResultatExecution.Fail("whisper non disponible - installe llama.cpp ou un autre ASR")
         ));
 
-        // 31. image_vers_texte
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "image_vers_texte", "Image vers Texte", "Description d'une image par le LLM multimodal (Qwen VL).",
+            "image_vers_texte", "Image vers Texte", "Description d'une image par le LLM multimodal.",
             Espace.Multimedia, "Vision",
             new List<Port> { new("image", TypePort.Image, true) },
             new List<Port> { new("description", TypePort.Texte, false) },
             new List<ParametreNoeud> { new("question", "Question (vide=description)", "texte", "") },
-            ctx =>
+            async ctx =>
             {
                 try
                 {
@@ -127,21 +119,20 @@ public static class Tous
                     var b64 = Convert.ToBase64String(bytes);
                     var prompt = string.IsNullOrEmpty(q) ? "Decris cette image en francais, de maniere detaillee." : q;
                     var full = "[IMAGE:b64:" + b64 + "]\n\n" + prompt;
-                    var res = Awaiter(new ClientModele().CompleterAsync(full, 1024));
+                    var res = await new ClientModele().CompleterAsync(full, 1024);
                     return ResultatExecution.Ok(new() { ["description"] = res });
                 }
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
 
-        // 32. extraire_frames
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "extraire_frames", "Extraire frames", "Extrait les frames d'une video a N fps (ffmpeg).",
             Espace.Multimedia, "Transformation",
             new List<Port> { new("video", TypePort.Video, true) },
             new List<Port> { new("frames", TypePort.Liste, false) },
             new List<ParametreNoeud> { new("fps", "FPS", "nombre", 1.0) },
-            ctx =>
+            async ctx =>
             {
                 var v = ctx.Entree("video") ?? ctx.Ch("video");
                 var fps = ctx.ChDouble("fps", 1.0);
@@ -164,14 +155,13 @@ public static class Tous
             }
         ));
 
-        // 33. fusionner_videos
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "fusionner_videos", "Fusionner vidéos", "Concatene plusieurs videos (ffmpeg concat demuxer).",
             Espace.Multimedia, "Transformation",
             new List<Port> { new("videos", TypePort.Liste, true) },
             new List<Port> { new("video", TypePort.Video, false) },
             new List<ParametreNoeud>(),
-            ctx =>
+            async ctx =>
             {
                 var raw = ctx.Entree("videos");
                 if (raw is null) return ResultatExecution.Fail("liste videos vide");
@@ -199,9 +189,8 @@ public static class Tous
             }
         ));
 
-        // 34. decouper_video
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "decouper_video", "Découper vidéo", "Coupe un segment d'une video entre deux temps (en secondes).",
+            "decouper_video", "Découper vidéo", "Coupe un segment d'une video entre deux temps (secondes).",
             Espace.Multimedia, "Transformation",
             new List<Port> { new("video", TypePort.Video, true) },
             new List<Port> { new("video", TypePort.Video, false) },
@@ -210,7 +199,7 @@ public static class Tous
                 new("debut", "Debut (s)", "nombre", 0.0),
                 new("fin", "Fin (s)", "nombre", 10.0),
             },
-            ctx =>
+            async ctx =>
             {
                 var v = ctx.Entree("video") ?? ctx.Ch("video");
                 var d = ctx.ChDouble("debut", 0);
@@ -232,9 +221,8 @@ public static class Tous
             }
         ));
 
-        // 35. redimensionner_image
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "redimensionner_image", "Redimensionner image", "Redimensionne une image aux dimensions demandees (ffmpeg).",
+            "redimensionner_image", "Redimensionner image", "Redimensionne une image (ffmpeg).",
             Espace.Multimedia, "Transformation",
             new List<Port> { new("image", TypePort.Image, true) },
             new List<Port> { new("image", TypePort.Image, false) },
@@ -243,7 +231,7 @@ public static class Tous
                 new("largeur", "Largeur (px)", "nombre", 1024),
                 new("hauteur", "Hauteur (px)", "nombre", 1024),
             },
-            ctx =>
+            async ctx =>
             {
                 var img = ctx.Entree("image") ?? ctx.Ch("image");
                 var w = ctx.ChInt("largeur", 1024);

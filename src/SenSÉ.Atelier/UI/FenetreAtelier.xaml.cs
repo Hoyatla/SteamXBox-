@@ -22,6 +22,9 @@ public partial class FenetreAtelier : Window
     private Graphe? _grapheActif;
     private readonly List<TabGraphe> _onglets = new();
 
+    public ICommand AnnulerCmd { get; }
+    public ICommand RefaireCmd { get; }
+
     public FenetreAtelier(string racine, ServeurHttp serveur)
     {
         InitializeComponent();
@@ -33,6 +36,10 @@ public partial class FenetreAtelier : Window
         RafraichirOnglets();
         SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
         InputBindings.Add(new KeyBinding(new ExecuterAction(this), new KeyGesture(Key.F5)));
+        AnnulerCmd = new RelayCommand(_ => AnnulerAction(), _ => PeutAnnuler());
+        RefaireCmd = new RelayCommand(_ => RefaireAction(), _ => PeutRefaire());
+        DataContext = this;
+        MajBoutonsUndo();
     }
 
     private void RafraichirOnglets()
@@ -45,7 +52,6 @@ public partial class FenetreAtelier : Window
         }
         if (_onglets.Count == 0)
         {
-            // Creer un graphe par defaut par espace
             foreach (var e in new[] { Espace.Codage, Espace.Multimedia })
             {
                 var g = new Graphe { Espace = e, Nom = e == Espace.Codage ? "Mon premier code" : "Mon premier média" };
@@ -62,6 +68,7 @@ public partial class FenetreAtelier : Window
         CanvasCtl.ChargerGraphe(g);
         InspecteurCtl.Vider();
         RafraichirBoutonsEspace();
+        MajBoutonsUndo();
     }
 
     private void RafraichirBoutonsEspace()
@@ -119,7 +126,6 @@ public partial class FenetreAtelier : Window
             PortsEntree = def.PortsEntree.ToList(),
             PortsSortie = def.PortsSortie.ToList(),
         };
-        // Valeurs par defaut
         foreach (var p in def.Params)
             n.Params[p.Nom] = p.Defaut;
         CanvasCtl.AjouterNoeud(n);
@@ -141,6 +147,7 @@ public partial class FenetreAtelier : Window
     private void CanvasCtl_GrapheModifie()
     {
         if (_grapheActif is not null) _persistance.SauvegarderGraphe(_grapheActif);
+        MajBoutonsUndo();
     }
 
     private void BtnExecuter_Click(object sender, RoutedEventArgs e) => ExecuterGraphe();
@@ -175,6 +182,38 @@ public partial class FenetreAtelier : Window
         }
     }
 
+    private bool PeutAnnuler() => _grapheActif is not null && Historique.PeutAnnuler(_grapheActif.Id);
+    private bool PeutRefaire() => _grapheActif is not null && Historique.PeutRefaire(_grapheActif.Id);
+
+    private void MajBoutonsUndo()
+    {
+        BtnAnnuler.IsEnabled = PeutAnnuler();
+        BtnRefaire.IsEnabled = PeutRefaire();
+    }
+
+    private void AnnulerAction()
+    {
+        if (_grapheActif is null) return;
+        if (!Historique.Annuler(_grapheActif)) return;
+        _persistance.SauvegarderGraphe(_grapheActif);
+        CanvasCtl.ChargerGraphe(_grapheActif);
+        StatutBas.Text = "Annulé.";
+        MajBoutonsUndo();
+    }
+
+    private void RefaireAction()
+    {
+        if (_grapheActif is null) return;
+        if (!Historique.Refaire(_grapheActif)) return;
+        _persistance.SauvegarderGraphe(_grapheActif);
+        CanvasCtl.ChargerGraphe(_grapheActif);
+        StatutBas.Text = "Refait.";
+        MajBoutonsUndo();
+    }
+
+    private void BtnAnnuler_Click(object sender, RoutedEventArgs e) => AnnulerAction();
+    private void BtnRefaire_Click(object sender, RoutedEventArgs e) => RefaireAction();
+
     private class TabGraphe
     {
         public string Id { get; set; } = "";
@@ -186,9 +225,19 @@ public partial class FenetreAtelier : Window
     {
         private readonly FenetreAtelier _w;
         public ExecuterAction(FenetreAtelier w) { _w = w; }
-        
+
         public event EventHandler? CanExecuteChanged { add { } remove { } }
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter) => _w.ExecuterGraphe();
     }
+}
+
+internal sealed class RelayCommand : ICommand
+{
+    private readonly Action<object?> _exec;
+    private readonly Func<object?, bool>? _can;
+    public RelayCommand(Action<object?> exec, Func<object?, bool>? can = null) { _exec = exec; _can = can; }
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+    public bool CanExecute(object? parameter) => _can?.Invoke(parameter) ?? true;
+    public void Execute(object? parameter) => _exec(parameter);
 }

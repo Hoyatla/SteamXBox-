@@ -6,12 +6,15 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Modele;
 
 namespace SenSÉ.Atelier.UI;
 
 public partial class CanvasAtelier : UserControl
 {
+    public const string DragFormatPort = "Atelier.PortRef";
+
     private Graphe? _graphe;
     private readonly Dictionary<string, VueNoeud> _vuesNoeuds = new();
     private Noeud? _selection;
@@ -26,6 +29,7 @@ public partial class CanvasAtelier : UserControl
         Surface.MouseLeftButtonDown += Surface_MouseLeftButtonDown;
     }
 
+    public Graphe? Graphe => _graphe;
     public Noeud? Selection => _selection;
 
     public void ChargerGraphe(Graphe? g)
@@ -51,10 +55,59 @@ public partial class CanvasAtelier : UserControl
     public Noeud AjouterNoeud(Modele.Noeud n)
     {
         if (_graphe is null) throw new InvalidOperationException("aucun graphe charge");
-        if (!_graphe.Noeuds.Contains(n)) _graphe.Noeuds.Add(n);
+        if (!_graphe.Noeuds.Contains(n))
+        {
+            SenSÉ.Atelier.Modele.Historique.Pousser(_graphe);
+            _graphe.Noeuds.Add(n);
+        }
         AjouterVueNoeud(n);
         GrapheModifie?.Invoke();
         return n;
+    }
+
+    public Lien CreerLien(Noeud src, string portSrc, Noeud cbl, string portCbl)
+    {
+        if (_graphe is null) throw new InvalidOperationException("aucun graphe charge");
+        if (!_vuesNoeuds.ContainsKey(src.Id) || !_vuesNoeuds.ContainsKey(cbl.Id))
+            throw new InvalidOperationException("noeud absent du canvas");
+        var srcPort = src.PortsSortie.FirstOrDefault(p => p.Nom == portSrc);
+        var cblPort = cbl.PortsEntree.FirstOrDefault(p => p.Nom == portCbl);
+        if (srcPort is null || cblPort is null) throw new InvalidOperationException("port introuvable");
+        if (!srcPort.Type.Compatible(cblPort.Type)) throw new InvalidOperationException("types incompatibles");
+        // Refuser les doublons
+        if (_graphe.Liens.Any(l => l.NoeudSourceId == src.Id && l.PortSourceNom == portSrc
+                                 && l.NoeudCibleId == cbl.Id && l.PortCibleNom == portCbl))
+            throw new InvalidOperationException("lien deja existant");
+        SenSÉ.Atelier.Modele.Historique.Pousser(_graphe);
+        var lien = new Lien
+        {
+            NoeudSourceId = src.Id, PortSourceNom = portSrc,
+            NoeudCibleId = cbl.Id, PortCibleNom = portCbl,
+        };
+        _graphe.Liens.Add(lien);
+        AjouterLien(lien);
+        GrapheModifie?.Invoke();
+        return lien;
+    }
+
+    public void SupprimerNoeud(Noeud n)
+    {
+        if (_graphe is null) return;
+        SenSÉ.Atelier.Modele.Historique.Pousser(_graphe);
+        _graphe.Noeuds.RemoveAll(x => x.Id == n.Id);
+        _graphe.Liens.RemoveAll(l => l.NoeudSourceId == n.Id || l.NoeudCibleId == n.Id);
+        // Rafraichir le canvas
+        ChargerGraphe(_graphe);
+        GrapheModifie?.Invoke();
+    }
+
+    public void SupprimerLien(Lien l)
+    {
+        if (_graphe is null) return;
+        SenSÉ.Atelier.Modele.Historique.Pousser(_graphe);
+        _graphe.Liens.RemoveAll(x => x.Id == l.Id);
+        ChargerGraphe(_graphe);
+        GrapheModifie?.Invoke();
     }
 
     private void AjouterVueNoeud(Modele.Noeud n)
@@ -71,7 +124,6 @@ public partial class CanvasAtelier : UserControl
         var src = _vuesNoeuds.GetValueOrDefault(l.NoeudSourceId);
         var cbl = _vuesNoeuds.GetValueOrDefault(l.NoeudCibleId);
         if (src is null || cbl is null) return;
-        // Ports en haut/bas : on simplifie en placant le path entre les centres
         var path = new Path
         {
             Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8FB4FF")),
@@ -121,6 +173,43 @@ public partial class CanvasAtelier : UserControl
     {
         Selectionner(null);
         SelectionNoeud?.Invoke(null!);
+    }
+
+    private void Surface_DragEnterOrOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(Palette.DragFormatNoeud))
+            e.Effects = DragDropEffects.Copy;
+        else if (e.Data.GetDataPresent(DragFormatPort))
+            e.Effects = DragDropEffects.Link;
+        else
+            e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Surface_Drop(object sender, DragEventArgs e)
+    {
+        if (_graphe is null) { e.Handled = true; return; }
+        // Cas 1 : drop d'un DefinitionNoeud depuis la palette
+        if (e.Data.GetDataPresent(Palette.DragFormatNoeud))
+        {
+            var def = e.Data.GetData(Palette.DragFormatNoeud) as DefinitionNoeud;
+            if (def is null) { e.Handled = true; return; }
+            var p = e.GetPosition(Surface);
+            // Si on drop sur un noeud, on decale un peu
+            var n = new Modele.Noeud
+            {
+                Type = def.Id,
+                X = Math.Max(0, p.X),
+                Y = Math.Max(0, p.Y),
+                PortsEntree = def.PortsEntree.ToList(),
+                PortsSortie = def.PortsSortie.ToList(),
+            };
+            foreach (var pp in def.Params) n.Params[pp.Nom] = pp.Defaut;
+            AjouterNoeud(n);
+            Selectionner(n);
+            SelectionNoeud?.Invoke(n);
+            e.Handled = true;
+        }
     }
 
     public void SauvegarderSiNecessaire() => GrapheModifie?.Invoke();

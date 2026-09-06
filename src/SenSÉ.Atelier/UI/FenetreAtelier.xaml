@@ -3,6 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SenSÉ.Atelier.UI"
         Title="Atelier — SenSÉ" Height="800" Width="1280" WindowStartupLocation="CenterScreen">
+    <Window.InputBindings>
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding AnnulerCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RefaireCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+    </Window.InputBindings>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -52,6 +56,9 @@
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="BtnExecuter" Content="▶ Exécuter (F5)" Click="BtnExecuter_Click" Style="{StaticResource BoutonAccent}" />
                 <Button x:Name="BtnSauvegarder" Content="💾 Sauvegarder" Click="BtnSauvegarder_Click" />
+                <Separator Margin="8,4" Width="1" Background="{StaticResource BordureBrush}" />
+                <Button x:Name="BtnAnnuler" Content="↶ Annuler (Ctrl+Z)" Click="BtnAnnuler_Click" />
+                <Button x:Name="BtnRefaire" Content="↷ Refaire (Ctrl+Y)" Click="BtnRefaire_Click" />
                 <TextBlock x:Name="Statut" Margin="12,0" VerticalAlignment="Center" Foreground="{StaticResource TexteSecondaireBrush}" />
             </StackPanel>
         </Border>

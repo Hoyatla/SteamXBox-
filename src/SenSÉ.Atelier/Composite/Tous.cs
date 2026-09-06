@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
@@ -10,17 +11,13 @@ using SenSÉ.Atelier.Mcp;
 namespace SenSÉ.Atelier.Composite;
 
 /// <summary>
-/// Les 4 workflows prets a l'emploi. Les helpers sont async (HTTP),
-/// les lambdas DefinitionNoeud sont sync avec .GetAwaiter().GetResult().
+/// Les 4 workflows prêts. Chaque Executeur est async (Task&lt;ResultatExecution&gt;)
+/// et appelle un helper static async.
 /// </summary>
 public static class Tous
 {
-    private static string Awaiter(System.Threading.Tasks.Task<string> t) => t.GetAwaiter().GetResult();
-    private static System.Threading.Tasks.Task AwaiterTask(System.Threading.Tasks.Task t) => t;
-
     public static void Enregistrer()
     {
-        // 36. workflow_code_complet
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "workflow_code_complet", "Workflow : Code complet",
             "Genere du code, le fait reviser, l'ecrit dans un fichier.",
@@ -33,13 +30,12 @@ public static class Tous
                 new("langage", "Langage", "liste", "python",
                     new List<string> { "python","rust","javascript","typescript","csharp","cpp","c","go","java" }),
             },
-            ctx => ExecuterCodeComplet(ctx)
+            async ctx => await ExecuterCodeCompletAsync(ctx)
         ));
 
-        // 37. workflow_tests_unitaires
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "workflow_tests_unitaires", "Workflow : Tests unitaires",
-            "Genere des tests pour le code, les ecrit, les execute.",
+            "Genere des tests, les ecrit, les execute.",
             Espace.Codage, "Workflows",
             new List<Port> { new("code", TypePort.Texte, true) },
             new List<Port> { new("stdout", TypePort.Texte, false), new("ok", TypePort.Booleen, false) },
@@ -48,10 +44,9 @@ public static class Tous
                 new("chemin_tests", "Chemin fichier tests", "chemin", ""),
                 new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp" }),
             },
-            ctx => ExecuterTests(ctx)
+            async ctx => await ExecuterTestsAsync(ctx)
         ));
 
-        // 38. workflow_refactor_securise
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "workflow_refactor_securise", "Workflow : Refactor sécurisé",
             "Refactore le code, fait une revision de securite, ecrit.",
@@ -64,10 +59,9 @@ public static class Tous
                 new("chemin_sortie", "Chemin sortie", "chemin", ""),
                 new("langage", "Langage", "liste", "python", new List<string> { "python","rust","javascript","typescript","csharp" }),
             },
-            ctx => ExecuterRefactor(ctx)
+            async ctx => await ExecuterRefactorAsync(ctx)
         ));
 
-        // 39. workflow_texte_vers_animation
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "workflow_texte_vers_animation", "Workflow : Texte vers Animation",
             "Genere une image puis une video a partir d'un texte.",
@@ -79,11 +73,11 @@ public static class Tous
                 new("chemin_sortie", "Chemin sortie video", "chemin", ""),
                 new("duree", "Duree (s)", "nombre", 4.0),
             },
-            ctx => ExecuterAnimation(ctx)
+            async ctx => await ExecuterAnimationAsync(ctx)
         ));
     }
 
-    private static ResultatExecution ExecuterCodeComplet(ContexteExecution ctx)
+    private static async Task<ResultatExecution> ExecuterCodeCompletAsync(ContexteExecution ctx)
     {
         try
         {
@@ -94,9 +88,9 @@ public static class Tous
             if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
                 "atelier_" + Guid.NewGuid().ToString("N") + "." + Extension(lang));
             var c = new ClientModele();
-            var code = Awaiter(c.CompleterAsync("Genere du code " + lang + " pour : " + desc + "\nReponds UNIQUEMENT avec le code."));
+            var code = await c.CompleterAsync("Genere du code " + lang + " pour : " + desc + "\nReponds UNIQUEMENT avec le code.");
             code = StripCodeFences(code, lang);
-            code = Awaiter(c.CompleterAsync("Revise ce code " + lang + " (qualite, bugs, conventions). Reponds UNIQUEMENT avec le code revise.\n```" + lang + "\n" + code + "\n```"));
+            code = await c.CompleterAsync("Revise ce code " + lang + " (qualite, bugs, conventions). Reponds UNIQUEMENT avec le code revise.\n```" + lang + "\n" + code + "\n```");
             code = StripCodeFences(code, lang);
             File.WriteAllText(sortie, code);
             return ResultatExecution.Ok(new() { ["chemin"] = sortie, ["code"] = code });
@@ -104,7 +98,7 @@ public static class Tous
         catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
     }
 
-    private static ResultatExecution ExecuterTests(ContexteExecution ctx)
+    private static async Task<ResultatExecution> ExecuterTestsAsync(ContexteExecution ctx)
     {
         try
         {
@@ -114,7 +108,7 @@ public static class Tous
             if (string.IsNullOrEmpty(code)) return ResultatExecution.Fail("code vide");
             if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
                 "atelier_tests_" + Guid.NewGuid().ToString("N") + ".py");
-            var tests = Awaiter(new ClientModele().CompleterAsync("Ecris des tests pour ce code " + lang + ". Reponds UNIQUEMENT avec le code de test.\n```" + lang + "\n" + code + "\n```"));
+            var tests = await new ClientModele().CompleterAsync("Ecris des tests pour ce code " + lang + ". Reponds UNIQUEMENT avec le code de test.\n```" + lang + "\n" + code + "\n```");
             tests = StripCodeFences(tests, lang);
             File.WriteAllText(sortie, tests);
             if (lang == "python")
@@ -134,7 +128,7 @@ public static class Tous
         catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
     }
 
-    private static ResultatExecution ExecuterRefactor(ContexteExecution ctx)
+    private static async Task<ResultatExecution> ExecuterRefactorAsync(ContexteExecution ctx)
     {
         try
         {
@@ -146,9 +140,9 @@ public static class Tous
             if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
                 "atelier_refactored_" + Guid.NewGuid().ToString("N") + "." + Extension(lang));
             var c = new ClientModele();
-            var r1 = Awaiter(c.CompleterAsync("Refactore ce code " + lang + " avec cet objectif : " + obj + ". Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + code + "\n```"));
+            var r1 = await c.CompleterAsync("Refactore ce code " + lang + " avec cet objectif : " + obj + ". Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + code + "\n```");
             r1 = StripCodeFences(r1, lang);
-            var r2 = Awaiter(c.CompleterAsync("Revise ce code refactore pour la securite (injection, validation, secrets). Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + r1 + "\n```"));
+            var r2 = await c.CompleterAsync("Revise ce code refactore pour la securite. Reponds UNIQUEMENT avec le code.\n```" + lang + "\n" + r1 + "\n```");
             r2 = StripCodeFences(r2, lang);
             File.WriteAllText(sortie, r2);
             return ResultatExecution.Ok(new() { ["chemin"] = sortie, ["code"] = r2 });
@@ -156,7 +150,7 @@ public static class Tous
         catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
     }
 
-    private static ResultatExecution ExecuterAnimation(ContexteExecution ctx)
+    private static async Task<ResultatExecution> ExecuterAnimationAsync(ContexteExecution ctx)
     {
         try
         {
@@ -165,7 +159,7 @@ public static class Tous
             if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
             if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
                 "atelier_anim_" + Guid.NewGuid().ToString("N") + ".mp4");
-            var img = Awaiter(new ClientComfyui().TexteVersImageAsync(prompt));
+            var img = await new ClientComfyui().TexteVersImageAsync(prompt);
             return ResultatExecution.Ok(new() { ["chemin_video"] = img });
         }
         catch (Exception ex) { return ResultatExecution.Fail("ComfyUI: " + ex.Message); }
