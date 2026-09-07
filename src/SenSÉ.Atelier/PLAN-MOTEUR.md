@@ -79,6 +79,9 @@ Wan2.2-T2V-A14B-{High,Low}Noise-Q4_K_M.gguf
 → 63,21 s, vidéo MJPEG 16 i/s, 17 images
 ```
 
+Les temps aux définitions utiles, et ce qui ne passe pas, sont au **§6** — c'est
+là que se dimensionne le travail, pas ici.
+
 Le binaire connaît nativement l'architecture à double expert de Wan 2.2 :
 `--high-noise-diffusion-model`, `--high-noise-steps`, `--moe-boundary`,
 `--vae-format wan`, `-M vid_gen`. Rien à bricoler.
@@ -444,8 +447,52 @@ une seconde vidéo avec le même modèle coûterait ~67 s au lieu de 178.** Emba
 le serveur plutôt que d'appeler la CLI ne fait pas gagner quelques pour cent, il
 divise le temps par deux et demi.
 
-Ce qui reste non mesuré : 832×480 (la définition native de Wan 480p) et un nombre
-d'étapes réaliste sans les LoRA 4 étapes.
+### Les deux définitions, mesurées
+
+| Définition | Images | Durée produite | Temps total | dont échantillonnage |
+|---|---|---|---|---|
+| 480×480 | 81 | 5,06 s | **178,26 s** | 67,31 s |
+| 832×480 *(native 480p)* | 49 | 3,06 s | **209,30 s** | 71,89 s |
+| 832×480 | 81 | — | **échec** | — |
+
+**La nuance, et elle est importante pour dimensionner.**
+
+À 832×480 avec 81 images, l'exécution s'arrête au bloc 3 sur 42 :
+
+```
+cannot make enough memory available on CUDA0:
+need 859.04 MB device, available 851.06 MB
+```
+
+**Il manquait huit mégaoctets.** Pas huit cents : huit. Et à cette définition, ce
+ne sont plus les poids qui saturent — ils sont en RAM — mais les **activations**,
+qui grandissent avec `largeur × hauteur × images`.
+
+Un écart aussi mince ne se décide pas dans le moteur, il se décide **sur le
+bureau de l'utilisateur**. Au moment de la mesure, la machine portait Firefox
+(24 processus), Claude (16), OpenCode (7), MiniMax Code (8) et un WebView — tous
+mordent sur la carte. La même commande passerait probablement sur une session
+vide, et échouerait de nouveau dès qu'un navigateur s'ouvre.
+
+**Ce qu'il faut en retenir pour le moteur, et qui n'est pas négociable :**
+
+1. **832×480×81 n'est pas une capacité de cette machine.** Ce n'est pas
+   « lent », c'est « pas fiable » — et une capacité qui dépend des fenêtres
+   ouvertes n'en est pas une.
+2. Le moteur doit **lire la VRAM libre au moment de l'appel** et refuser avant de
+   charger, plutôt que d'échouer après cent trente secondes de chargement. Le
+   `vram_mo` du manifeste ne suffit pas : il décrit les poids, pas les
+   activations.
+3. Les combinaisons sûres se plafonnent. À la définition native, **49 images
+   (3 s) passent**. Au-delà, il faut enchaîner par I2V plutôt que d'allonger un
+   seul plan — voir §6, l'enchaînement.
+
+**Le chargement reste le poste principal dans les deux cas** : 111 s sur 178,
+137 s sur 209. Contre 67 et 72 secondes de calcul. C'est le même argument qu'au
+§6 pour `sd-server`, chiffré une seconde fois.
+
+Reste non mesuré : un nombre d'étapes réaliste sans les LoRA 4 étapes, et le
+720p, qui ne tiendra manifestement pas.
 
 **Le partage de la VRAM.** Décidé : le média prend la carte, le texte reste sur
 processeur et RAM. Le moteur doit donc savoir refuser une génération quand la
