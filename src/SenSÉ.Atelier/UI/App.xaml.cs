@@ -14,6 +14,13 @@ public partial class App : Application
     {
         DispatcherUnhandledException += (s, e) =>
         {
+            try
+            {
+                var logPath = System.IO.Path.Combine(Racine ?? System.IO.Path.GetTempPath(), "_startup_error.log");
+                System.IO.File.AppendAllText(logPath,
+                    "[" + System.DateTime.Now.ToString("o") + "] DISPATCHER UNHANDLED\n" + e.Exception.ToString() + "\n\n");
+            }
+            catch { }
             System.Console.Error.WriteLine("[atelier] UNHANDLED: " + e.Exception);
             e.Handled = true;
         };

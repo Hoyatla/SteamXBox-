@@ -22,8 +22,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- InvariantGlobalization retire : WPF a besoin de en-US pour les bindings/templates. -->
   </PropertyGroup>
-
 
 </Project>

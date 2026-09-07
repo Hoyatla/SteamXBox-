@@ -30,15 +30,29 @@ public static class Program
             catch (Exception ex) { Console.Error.WriteLine("[atelier] serveur: " + ex.Message); }
         });
 
-        // Lancer l'application WPF
+        // Lancer l'application WPF avec filet de diagnostic
         var app = new App();
-        app.InitializeComponent();
-        app.Serveur = serveur;
-        app.Racine = racine;
-        var exit = app.Run(new FenetreAtelier(racine, serveur));
-
-        serveur.Arreter();
-        return exit;
+        var logPath = Path.Combine(racine, "_startup_error.log");
+        try
+        {
+            app.InitializeComponent();
+            app.Serveur = serveur;
+            app.Racine = racine;
+            var window = new FenetreAtelier(racine, serveur);
+            var exit = app.Run(window);
+            serveur.Arreter();
+            return exit;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                File.WriteAllText(logPath,
+                    ex.ToString() + "\n\nRacine: " + racine);
+            }
+            catch { /* si meme le log plante */ }
+            throw;
+        }
     }
 
     private static string DeterminerRacine()
