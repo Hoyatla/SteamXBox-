@@ -456,6 +456,82 @@ les chiffres du §3 comme référence.
 
 ---
 
+## 5 ter. L'espace Codage : exécuter, pas seulement écrire
+
+**L'Atelier écrit du code en douze langages et n'en exécute qu'un.** Le nœud
+`llm_generer_code` propose `python, rust, javascript, typescript, csharp, cpp, c,
+go, java, kotlin, swift, shell` ; le seul nœud d'exécution est
+`executer_python` (`Primitives.cs`, n° 8). Un graphe peut donc produire du Rust
+et n'a aucun moyen de l'essayer.
+
+C'est l'asymétrie à corriger, et elle vaut pour les deux espaces : un nœud
+Multimedia qui découpe une image par un script, un nœud Codage qui compile et
+teste ce qu'il vient d'écrire.
+
+### Ce qui est déjà installé sur la machine de référence
+
+Relevé le 8 septembre 2026 :
+
+| Moteur | État | Version |
+|---|---|---|
+| python | **embarqué dans le produit** | 3.11.0 — `Outils/Python`, 301 Mo |
+| dotnet | présent sur la machine | 10.0.301 |
+| node | présent | 24.18.0 |
+| cargo / rustc | présents | 1.98.0 |
+| java | présent | 17.0.12 LTS |
+| gcc | présent | MinGW-W64 16.1.0 |
+| go, pwsh | absents | — |
+
+Seul Python est **embarqué** : il vit dans le produit et existe donc sur toute
+machine où SenSÉ est installé. Les autres appartiennent à la machine, et un
+produit ne peut pas les supposer.
+
+### La forme
+
+Un seul nœud, `executer_code`, avec le langage en paramètre — plutôt que douze
+nœuds qui se ressembleraient. Chaque moteur est décrit par un manifeste, sur le
+modèle exact de ceux des modèles (§étape 2) :
+
+```json
+{
+  "id": "rust",
+  "nom": "Rust",
+  "espace": "Codage",
+  "detection": "cargo --version",
+  "compile": true,
+  "commande": "...",
+  "embarque": false
+}
+```
+
+**La règle qui compte, et c'est celle du produit :** un moteur absent n'est pas
+déclaré. C'est ce qui a été appliqué aux recherches distantes non configurées et
+au mode interactif — un nœud qui échoue à chaque appel coûte un tour et
+apprend au modèle à s'entêter. `detection` est ce qui tranche, au démarrage.
+
+### Pourquoi Python garde une place à part
+
+Il est le seul que le produit apporte. Après le retrait de ComfyUI, son
+environnement a été purgé — `site-packages` est passé de **4,6 Go à 21 Mo**, il
+n'en reste que `pip` et `setuptools`. La bibliothèque standard suffit à ce qu'un
+nœud de script fait normalement : lire un fichier, transformer du texte, appeler
+une API, calculer. Ce qui manquerait s'installe par `pip`, à la demande et en
+quelques mégaoctets — non par 2,8 Go de PyTorch réinstallés par précaution.
+
+**Ne pas remettre de dépendances « au cas où » dans cet interprète.** C'est
+exactement ce qui l'avait fait grossir à cinq gigaoctets.
+
+### Ce qui manque avant d'écrire
+
+Un nœud qui exécute du code arbitraire est le point le plus sensible du produit,
+et la règle de SenSÉ s'y applique en entier : rien ne s'exécute que l'utilisateur
+n'aurait pu lancer lui-même. Le nœud actuel écrit un fichier dans `%TEMP%` et le
+lance sans borne autre qu'un délai de trente secondes. Avant d'en ajouter onze
+autres, il faut décider ce qu'un tel nœud a le droit de faire — le réseau, le
+disque, la durée — et l'écrire ici. Cette décision n'est pas prise.
+
+---
+
 ## 6. Ce qui reste à décider
 
 **La qualité contre le temps — mesuré depuis.** La longueur native de Wan 2.2,
