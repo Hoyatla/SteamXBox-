@@ -395,7 +395,9 @@ public static class FichierTravail
                 return null;
             }
 
-            if (toucher)
+            var soigne = Redecouper(travail, journal);
+
+            if (toucher || soigne)
             {
                 travail.Touche = DateTime.UtcNow;
                 Ecrire(travail, journal);
@@ -409,6 +411,58 @@ public static class FichierTravail
 
             return null;
         }
+    }
+
+    /// <summary>Répare un carnet dont une étape en contient plusieurs. Vrai s'il a changé.</summary>
+    /// <remarks>
+    /// <b>Corriger l'écriture des carnets neufs ne suffisait pas : les anciens restaient piégés.</b>
+    /// Celui de la session du 7 septembre 2026 portait une étape unique dont le texte était
+    /// <c>"1. Ouvrir LibreOffice\n2. Écrire..\n3. Sauvegarder..\n4. Ouvrir le dossier"</c>. Les
+    /// conséquences se lisent dans le journal : le carnet s'affichait <c>1/1</c>,
+    /// <see cref="Cocher"/> reconnaissait cette étape sur son début — « 1. Ouvrir LibreOffice » —
+    /// et la cochait entière, le travail passait pour fini alors que trois étapes n'avaient pas été
+    /// faites, puis les trois appels suivants échouaient sur un carnet qui affirmait pourtant les
+    /// contenir.
+    ///
+    /// <para>
+    /// <b>Seul le premier morceau garde la coche.</b> C'est la lecture prudente et la seule
+    /// défendable : l'assistant a coché cette étape après avoir fait la première chose qu'elle
+    /// nommait, et ce geste ne dit rien des trois autres. Les rouvrir peut faire refaire une étape ;
+    /// les fermer ferait perdre le travail sans que personne ne s'en aperçoive.
+    /// </para>
+    /// </remarks>
+    private static bool Redecouper(Travail travail, Action<string>? journal)
+    {
+        if (!travail.Taches.Exists(t => t.Texte.Contains('\n') || t.Texte.Contains('\r')))
+        {
+            return false;
+        }
+
+        var soignees = new List<Tache>();
+
+        foreach (var tache in travail.Taches)
+        {
+            var morceaux = Decouper(tache.Texte);
+
+            if (morceaux.Count <= 1)
+            {
+                // Une étape d'une seule ligne est laissée telle quelle, coche comprise.
+                soignees.Add(tache);
+                continue;
+            }
+
+            for (var rang = 0; rang < morceaux.Count; rang++)
+            {
+                soignees.Add(new Tache { Texte = morceaux[rang], Faite = rang == 0 && tache.Faite });
+            }
+        }
+
+        journal?.Invoke(
+            $"carnet « {travail.Titre} » : {travail.Taches.Count} étape(s) mal écrite(s) redécoupée(s) en {soignees.Count}.");
+
+        travail.Taches = soignees;
+
+        return true;
     }
 
     /// <summary>Tous les carnets en cours, du plus récemment ouvert au plus ancien.</summary>
@@ -427,6 +481,15 @@ public static class FichierTravail
             {
                 if (JsonSerializer.Deserialize<Travail>(File.ReadAllText(fichier)) is { } travail)
                 {
+                    // Réparé ici aussi, et pas seulement dans Lire : c'est par cette liste que
+                    // passent le rappel de la consigne et la reprise après contexte plein. Un
+                    // carnet soigné d'un côté et lu de travers de l'autre serait pire que pas de
+                    // réparation du tout.
+                    if (Redecouper(travail, journal))
+                    {
+                        Ecrire(travail, journal);
+                    }
+
                     carnets.Add(travail);
                 }
             }

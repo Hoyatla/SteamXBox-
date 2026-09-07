@@ -1570,26 +1570,18 @@ public sealed class AssistantLocal
     {
         var lus = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // [DEBUG 2026-09-06] log temporaire du JSON brut pour diagnostiquer args vides
-        try {
-            var dbg = "[sense-capacite] Lire raw=" + arguments;
-            System.Console.Error.WriteLine(dbg);
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sense-capacite.log"), dbg + "\n"); } catch { }
-        } catch { }
-
+        // Le journal brut du 6 septembre est retiré, et il aura servi jusqu'au bout : c'est lui qui
+        // a montré, le 7, que des arguments affichés comme corrompus étaient en réalité intacts à
+        // l'exécution. Il écrivait cependant chaque appel d'outil dans %TEMP%, texte de
+        // l'utilisateur compris, sans limite de taille ni d'âge — ce qu'un diagnostic terminé n'a
+        // aucune raison de continuer à faire.
         try
         {
             if (JsonNode.Parse(arguments) is JsonObject objet)
             {
                 foreach (var paire in objet)
                 {
-                    var valStr = paire.Value?.ToString() ?? "";
-                    lus[paire.Key] = valStr;
-                    try {
-                        var dbg2 = "[sense-capacite]   cle=" + paire.Key + " valeur=[" + (valStr.Length > 80 ? valStr.Substring(0, 80) + "..." : valStr) + "] type=" + (paire.Value?.GetType().Name ?? "?");
-                        System.Console.Error.WriteLine(dbg2);
-                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sense-capacite.log"), dbg2 + "\n"); } catch { }
-                    } catch { }
+                    lus[paire.Key] = paire.Value?.ToString() ?? "";
                 }
             }
         }

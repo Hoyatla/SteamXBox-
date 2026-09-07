@@ -296,6 +296,92 @@ public class FichierTravailTests : IDisposable
     public void NothingToCutYieldsNothing(string liste)
         => Assert.Empty(FichierTravail.Decouper(liste));
 
+    /// <summary>Un carnet déjà écrit de travers se répare tout seul à la lecture.</summary>
+    /// <remarks>
+    /// <b>Corriger l'écriture ne suffisait pas : le carnet du jour restait piégé.</b> Il portait une
+    /// étape unique dont le texte était les quatre lignes numérotées. Le carnet s'affichait
+    /// <c>1/1</c>, <see cref="FichierTravail.Cocher"/> reconnaissait cette étape sur son début et la
+    /// cochait entière, le travail passait pour fini — et les trois appels suivants échouaient sur
+    /// un carnet qui affirmait pourtant contenir ces étapes.
+    /// </remarks>
+    [Fact]
+    public void ANotebookAlreadyWrittenBadlyHealsItselfOnRead()
+    {
+        FichierTravail.Noter(
+            "LibreOffice",
+            ["1. Ouvrir LibreOffice\n2. Écrire « Bonjour »\n3. Sauvegarder\n4. Ouvrir le dossier"],
+            null);
+
+        var carnet = FichierTravail.Lire("LibreOffice", null)!;
+
+        Assert.Equal(
+            ["Ouvrir LibreOffice", "Écrire « Bonjour »", "Sauvegarder", "Ouvrir le dossier"],
+            carnet.Taches.Select(t => t.Texte));
+    }
+
+    /// <summary>La coche de l'étape fourre-tout ne vaut que pour la première.</summary>
+    /// <remarks>
+    /// L'assistant a coché cette étape après avoir fait la première chose qu'elle nommait ; ce geste
+    /// ne dit rien des trois autres. Les rouvrir peut faire refaire une étape, les fermer ferait
+    /// perdre le travail sans que personne ne s'en aperçoive.
+    /// </remarks>
+    [Fact]
+    public void TheTickOfACatchAllStepCountsOnlyForTheFirst()
+    {
+        FichierTravail.Noter("LibreOffice", ["1. Ouvrir\n2. Écrire\n3. Sauvegarder"], null);
+        FichierTravail.Cocher("LibreOffice", "1. Ouvrir", null);
+
+        var carnet = FichierTravail.Lire("LibreOffice", null)!;
+
+        Assert.True(carnet.Taches[0].Faite);
+        Assert.Equal(["Écrire", "Sauvegarder"], FichierTravail.Restantes(carnet));
+        Assert.False(carnet.Fini);
+    }
+
+    // La réparation est écrite sur le disque, pas seulement rendue : sans cela le carnet
+    // s'afficherait juste et se cocherait de travers, ce qui est la pire des deux situations.
+    [Fact]
+    public void TheRepairIsWrittenDownNotJustReturned()
+    {
+        FichierTravail.Noter("LibreOffice", ["1. Ouvrir\n2. Écrire"], null);
+        FichierTravail.Lire("LibreOffice", null);
+
+        // Le saut de ligne échappé, pas les vrais : le fichier est indenté et en contient
+        // légitimement. Ce qui doit avoir disparu, c'est celui qui était DANS le texte d'une étape.
+        Assert.DoesNotContain(
+            "\\n", File.ReadAllText(FichierTravail.Fichier("LibreOffice")), StringComparison.Ordinal);
+    }
+
+    /// <summary>La liste répare aussi, parce que c'est par elle que passe la reprise.</summary>
+    /// <remarks>
+    /// <c>Lister</c> désérialise sans passer par <c>Lire</c>, et ce sont pourtant ses carnets que
+    /// lisent le rappel de la consigne et la reprise après contexte plein. Soigné d'un côté et lu
+    /// de travers de l'autre, le carnet aurait menti là où il compte le plus.
+    /// </remarks>
+    [Fact]
+    public void TheListingRepairsToo()
+    {
+        FichierTravail.Noter("LibreOffice", ["1. Ouvrir\n2. Écrire\n3. Sauvegarder"], null);
+
+        var carnet = FichierTravail.Lister(null).Single(c => c.Titre == "LibreOffice");
+
+        Assert.Equal(["Ouvrir", "Écrire", "Sauvegarder"], carnet.Taches.Select(t => t.Texte));
+    }
+
+    // Un carnet bien écrit n'est pas touché : la réparation ne doit pas réécrire tous les fichiers
+    // à chaque lecture, ni changer une étape qui contient légitimement une ponctuation.
+    [Fact]
+    public void AWellWrittenNotebookIsLeftAlone()
+    {
+        FichierTravail.Noter("Propre", ["choisir", "animer"], null);
+        FichierTravail.Cocher("Propre", "choisir", null);
+
+        var carnet = FichierTravail.Lire("Propre", null)!;
+
+        Assert.Equal(["choisir", "animer"], carnet.Taches.Select(t => t.Texte));
+        Assert.True(carnet.Taches[0].Faite);
+    }
+
     /// <summary>Vieillit un carnet en réécrivant sa date d'ouverture.</summary>
     private static void Vieillir(string titre, DateTime quand)
     {
