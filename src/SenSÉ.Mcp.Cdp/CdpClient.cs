@@ -15,63 +15,182 @@ namespace SenSÉ.Mcp.Cdp;
 /// CDP sur WebSocket. C'est plus leger que Selenium et ca marche avec
 /// n'importe quel Chromium-compatible qui expose <c>--remote-debugging-port</c>.
 ///
-/// <para><b>Thread-safe.</b> Le <see cref="SendAsync"/> est serialise
-/// par un <see cref="SemaphoreSlim"/> ; la <see cref="BoucleLectureAsync"/>
-/// accede au dictionnaire des requetes en attente sous le meme lock.
-/// Les reponses sont dispatchees via TCS pour que chaque appelant
-/// attende sa propre reponse.</para>
+/// <para><b>Le verrou ne couvre que l'envoi, et c'est la correction.</b> Il couvrait
+/// aussi l'attente de la reponse, que seule <see cref="BoucleLectureAsync"/> peut
+/// donner — laquelle prenait ce meme verrou pour retirer la requete du dictionnaire.
+/// Chacun attendait l'autre : la premiere commande CDP ne pouvait pas aboutir, le
+/// verrou n'etait jamais rendu, et toutes les suivantes s'empilaient derriere.
+/// Constate le 7 septembre 2026, ou trois <c>cdp_navigate</c> de suite ont expire a
+/// trente secondes, l'un apres l'autre. mcp-cdp n'avait jamais pilote une page.</para>
+///
+/// <para>Le verrou ne sert donc plus qu'a ce pour quoi il existe :
+/// <see cref="System.Net.WebSockets.ClientWebSocket.SendAsync"/> interdit deux envois
+/// simultanes. Le dictionnaire est devenu concurrent, la boucle de lecture n'a plus
+/// rien a verrouiller, et l'attente se fait dehors.</para>
 /// </remarks>
 public sealed class CdpClient : IAsyncDisposable
 {
+    /// <summary>Au-dela, la reponse ne viendra pas.</summary>
+    /// <remarks>
+    /// <b>Une attente sans borne n'est pas une attente, c'est une panne silencieuse.</b> Aucun
+    /// appelant ne passait de jeton d'annulation — tous prenaient le defaut — si bien qu'une
+    /// socket morte laissait la requete en suspens pour toujours. Ce qui sauvait la mise etait le
+    /// delai HTTP du serveur, trente secondes, qui rendait a l'assistant une erreur parlant de
+    /// <c>HttpClient</c> plutot que du navigateur.
+    ///
+    /// <para>Vingt secondes : assez pour un chargement de page lent, assez court pour laisser le
+    /// serveur repondre quelque chose d'utile avant que son propre client ne renonce.</para>
+    /// </remarks>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(20);
+
     private readonly ClientWebSocket _ws = new();
     private int _idCounter;
+
+    /// <summary>Serialise les envois sur la socket, rien de plus.</summary>
     private readonly SemaphoreSlim _sendLock = new(1, 1);
-    private readonly Dictionary<int, TaskCompletionSource<JsonNode?>> _pending = new();
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, TaskCompletionSource<JsonNode?>> _pending = new();
     private readonly CancellationTokenSource _cts = new();
     private Task? _readerTask;
 
-    /// <summary>Se connecte au navigateur via son webSocketDebuggerUrl. Demarre le reader.</summary>
+    /// <summary>Le client peut-il encore repondre ?</summary>
+    /// <remarks>
+    /// Demande par <c>Serveur.AssurerAsync</c>, qui gardait son client sans jamais verifier qu'il
+    /// etait vivant et resservait donc un cadavre a chaque appel.
+    /// </remarks>
+    public bool Vivant => _ws.State == WebSocketState.Open;
+
+    /// <summary>Se connecte a une PAGE du navigateur. Demarre le reader.</summary>
+    /// <remarks>
+    /// <b>A une page, et non au navigateur : c'est ce qui manquait pour que les verbes existent.</b>
+    /// <c>/json/version</c> donne la socket du <i>navigateur</i>, qui ne connait que les domaines
+    /// <c>Browser</c> et <c>Target</c>. Toutes les commandes de ce client — <c>Page.navigate</c>,
+    /// <c>Runtime.evaluate</c>, <c>Page.captureScreenshot</c> — appartiennent a un onglet, et le
+    /// navigateur repondait donc <c>-32601 « 'Page.navigate' wasn't found »</c> a chacune.
+    ///
+    /// <para>
+    /// Le defaut etait invisible tant que l'interblocage du verrou d'envoi empechait la moindre
+    /// commande d'aboutir : on ne voyait qu'un delai de trente secondes. La premiere reparation a
+    /// mis la seconde au jour, ce qui est la seule facon d'apprendre qu'un chemin n'a jamais servi.
+    /// </para>
+    ///
+    /// <para><c>/json/list</c> enumere les cibles ; on retient le premier onglet. S'il n'y en a
+    /// aucun — navigateur ouvert sans fenetre — on en fait creer un par <c>/json/new</c> plutot que
+    /// d'echouer, parce qu'un navigateur sans onglet est un etat qu'on traverse au demarrage.</para>
+    /// </remarks>
     public async Task ConnectAsync(int port = 9223, CancellationToken arret = default)
     {
-        // Le navigateur expose /json/version avec le webSocketDebuggerUrl.
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        var json = await http.GetStringAsync($"http://127.0.0.1:{port}/json/version", arret);
-        var noeud = JsonNode.Parse(json);
-        var wsUrl = noeud?["webSocketDebuggerUrl"]?.GetValue<string>()
-            ?? throw new InvalidOperationException("webSocketDebuggerUrl manquant dans /json/version");
+
+        var wsUrl = await PageAsync(http, port, arret)
+            ?? await NouvellePageAsync(http, port, arret)
+            ?? throw new InvalidOperationException(
+                "aucun onglet a piloter sur 127.0.0.1:" + port.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         await _ws.ConnectAsync(new Uri(wsUrl), arret);
         _readerTask = Task.Run(() => BoucleLectureAsync(_cts.Token), _cts.Token);
     }
 
+    /// <summary>La socket du premier onglet, ou null s'il n'y en a pas.</summary>
+    private static async Task<string?> PageAsync(HttpClient http, int port, CancellationToken arret)
+    {
+        var json = await http.GetStringAsync(
+            $"http://127.0.0.1:{port.ToString(System.Globalization.CultureInfo.InvariantCulture)}/json/list", arret);
+
+        if (JsonNode.Parse(json) is not JsonArray cibles)
+        {
+            return null;
+        }
+
+        foreach (var cible in cibles)
+        {
+            // « page » et non « background_page », « service_worker » ou « iframe » : ce sont des
+            // cibles reelles, mais aucune n'est l'onglet que l'utilisateur regarde.
+            if (cible?["type"]?.GetValue<string>() == "page"
+                && cible["webSocketDebuggerUrl"]?.GetValue<string>() is { Length: > 0 } socket)
+            {
+                return socket;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Fait ouvrir un onglet, et rend sa socket.</summary>
+    private static async Task<string?> NouvellePageAsync(HttpClient http, int port, CancellationToken arret)
+    {
+        var adresse = $"http://127.0.0.1:{port.ToString(System.Globalization.CultureInfo.InvariantCulture)}/json/new?about:blank";
+
+        // PUT depuis Chrome 111 ; le GET reste accepte par d'autres Chromium, d'ou les deux.
+        var reponse = await http.PutAsync(adresse, content: null, arret);
+
+        if (!reponse.IsSuccessStatusCode)
+        {
+            reponse = await http.GetAsync(adresse, arret);
+        }
+
+        if (!reponse.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await reponse.Content.ReadAsStringAsync(arret);
+
+        return JsonNode.Parse(json)?["webSocketDebuggerUrl"]?.GetValue<string>();
+    }
+
     /// <summary>Envoie une commande CDP et attend la reponse.</summary>
     public async Task<JsonNode?> SendAsync(string method, object? parameters = null, CancellationToken arret = default)
     {
-        await _sendLock.WaitAsync(arret);
+        if (!Vivant)
+        {
+            throw new InvalidOperationException(
+                "la connexion au navigateur est fermee : relance le verbe, une nouvelle sera ouverte.");
+        }
+
+        var id = Interlocked.Increment(ref _idCounter);
+        var tcs = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[id] = tcs;
+
+        var req = new JsonObject
+        {
+            ["id"] = id,
+            ["method"] = method,
+        };
+
+        if (parameters is not null)
+        {
+            req["params"] = JsonSerializer.SerializeToNode(parameters);
+        }
+
         try
         {
-            var id = Interlocked.Increment(ref _idCounter);
-            var tcs = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _pending[id] = tcs;
+            // Le verrou ne tient que l'envoi. C'est tout ce que ClientWebSocket exige, et c'est
+            // tout ce qu'il doit tenir : l'englober sur l'attente de la reponse etait l'interblocage.
+            await _sendLock.WaitAsync(arret);
 
-            var req = new JsonObject
+            try
             {
-                ["id"] = id,
-                ["method"] = method,
-            };
-            if (parameters is not null)
+                var bytes = Encoding.UTF8.GetBytes(req.ToJsonString());
+                await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, arret);
+            }
+            finally
             {
-                req["params"] = JsonSerializer.SerializeToNode(parameters);
+                _sendLock.Release();
             }
 
-            var bytes = Encoding.UTF8.GetBytes(req.ToJsonString());
-            await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, arret);
-
-            return await tcs.Task.WaitAsync(arret);
+            return await tcs.Task.WaitAsync(Patience, arret);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException(
+                $"le navigateur n'a pas repondu a {method} en {Patience.TotalSeconds:N0} s.");
         }
         finally
         {
-            _sendLock.Release();
+            // Retiree quoi qu'il arrive : une requete abandonnee qui resterait inscrite ferait
+            // fuir le dictionnaire une entree par appel expire.
+            _pending.TryRemove(id, out _);
         }
     }
 
@@ -84,10 +203,32 @@ public sealed class CdpClient : IAsyncDisposable
             returnByValue = true,
             awaitPromise = true,
         }, arret);
-        var value = result?["result"]?["result"]?["value"];
-        if (value is null) return "";
-        // value est un JsonNode ; on le rend tel quel en string
-        return value.ToJsonString();
+        // Un seul « result », et c'est la correction.
+        //
+        // SendAsync rend deja le champ « result » de la reponse CDP ; en redescendre un second
+        // menait nulle part, et toute evaluation rendait la chaine vide. « 1+1 » rendait vide, ce
+        // qui dit assez que le chemin n'avait jamais servi — masque, comme le reste, par
+        // l'interblocage qui empechait la commande d'arriver jusqu'ici.
+        if (result?["exceptionDetails"] is { } souci)
+        {
+            // Rendue plutot qu'avalee : une expression fautive rendait « » comme une page vide, et
+            // le modele en concluait que l'element n'existait pas.
+            throw new InvalidOperationException(
+                "l'expression a leve dans la page : "
+                + (souci["exception"]?["description"]?.GetValue<string>() ?? souci.ToJsonString()));
+        }
+
+        var value = result?["result"]?["value"];
+
+        if (value is null)
+        {
+            return "";
+        }
+
+        // Une chaine est rendue nue ; le reste garde sa forme JSON, qui est ce qui la decrit.
+        return value.GetValueKind() == System.Text.Json.JsonValueKind.String
+            ? value.GetValue<string>()
+            : value.ToJsonString();
     }
 
     /// <summary>Navigue vers une URL. Attend 1,5s pour que la page charge (best-effort).</summary>
@@ -167,17 +308,12 @@ public sealed class CdpClient : IAsyncDisposable
                     if (noeud is JsonObject obj && obj["id"] is JsonValue val)
                     {
                         var id = val.GetValue<int>();
-                        TaskCompletionSource<JsonNode?>? tcs;
-                        // Lock pour eviter la race avec SendAsync qui ajoute en parallele
-                        await _sendLock.WaitAsync(arret);
-                        try
-                        {
-                            _pending.Remove(id, out tcs);
-                        }
-                        finally
-                        {
-                            _sendLock.Release();
-                        }
+
+                        // Sans verrou : le dictionnaire est concurrent. Le prendre ici etait
+                        // l'autre moitie de l'interblocage, puisque SendAsync le tenait en
+                        // attendant precisement cette ligne.
+                        _pending.TryRemove(id, out var tcs);
+
                         if (tcs is not null)
                         {
                             var err = obj["error"];
@@ -206,6 +342,31 @@ public sealed class CdpClient : IAsyncDisposable
         catch (Exception ex)
         {
             await Console.Error.WriteLineAsync("CDP boucle lecture erreur: " + ex.Message);
+        }
+        finally
+        {
+            // Personne d'autre ne peut plus repondre.
+            //
+            // Cette boucle est la seule source de reponses ; quand elle s'arrete, tout ce qui
+            // attend attend pour rien. Le laisser expirer sur le delai rendrait vingt secondes de
+            // silence par appel, et le journal du 7 septembre montre ce que cela donne : le
+            // navigateur avait ferme sa socket — « remote party closed » — et l'assistant a
+            // continue d'appeler dans le vide.
+            var reste = _pending.Count;
+
+            foreach (var attente in _pending.Values)
+            {
+                attente.TrySetException(new InvalidOperationException(
+                    "la connexion au navigateur s'est fermee avant la reponse."));
+            }
+
+            _pending.Clear();
+
+            if (reste > 0)
+            {
+                await Console.Error.WriteLineAsync(
+                    $"CDP: {reste} requete(s) en attente abandonnee(s), la socket est fermee.");
+            }
         }
     }
 

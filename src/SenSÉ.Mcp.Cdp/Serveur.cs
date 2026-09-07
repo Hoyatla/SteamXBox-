@@ -86,7 +86,9 @@ public static class Serveur
     /// </remarks>
     private static async Task<CdpClient> AssurerAsync(CancellationToken arret = default)
     {
-        if (_client is not null)
+        // Vivant, pas seulement present. Un client dont la socket est fermee etait resservi
+        // indefiniment, et chaque verbe expirait sur un navigateur qui n'ecoutait plus.
+        if (_client is { Vivant: true })
         {
             return _client;
         }
@@ -96,9 +98,18 @@ public static class Serveur
         try
         {
             // Reteste apres le verrou : celui qui attendait derriere n'a plus rien a faire.
-            if (_client is not null)
+            if (_client is { Vivant: true })
             {
                 return _client;
+            }
+
+            if (_client is { } mort)
+            {
+                // Congedié avant d'en ouvrir un autre, sinon sa boucle de lecture et sa socket
+                // survivraient a chaque reconnexion.
+                _client = null;
+                await Console.Error.WriteLineAsync("CDP: connexion morte, on en rouvre une.");
+                try { await mort.DisposeAsync(); } catch { /* deja ferme */ }
             }
 
             using var sonde = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
