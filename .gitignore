@@ -124,3 +124,8 @@ Outils/CdpUserData/
 # fait doublon avec l'historique, et l'une d'elles pesait cent cinquante-cinq
 # megaoctets.
 *.avant-*
+
+# Ce que la generation a produit, et les images qu'on lui a donnees.
+# Recuperees de ComfyUI avant sa suppression : ce sont les creations de
+# l'utilisateur, pas des sources du produit.
+/Creations/
