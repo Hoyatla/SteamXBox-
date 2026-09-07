@@ -9,6 +9,7 @@ using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Custom;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
+using SenSÉ.Atelier.Diffusion;
 using SenSÉ.Atelier.Serialisation;
 
 namespace SenSÉ.Atelier.Mcp;
@@ -522,5 +523,23 @@ public sealed class Verbes
             var g = _persistance.ChargerGraphe(t.id, t.espace);
             if (g is not null) yield return g;
         }
+    }
+
+    /// <summary>Liste tous les modeles installes (image/ et video/) avec leur manifeste.</summary>
+    private object ModelesLister()
+    {
+        var racine = Path.Combine(AppContext.BaseDirectory, "Outils", "Modeles");
+        var racineImg = Path.Combine(racine, "image");
+        var racineVid = Path.Combine(racine, "video");
+        var img = ServeurDiffusion.ChargerModeles(racineImg);
+        var vid = ServeurDiffusion.ChargerModeles(racineVid);
+        var liste = img.Select(m => new {
+            id = m.Id, nom = m.Nom, espace = m.Produit, moteur = m.Moteur, vram_mo = m.VramMo,
+            racine = m.Racine, fichier_diffusion = m.Fichiers.GetValueOrDefault("diffusion"),
+        }).Concat(vid.Select(m => new {
+            id = m.Id, nom = m.Nom, espace = m.Produit, moteur = m.Moteur, vram_mo = m.VramMo,
+            racine = m.Racine, fichier_diffusion = m.Fichiers.GetValueOrDefault("diffusion"),
+        }));
+        return new { ok = true, data = new { modeles = liste } };
     }
 }
