@@ -387,6 +387,21 @@ public static class ServeurModele
                 "-ctk", "q8_0",
                 "-ctv", "q8_0",
 
+                // Que la machine reste utilisable pendant qu'il repond.
+                //
+                // Par defaut les fils du serveur attendent le travail en tournant a vide
+                // (« --poll 50 ») et a priorite normale : quatorze fils qui se disputent
+                // l'ordonnanceur avec l'interface de l'utilisateur, pour une generation limitee par
+                // la bande passante memoire et non par le calcul. Les endormir et les faire passer
+                // en dernier ne coute presque rien puisqu'ils n'attendaient rien d'utile.
+                //
+                // Mesure sur cette machine, un temoin monofil chronometre pendant que le modele
+                // ecrit : 2 107 ms machine au repos, 3 171 ms avec le serveur tel qu'il etait,
+                // 2 838 ms ainsi. Un tiers de la gene rendu pour 2 % de debit — 12,34 jetons par
+                // seconde contre 12,09.
+                "--poll", "0",
+                "--prio", "-1",
+
                 // Sans --jinja, le serveur ignore le gabarit de conversation du modèle et l'appel
                 // d'outils ne fonctionne pas. C'est tout ce qui sépare un assistant d'une boîte à
                 // dialogue.
