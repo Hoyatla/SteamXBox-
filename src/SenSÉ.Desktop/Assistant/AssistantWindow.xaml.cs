@@ -831,13 +831,15 @@ public partial class AssistantWindow : Window
                     new AssistantLocal.Parametre(
                         "titre", "Ce que l'utilisateur a demandé, en quelques mots.", []),
                     new AssistantLocal.Parametre(
-                        "taches", "Les étapes, séparées par un point-virgule.", []),
+                        "taches",
+                        "Les étapes, une par ligne ou séparées par un point-virgule.",
+                        []),
                 ],
                 reglages =>
                 {
                     var note = FichierTravail.Noter(
                         Valeur(reglages, "titre"),
-                        Valeur(reglages, "taches").Split(';'),
+                        FichierTravail.Decouper(Valeur(reglages, "taches")),
                         journal);
 
                     Rafraichir();
@@ -868,14 +870,16 @@ public partial class AssistantWindow : Window
                 [
                     new AssistantLocal.Parametre("titre", "Le titre du carnet.", []),
                     new AssistantLocal.Parametre(
-                        "faits", "Les faits à retenir, séparés par un point-virgule.", []),
+                        "faits",
+                        "Les faits à retenir, un par ligne ou séparés par un point-virgule.",
+                        []),
                 ],
                 reglages =>
                 {
                     var titre = Valeur(reglages, "titre");
 
                     var retenu = FichierTravail.Retenir(
-                        titre, Valeur(reglages, "faits").Split(';'), journal);
+                        titre, FichierTravail.Decouper(Valeur(reglages, "faits")), journal);
 
                     Rafraichir();
 

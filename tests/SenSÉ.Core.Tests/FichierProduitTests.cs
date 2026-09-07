@@ -94,4 +94,44 @@ public class FichierProduitTests : IDisposable
 
         Assert.Equal(fichier, FichierProduit.Trouver($"Terminé : {fichier}."));
     }
+
+    /// <summary>Un programme n'est jamais un fichier produit, même s'il existe bel et bien.</summary>
+    /// <remarks>
+    /// <b>Le disque ne suffit plus à trancher quand la phrase ne vient pas d'un verbe producteur.</b>
+    /// La détection s'applique à toute réponse d'outil, et la liste des fenêtres ouvertes contenait
+    /// <c>C:\Program Files\SenSÉ\SenSÉ-Moniteur.exe</c> — un titre de fenêtre qui se trouve être un
+    /// chemin réel. L'assistant a lu « FICHIER PRODUIT », l'a cru, et l'a annoncé à l'utilisateur
+    /// au beau milieu d'un travail sur un document LibreOffice.
+    /// </remarks>
+    [Fact]
+    public void AProgramIsNeverAProducedFile()
+    {
+        var programme = Poser("SenSÉ-Moniteur.exe");
+
+        Assert.Null(FichierProduit.Trouver($"{{\"title\":\"{programme}\"}}"));
+    }
+
+    // La même règle pour ce qui s'exécute sans être un .exe : le script est la forme dont on se
+    // méfie le plus, puisqu'un chemin annoncé revient souvent dans un appel d'outil suivant.
+    [Theory]
+    [InlineData("outil.dll")]
+    [InlineData("lancer.bat")]
+    [InlineData("script.ps1")]
+    [InlineData("raccourci.lnk")]
+    public void NeitherIsAnythingElseThatRuns(string nom)
+    {
+        var fichier = Poser(nom);
+
+        Assert.Null(FichierProduit.Trouver($"Terminé : {fichier}"));
+    }
+
+    // Et rien d'autre n'est écarté au passage : une extension inconnue reste enchaînable, parce que
+    // refuser une liste courte coûte moins qu'autoriser une liste fermée qu'il faudrait tenir.
+    [Fact]
+    public void AnUnknownExtensionStaysChainable()
+    {
+        var fichier = Poser("modele.gguf");
+
+        Assert.Equal(fichier, FichierProduit.Trouver($"Terminé : {fichier}"));
+    }
 }

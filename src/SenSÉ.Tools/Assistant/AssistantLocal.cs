@@ -899,7 +899,10 @@ public sealed class AssistantLocal
 
                 if (!capacites.Any(c => Nom(c.Nom) == appele && c.Interne))
                 {
-                    dernierResultat = Ecrit(resultat["content"]) is { Length: > 0 } rendu ? rendu : dernierResultat;
+                    dernierResultat =
+                        Ecrit(resultat["content"]) is { Length: > 0 } rendu && !Machine(rendu)
+                            ? rendu
+                            : dernierResultat;
                 }
 
                 _messages.Add(resultat);
@@ -1001,24 +1004,44 @@ public sealed class AssistantLocal
         var reponse = Demander(demande, [], arret);
         var dit = Ecrit((reponse?["choices"]?[0]?["message"] as JsonObject)?["content"]);
 
-        if (dit.Length == 0)
-        {
-            return false;
-        }
-
         var titre = Ligne(dit, "TITRE:");
         var reste = Morceaux(Ligne(dit, "RESTE:"));
         var acquis = Morceaux(Ligne(dit, "ACQUIS:"));
 
-        if (titre.Length == 0 || reste.Count == 0)
+        if (titre.Length > 0 && reste.Count > 0)
         {
-            // Sans etapes restantes, il n'y a rien a reprendre : mieux vaut rendre la main avec ce
-            // qui a ete fait que repartir sur un fil neuf pour tourner en rond dedans.
-            return false;
+            FichierTravail.Noter(titre, reste, journal);
+        }
+        else
+        {
+            // Le modele n'a pas su dicter son etat, et c'etait previsible : on le lui demande au
+            // moment precis ou il en est le moins capable, place de travail saturee. Constate en
+            // clair — au lieu des trois lignes, il a recopie la reponse d'outil qu'il venait de
+            // lire, et la reprise etait perdue avec le fil.
+            //
+            // Or il n'y avait rien a lui demander. Le carnet est deja sur le disque, avec ses
+            // etapes cochees et non cochees ; reprendre dessus ne coute pas un jeton et ne peut pas
+            // echouer. Ce que le modele dit est desormais un raccourci, plus une condition.
+            var ouvert = FichierTravail.Lister(journal)
+                .FirstOrDefault(c => c.Taches.Exists(t => !t.Faite));
+
+            if (ouvert is null)
+            {
+                // La, vraiment, il n'y a rien a reprendre : mieux vaut rendre la main avec ce qui a
+                // ete fait que repartir sur un fil neuf pour y tourner en rond.
+                journal?.Invoke("Contexte plein, mais aucun carnet ouvert : l'assistant rend la main.");
+                return false;
+            }
+
+            titre = ouvert.Titre;
+            reste = FichierTravail.Restantes(ouvert);
+
+            journal?.Invoke(
+                $"L'assistant n'a pas su dicter son etat : reprise sur le carnet « {titre} » tel qu'il est ecrit.");
         }
 
-        FichierTravail.Noter(titre, reste, journal);
-
+        // Les acquis sont gardes dans les deux cas : ce que le modele a appris en travaillant reste
+        // vrai meme quand il a rate le format des trois lignes.
         if (acquis.Count > 0)
         {
             FichierTravail.Retenir(titre, acquis, journal);
@@ -1069,6 +1092,29 @@ public sealed class AssistantLocal
     /// <summary>Une liste separee par des points-virgules, nettoyee de ses vides.</summary>
     private static IReadOnlyList<string> Morceaux(string ligne)
         => [.. ligne.Split(';').Select(m => m.Trim()).Where(m => m.Length > 0)];
+
+    /// <summary>Une réponse écrite pour une machine, qu'on ne montrera pas comme une phrase.</summary>
+    /// <remarks>
+    /// <b>Ce texte-là finit sous les yeux de l'utilisateur.</b> Quand la boucle s'arrête sans que le
+    /// modèle ait conclu, la dernière réponse d'outil sert de repli — et l'utilisateur a lu, comme
+    /// message de l'assistant, le JSON entier de <c>debug_uia_list_windows</c> : dix-sept fenêtres,
+    /// leurs identifiants, leurs titres. Ce n'est pas une réponse, c'est de la matière première.
+    ///
+    /// <para>
+    /// Le repli garde son intérêt pour les verbes qui répondent en français — « Ouvert : … »,
+    /// « Image écrite dans … » —, et c'est pourquoi il n'est pas supprimé mais filtré. Un objet
+    /// JSON, un tableau, une enveloppe HTTP : trois formes qu'aucun verbe n'emploie pour parler à
+    /// quelqu'un.
+    /// </para>
+    /// </remarks>
+    private static bool Machine(string texte)
+    {
+        var propre = texte.TrimStart();
+
+        return propre.StartsWith('{')
+            || propre.StartsWith('[')
+            || propre.StartsWith("HTTP ", StringComparison.Ordinal);
+    }
 
     /// <summary>Ce qu'on rend quand l'utilisateur a demandé l'arrêt.</summary>
     /// <remarks>

@@ -198,6 +198,44 @@ public static class FichierTravail
         return nom.Length == 0 ? "travail" : nom[..Math.Min(nom.Length, 60)];
     }
 
+    /// <summary>Une liste écrite par le modèle, découpée en étapes quoi qu'il ait choisi.</summary>
+    /// <remarks>
+    /// <b>La consigne demande des points-virgules ; le modèle écrit des listes numérotées.</b>
+    /// Constaté en clair : « Ouvre LibreOffice, écris Bonjour et sauvegarde. Puis ouvre le
+    /// dossier » a produit <c>"1. Ouvrir LibreOffice\n2. Écrire..\n3. Sauvegarder..\n4. Ouvrir.."</c>
+    /// en un seul morceau. Le carnet affichait <c>0/1</c>, l'assistant cochait sa tâche unique après
+    /// la première étape, et les trois autres n'existaient pour personne.
+    ///
+    /// <para>
+    /// Exiger la bonne syntaxe d'un modèle de quatre milliards de paramètres est un vœu ; accepter
+    /// les deux écritures est un correctif. Le point-virgule et le saut de ligne séparent tous
+    /// deux, et la numérotation de tête est retirée — elle ferait échouer <see cref="Cocher"/>, qui
+    /// compare le texte de l'étape mot pour mot.
+    /// </para>
+    ///
+    /// <para>
+    /// La puce n'est retirée que suivie d'une espace, ce qui laisse « 3.5 mm » entier.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> Decouper(string? liste)
+    {
+        if (string.IsNullOrWhiteSpace(liste))
+        {
+            return [];
+        }
+
+        return [.. liste
+            .Split([';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(morceau => Puce.Replace(morceau.Trim(), ""))
+            .Select(morceau => morceau.Trim())
+            .Where(morceau => morceau.Length > 0)];
+    }
+
+    /// <summary>Une numérotation ou un tiret de tête, et l'espace qui suit.</summary>
+    private static readonly System.Text.RegularExpressions.Regex Puce = new(
+        @"^(?:\d{1,2}[.)\]:]|[-*•–])\s+",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
     /// <summary>Écrit un carnet : le titre, et ce qu'il y a à faire.</summary>
     /// <remarks>
     /// Réécrire un carnet existant garde ce qui était déjà coché : l'assistant qui reprécise son

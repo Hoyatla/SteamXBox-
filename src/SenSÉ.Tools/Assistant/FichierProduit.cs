@@ -117,7 +117,7 @@ public static class FichierProduit
             }
 
             // Un chemin mal formé ne lève pas : File.Exists rend faux et l'on continue.
-            if (File.Exists(essai))
+            if (File.Exists(essai) && !Programme(essai))
             {
                 return essai;
             }
@@ -125,4 +125,31 @@ public static class FichierProduit
 
         return null;
     }
+
+    /// <summary>Un programme, que l'assistant n'a donc pas pu produire.</summary>
+    /// <remarks>
+    /// <b>La détection est appliquée à toutes les réponses d'outil, y compris celles qui ne
+    /// produisent rien</b>, et le disque ne suffit alors plus à trancher : la liste des fenêtres
+    /// ouvertes contenait <c>C:\Program Files\SenSÉ\SenSÉ-Moniteur.exe</c> — un <i>titre</i> de
+    /// fenêtre qui se trouve être un chemin réel. L'assistant a lu « FICHIER PRODUIT », l'a cru, et
+    /// l'a annoncé à l'utilisateur au milieu d'un travail sur un document LibreOffice.
+    ///
+    /// <para>
+    /// Écarter les exécutables est une règle de sens et non un rustinage sur ce cas : aucun verbe
+    /// n'écrit un programme. Le reste demeure enchaînable, extension inconnue comprise — refuser
+    /// une liste courte coûte moins qu'autoriser une liste fermée qu'il faudrait tenir à jour.
+    /// </para>
+    /// </remarks>
+    private static bool Programme(string chemin)
+    {
+        var extension = Path.GetExtension(chemin);
+
+        return extension.Length > 0 && Programmes.Contains(extension);
+    }
+
+    private static readonly HashSet<string> Programmes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".dll", ".sys", ".msi", ".com", ".bat", ".cmd", ".ps1",
+        ".scr", ".cpl", ".drv", ".ocx", ".lnk", ".vbs",
+    };
 }

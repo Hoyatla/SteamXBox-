@@ -242,6 +242,60 @@ public class FichierTravailTests : IDisposable
         Assert.Empty(FichierTravail.Restantes(carnet));
     }
 
+    /// <summary>Une liste numérotée fait autant d'étapes qu'elle en porte.</summary>
+    /// <remarks>
+    /// <b>C'est l'écriture que le modèle choisit réellement.</b> La consigne demande des
+    /// points-virgules ; à « Ouvre LibreOffice, écris Bonjour et sauvegarde. Puis ouvre le
+    /// dossier », il a rendu les quatre étapes numérotées et séparées par des sauts de ligne. Le
+    /// carnet affichait alors <c>0/1</c>, l'assistant cochait son étape unique après la première
+    /// action, et les trois autres n'existaient pour personne.
+    /// </remarks>
+    [Fact]
+    public void ANumberedListMakesAsManyStepsAsItCarries()
+    {
+        var etapes = FichierTravail.Decouper(
+            "1. Ouvrir LibreOffice\n2. Écrire \"Bonjour\"\n3. Sauvegarder\n4. Ouvrir le dossier");
+
+        Assert.Equal(
+            ["Ouvrir LibreOffice", "Écrire \"Bonjour\"", "Sauvegarder", "Ouvrir le dossier"],
+            etapes);
+    }
+
+    // Le point-virgule que la consigne demande marche toujours : le correctif ajoute une écriture,
+    // il n'en remplace pas une.
+    [Fact]
+    public void TheSemicolonTheInstructionAsksForStillWorks()
+        => Assert.Equal(
+            ["choisir", "animer", "monter"],
+            FichierTravail.Decouper("choisir; animer; monter"));
+
+    // Les deux à la fois, parce qu'un modèle mélange les deux dans la même réponse.
+    [Fact]
+    public void BothWritingsAtOnce()
+        => Assert.Equal(
+            ["a", "b", "c"],
+            FichierTravail.Decouper("- a; - b\n* c"));
+
+    /// <summary>Un nombre au milieu d'une étape n'est pas une puce.</summary>
+    /// <remarks>
+    /// La puce n'est retirée que suivie d'une espace. Sans cette condition, « 3.5 mm » perdrait son
+    /// « 3. » et l'étape mentirait sur la mesure qu'elle porte.
+    /// </remarks>
+    [Fact]
+    public void ANumberInsideAStepIsNotABullet()
+        => Assert.Equal(
+            ["Régler l'épaisseur à 3.5 mm"],
+            FichierTravail.Decouper("Régler l'épaisseur à 3.5 mm"));
+
+    // Rien à découper ne rend rien, plutôt qu'une étape vide qui s'afficherait comme une case à
+    // cocher sans texte.
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(";;\n\n;")]
+    public void NothingToCutYieldsNothing(string liste)
+        => Assert.Empty(FichierTravail.Decouper(liste));
+
     /// <summary>Vieillit un carnet en réécrivant sa date d'ouverture.</summary>
     private static void Vieillir(string titre, DateTime quand)
     {
