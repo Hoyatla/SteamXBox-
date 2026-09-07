@@ -282,10 +282,25 @@ c'est aujourd'hui la seule voie de génération d'image du produit.
 
 ## 6. Ce qui reste à décider
 
-**La qualité contre le temps.** Les 63 secondes ci-dessus valent pour 480×480,
-17 images, 2+2 étapes. C'est un essai de faisabilité, pas un réglage. Ce que
-coûte une vidéo utilisable — 832×480, 81 images — n'a pas été mesuré et se
-compte probablement en dizaines de minutes.
+**La qualité contre le temps — mesuré depuis.** La longueur native de Wan 2.2,
+81 images à 16 i/s :
+
+```
+480×480, 81 images (5,06 s de vidéo), 2+2 étapes
+→ 178,26 s au total, dont 67,31 s d'échantillonnage
+```
+
+**Le chargement coûte plus cher que le calcul : 111 s contre 67.** Encodeur,
+expert haut bruit, expert bas bruit, VAE — quatre chargements, à chaque
+invocation de la CLI.
+
+C'est l'argument décisif pour l'étape 1. **`sd-server` garde ses poids chargés :
+une seconde vidéo avec le même modèle coûterait ~67 s au lieu de 178.** Embarquer
+le serveur plutôt que d'appeler la CLI ne fait pas gagner quelques pour cent, il
+divise le temps par deux et demi.
+
+Ce qui reste non mesuré : 832×480 (la définition native de Wan 480p) et un nombre
+d'étapes réaliste sans les LoRA 4 étapes.
 
 **Le partage de la VRAM.** Décidé : le média prend la carte, le texte reste sur
 processeur et RAM. Le moteur doit donc savoir refuser une génération quand la
