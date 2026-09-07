@@ -8,9 +8,31 @@
     "diffusion":            "../Wan2.2-T2V-LowNoise-Q4_K_M.gguf",
     "diffusion_haut_bruit": "../Wan2.2-T2V-HighNoise-Q4_K_M.gguf",
     "vae":                  "../wan_2.1_vae.safetensors",
-    "umt5":                 "../umt5-xxl-encoder-Q4_K_M.gguf"
+    "umt5":                 "../umt5-xxl-encoder-Q4_K_M.gguf",
+    "lora_dir":             "../loras"
   },
-  "vram_mo": 0,
+  "vram_mo": 9651,
   "params_backend": "diffusion=cpu",
-  "produit": "video"
+  "produit": "video",
+
+  "_vram_mo": "Mesure du 7 septembre 2026 : un expert charge 9 651 Mo. Les deux ne tiennent jamais ensemble sur 12 282 Mo, d'ou params_backend qui garde les poids en RAM. Ce chiffre ne couvre PAS les activations, qui grandissent avec largeur x hauteur x images : voir plafonds.",
+
+  "loras_rapides": {
+    "haut_bruit": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise",
+    "bas_bruit":  "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise"
+  },
+  "_loras_rapides": "S'appliquent par la syntaxe de prompt <lora:nom:1> avec --lora-model-dir. Sans elles il faut une vingtaine d'etapes par expert, et les temps ci-dessous sont faux d'un ordre de grandeur.",
+
+  "etapes_rapides": {
+    "steps": 2,
+    "high_noise_steps": 2,
+    "cfg_scale": 1.0,
+    "high_noise_cfg_scale": 1.0
+  },
+
+  "plafonds": [
+    { "largeur": 480, "hauteur": 480, "images": 81, "secondes": 178, "sur": "RTX 4070 SUPER 12 Go" },
+    { "largeur": 832, "hauteur": 480, "images": 49, "secondes": 209, "sur": "RTX 4070 SUPER 12 Go" }
+  ],
+  "_plafonds": "832x480 en 81 images ECHOUE sur cette carte : il manquait 8 Mo au bloc 3 sur 42. L'ecart est si mince que le resultat depend des applications ouvertes — a traiter comme non disponible, pas comme lent. Au-dela, enchainer par I2V plutot qu'allonger un plan."
 }

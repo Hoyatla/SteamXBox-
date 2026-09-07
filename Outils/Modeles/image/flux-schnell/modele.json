@@ -6,10 +6,22 @@
   "racine": "image",
   "fichiers": {
     "diffusion": "../unet-flux1-schnell-Q5_K_S.gguf",
-    "vae":        "../ae.safetensors",
-    "t5xxl":      "../t5xxl.safetensors",
-    "clip_l":     "../clip_l.safetensors"
+    "vae":       "../ae.safetensors",
+    "t5xxl":     "../t5xxl.safetensors",
+    "clip_l":    "../clip_l.safetensors"
   },
-  "vram_mo": 0,
-  "produit": "image"
+  "vram_mo": 7880,
+  "produit": "image",
+
+  "_vram_mo": "Mesure du 7 septembre 2026 : sd.cpp place le DiT en VRAM (7 880 Mo) et laisse l'encodeur de texte (4 776 Mo) et le VAE (319 Mo) en RAM. Il decide seul et decide juste ici — pas de params_backend a forcer, contrairement a la video.",
+
+  "etapes_rapides": {
+    "steps": 4,
+    "cfg_scale": 1.0
+  },
+  "_etapes_rapides": "schnell est distille : quatre etapes a CFG 1. Les defauts du serveur — 20 etapes a CFG 7 — sont faux pour ce modele et le rendent cinq fois plus lent pour une image moins bonne.",
+
+  "plafonds": [
+    { "largeur": 512, "hauteur": 512, "secondes": 16, "sur": "RTX 4070 SUPER 12 Go" }
+  ]
 }

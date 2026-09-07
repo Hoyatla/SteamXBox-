@@ -8,9 +8,29 @@
     "diffusion":            "../Wan2.2-I2V-LowNoise-Q4_K_M.gguf",
     "diffusion_haut_bruit": "../Wan2.2-I2V-HighNoise-Q4_K_M.gguf",
     "vae":                  "../wan_2.1_vae.safetensors",
-    "umt5":                 "../umt5-xxl-encoder-Q4_K_M.gguf"
+    "umt5":                 "../umt5-xxl-encoder-Q4_K_M.gguf",
+    "lora_dir":             "../loras"
   },
-  "vram_mo": 0,
+  "vram_mo": 9651,
   "params_backend": "diffusion=cpu",
-  "produit": "video"
+  "produit": "video",
+
+  "_vram_mo": "Meme taille que le T2V : un expert charge 9 651 Mo, les deux ne tiennent jamais ensemble sur 12 282 Mo. Le chiffre ne couvre pas les activations.",
+
+  "loras_rapides": {
+    "haut_bruit": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise",
+    "bas_bruit":  "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise"
+  },
+  "_loras_rapides": "S'appliquent par la syntaxe de prompt <lora:nom:1> avec --lora-model-dir. Version v1 ici, la ou le T2V est en v1.1 : ce ne sont pas les memes fichiers, ne pas les intervertir.",
+
+  "etapes_rapides": {
+    "steps": 2,
+    "high_noise_steps": 2,
+    "cfg_scale": 1.0,
+    "high_noise_cfg_scale": 1.0
+  },
+
+  "_essai": "JAMAIS ESSAYE au 8 septembre 2026. Les plafonds du T2V servent de premiere estimation — memes poids, meme architecture — mais l'image de depart ajoute un encodage que rien n'a mesure. C'est ce modele qui permet d'enchainer les plans au-dela de cinq secondes.",
+
+  "plafonds": []
 }

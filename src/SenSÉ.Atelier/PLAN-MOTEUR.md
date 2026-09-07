@@ -221,7 +221,35 @@ Sur le modèle exact de `ServeurModele` (`src/SenSÉ.Tools/Assistant/`) :
 - Le binaire absent est dit clairement, sans planter l'Atelier.
 - Les deux réserves du §3 sont levées et écrites ici même.
 
-### Étape 2 — le rangement des modèles
+### Étape 2 — le rangement des modèles — **FAITE le 8 septembre 2026**
+
+Le rangement décrit ci-dessous a été exécuté. L'état réel :
+
+```
+Outils/Modeles/
+  Qwen3.5-4B-Q4_K_M.gguf + mmproj      ← le modèle de langage, resté à la racine
+  autres/                              ← le 9B, mis de côté
+  image/
+    unet-flux1-schnell-Q5_K_S.gguf, ae, clip_l, t5xxl
+    flux-schnell/modele.json
+  video/                               53,1 Go
+    Wan2.2-{T2V,I2V}-{High,Low}Noise-Q4_K_M.gguf, umt5, wan_2.1_vae, svd_xt
+    loras/  (les quatre lightx2v 4 étapes)
+    wan22-t2v/modele.json, wan22-i2v/modele.json
+```
+
+Les trois manifestes sont valides et chacun de leurs chemins déclarés existe —
+vérifié. `vram_mo` est renseigné d'après les mesures : 7 880 Mo pour le DiT de
+Flux, 9 651 Mo par expert Wan.
+
+**Le modèle de langage est resté à la racine, volontairement.** `ServeurModele`
+cherche `*.gguf` au premier niveau seulement ; le déplacer sous `texte/` le
+casserait tant que cette règle n'a pas changé. C'est la seule partie de l'étape 2
+qui reste à faire, et elle appartient au même chantier que la flottille.
+
+Ce qui suit décrit l'intention, gardée comme référence.
+
+---
 
 ```
 Outils/Modeles/
@@ -507,21 +535,42 @@ les checkpoints et n'a pas été essayé.
 
 ## Annexe — la ligne de commande qui a marché
 
+**Répertoire courant : `Outils/Modeles/video/wan22-t2v`** — celui du manifeste.
+C'est ce qui rend les chemins relatifs valides et contourne l'accent (§4a).
+
 ```
 sd-cli.exe -M vid_gen \
-  --diffusion-model            <...>/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf \
-  --high-noise-diffusion-model <...>/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf \
-  --vae                        <...>/wan_2.1_vae.safetensors \
-  --t5xxl                      <...>/umt5-xxl-encoder-Q4_K_M.gguf \
-  --lora-model-dir             <...>/loras \
+  --diffusion-model            ../Wan2.2-T2V-LowNoise-Q4_K_M.gguf \
+  --high-noise-diffusion-model ../Wan2.2-T2V-HighNoise-Q4_K_M.gguf \
+  --vae                        ../wan_2.1_vae.safetensors \
+  --t5xxl                      ../umt5-xxl-encoder-Q4_K_M.gguf \
+  --lora-model-dir             ../loras \
   -p "... <lora:wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise:1>" \
-  --video-frames 17 -H 480 -W 480 \
+  --video-frames 81 -H 480 -W 480 --fps 16 \
   --steps 2 --high-noise-steps 2 \
   --cfg-scale 1.0 --high-noise-cfg-scale 1.0 \
   --params-backend diffusion=cpu --diffusion-fa --vae-tiling \
   -o sortie.mp4
 ```
 
-Les chemins doivent être **sans accent** (voir §4a). La sortie est écrite en
-`.avi` MJPEG même si l'extension demandée est `.mp4` — à convertir avec le
-`ffmpeg` déjà embarqué, ou à accepter tel quel.
+Et pour Flux, depuis `Outils/Modeles/image/flux-schnell` :
+
+```
+sd-cli.exe -M img_gen \
+  --diffusion-model ../unet-flux1-schnell-Q5_K_S.gguf \
+  --vae             ../ae.safetensors \
+  --clip_l          ../clip_l.safetensors \
+  --t5xxl           ../t5xxl.safetensors \
+  -p "..." --cfg-scale 1.0 --steps 4 -H 512 -W 512 --diffusion-fa \
+  -o sortie.png
+```
+
+**Les noms de fichiers ont changé au déménagement du 8 septembre** — plus de
+`A14B` dans les Wan, `t5xxl.safetensors` au lieu de `t5xxl_fp8_e4m3fn`,
+`unet-flux1-schnell` au lieu de `flux1-schnell`. Ces lignes-ci sont à jour ; toute
+ligne de commande trouvée ailleurs ne l'est pas.
+
+**Aucun chemin ne doit porter d'accent** (§4a) — d'où le répertoire courant et les
+`../`. La sortie est écrite en `.avi` MJPEG même si l'extension demandée est
+`.mp4` : à convertir avec le `ffmpeg` déjà embarqué, ou à nommer pour ce qu'elle
+est.
