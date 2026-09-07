@@ -83,9 +83,40 @@ Le binaire connaît nativement l'architecture à double expert de Wan 2.2 :
 `--high-noise-diffusion-model`, `--high-noise-steps`, `--moe-boundary`,
 `--vae-format wan`, `-M vid_gen`. Rien à bricoler.
 
-**Il fournit aussi `sd-server.exe`** — la même forme que `llama-server.exe`. C'est
-lui qu'il faut embarquer, pas la CLI : un processus qui vit, qui garde ses poids
-chargés, et qu'on arrête avec la fenêtre.
+**Il fournit aussi `sd-server.exe`** — la même forme que `llama-server.exe` : un
+processus qui vit, garde ses poids chargés, et qu'on arrête avec la fenêtre.
+
+### Le contrat du serveur, relevé
+
+Démarré avec `--listen-port 1234` (défaut `127.0.0.1:1234`), Flux chargé :
+
+| Route | Réponse |
+|---|---|
+| `GET /v1/models` | `{"data":[{"id":"sd-cpp-local","object":"model","owned_by":"local"}]}` |
+| `POST /v1/images/generations` | `{"created":…,"data":[{"b64_json":"…"}]}` |
+| `POST /v1/images/edits` | existe (400 sans corps valide) |
+| `POST /v1/video/generations` | **404 — n'existe pas** |
+
+C'est une API façon OpenAI. **Le modèle se fixe au lancement du serveur** : les
+poids sont passés en arguments de démarrage, pas par requête. Changer de modèle,
+c'est redémarrer le processus — ce qui confirme la règle de l'étape 2 bis par une
+autre voie.
+
+**Deux réserves à lever en premier, avant d'écrire quoi que ce soit d'autre.**
+
+1. **Pas de route vidéo.** Confirmé : `/v1/video/generations` rend 404. Il faut
+   donc établir si `-M vid_gen` au démarrage du serveur fait produire des vidéos
+   par `/v1/images/generations`, ou si la vidéo doit passer par la CLI. **Si c'est
+   la CLI, les 111 secondes de chargement ne s'amortissent pas pour la vidéo** —
+   ce qui change l'intérêt du serveur pour la moitié du travail. C'est la première
+   chose à vérifier, elle prend dix minutes.
+
+2. **Les paramètres ne sont pas ceux qu'on croit.** Un appel portant
+   `"steps":4, "cfg_scale":1.0` a été exécuté avec `Steps: 20, CFG scale: 7.0` —
+   les noms envoyés ont été ignorés en silence. Pour Flux schnell, 20 étapes à
+   CFG 7 est un réglage faux. Les noms réellement acceptés sont à relever avant de
+   bâtir dessus, sans quoi le moteur produira des images lentes et laides en
+   croyant obéir.
 
 ---
 
@@ -178,8 +209,14 @@ Sur le modèle exact de `ServeurModele` (`src/SenSÉ.Tools/Assistant/`) :
 - Téléchargement au premier besoin, sur le modèle de `ChromiumEmbarque.cs`
   (`src/SenSÉ.Mcp.Bus/`) : révision épinglée, `.part` pendant la copie.
 
-**Ce qui est fini quand :** `sd-server` répond sur son port, et s'arrête quand la
-fenêtre se ferme. Rien d'autre.
+**Fini quand :**
+
+- `GET /v1/models` répond depuis SenSÉ, modèle chargé.
+- La fenêtre de l'Atelier se ferme → le processus meurt, vérifié au gestionnaire
+  de tâches. Pas d'orphelin. (`JobEnfants` est le filet en dessous, comme pour les
+  serveurs MCP.)
+- Le binaire absent est dit clairement, sans planter l'Atelier.
+- Les deux réserves du §3 sont levées et écrites ici même.
 
 ### Étape 2 — le rangement des modèles
 
@@ -207,6 +244,35 @@ mal le jour où un format de plus arrive.
 Ceci remplace la règle actuelle de `ServeurModele` — « un seul `.gguf` à la
 racine, les autres dans `autres\` » — **qui est ce qui interdit aujourd'hui la
 flottille de modèles**.
+
+Forme suggérée du manifeste, à côté du poids :
+
+```json
+{
+  "id": "wan22-t2v",
+  "nom": "Wan 2.2 texte vers vidéo",
+  "moteur": "sd.cpp",
+  "espace": "Multimedia",
+  "racine": "video",
+  "fichiers": {
+    "diffusion":            "unet/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf",
+    "diffusion_haut_bruit": "unet/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf",
+    "vae":                  "vae/wan_2.1_vae.safetensors",
+    "t5xxl":                "text_encoders/umt5-xxl-encoder-Q4_K_M.gguf"
+  },
+  "vram_mo": 9651,
+  "params_backend": "diffusion=cpu",
+  "produit": "video"
+}
+```
+
+Tous les chemins sont **relatifs à `racine`** — voir §4a, c'est ce qui contourne
+l'accent. `vram_mo` sert à refuser une exécution avant de charger dix secondes de
+poids pour rien.
+
+**Fini quand :** les 66 Go sont sous `Outils/Modeles/{image,video}`, chaque modèle
+a son manifeste, et un test lit les manifestes et vérifie que chaque fichier
+déclaré existe. Ce test est le seul garde-fou contre un rangement à moitié fait.
 
 ### Étape 2 bis — un seul modèle à la fois, et l'ordre des nœuds
 
@@ -249,6 +315,20 @@ Nœuds minimaux :
 - `charger_modele` / `lora` — pour que le graphe dise quel poids il veut, au lieu
   de le supposer.
 
+**Fini quand :** un graphe à trois nœuds — texte → image → vidéo — s'exécute de
+bout en bout sans que ComfyUI tourne. C'est le seul critère qui compte, et il est
+binaire.
+
+Deux gardes à ne pas oublier :
+
+- Une exécution refusée **avant** le chargement quand la VRAM manque, avec le
+  chiffre manquant dans le message. Aujourd'hui l'échec arrive après dix secondes
+  de chargement et dit `cannot make enough memory available on CUDA0`, ce qui ne
+  se lit pas.
+- La sortie est écrite en `.avi` MJPEG même quand on demande `.mp4` (§annexe). Le
+  nœud doit convertir avec le `ffmpeg` déjà embarqué, ou nommer le fichier pour ce
+  qu'il est. Rendre un `.mp4` qui n'en est pas un ferait échouer l'outil suivant.
+
 ### Étape 4 — le raccordement au shell
 
 Chaque nœud exécutable devient une commande SenSÉ. C'est ici que le chantier paie :
@@ -258,6 +338,18 @@ SenSÉ avec des verbes SenSÉ**, et non un appel HTTP vers un étranger.
 **La règle du produit tient par construction** : le système ne peut émettre que
 des commandes que l'utilisateur aurait pu taper. Ce n'est pas une contrainte à
 contourner, c'est la définition du vocabulaire.
+
+Les verbes MCP de l'Atelier existent déjà (`executer`, `executer_noeud`,
+`annuler`, `refaire`, paramètre `espace`). Il manque de quoi lister ce qui est
+disponible et suivre ce qui est long :
+
+- `modeles` — ce qui est installé, par espace, avec le coût VRAM.
+- `etat` — ce qu'une exécution fait en ce moment, puisqu'une vidéo prend trois
+  minutes et qu'un appel qui ne rend rien pendant trois minutes se lit comme une
+  panne.
+
+**Fini quand :** une commande du shell produit une image, sans passer par la
+fenêtre de l'Atelier, et l'utilisateur peut taper la même commande lui-même.
 
 ### Étape 5 — Comfy dégage
 
@@ -277,6 +369,59 @@ Côté code, 26 fichiers mentionnent Comfy. Le gros est
 `FluxGel`, `WorkflowsLivres`, `SequenceAnimee`, `PaquetGenerateur`,
 `OptionsVivantes`. **Ne rien supprimer là avant que l'étape 3 ne soit verte** :
 c'est aujourd'hui la seule voie de génération d'image du produit.
+
+---
+
+## 5 bis. L'ordre, et ce qu'il ne faut pas faire
+
+### L'ordre
+
+Les étapes 1 et 2 sont indépendantes et peuvent se mener en parallèle. Tout le
+reste s'enchaîne :
+
+```
+1 (serveur)  ─┐
+              ├─→ 3 (nœuds) ─→ 4 (shell) ─→ 5 (Comfy dégage)
+2 (modèles)  ─┘
+      └─ 2 bis (un seul à la fois) est une règle, pas une étape :
+         elle contraint 1 et 3, elle ne se développe pas seule.
+```
+
+**Rien ne se supprime avant que l'étape 3 ne soit verte.** C'est la seule règle
+d'ordonnancement qui compte.
+
+### Ce qu'il ne faut pas faire
+
+- **Ne pas copier les 66 Go.** Tout est sur `C:` ; le déplacement est un
+  renommage, instantané. Une copie prendrait une heure et doublerait l'occupation
+  du disque le temps de la faire.
+- **Ne pas supprimer `src/SenSÉ.Tools/Generation/` avant l'étape 3.** C'est
+  aujourd'hui la seule voie de génération d'image du produit, et vingt-six
+  fichiers en dépendent.
+- **Ne pas créer de dossier hors de `C:\Program Files\SenSÉ`.** Ni jonction, ni
+  dossier de travail, ni sortie. Le §4a règle le problème de l'accent sans sortir
+  du produit.
+- **Ne pas croire le succès sur parole.** Le binaire annonce `save result` et
+  écrit un `.avi` quand on demande un `.mp4` ; il accepte `steps:4` et exécute
+  `Steps: 20`. Chaque étape doit vérifier son résultat sur le disque, pas dans le
+  message.
+- **Ne pas chercher à tenir deux modèles de diffusion en VRAM.** Mesuré, ils n'y
+  tiennent pas. Un moteur qui l'espère échouera après dix secondes de chargement,
+  au hasard des autres applications ouvertes.
+
+### Ce qui se teste sans carte graphique
+
+Utile, parce que la suite de tests du produit tourne sans GPU :
+
+- La lecture des manifestes et l'existence des fichiers déclarés.
+- L'ordonnancement d'un graphe par modèle — un graphe qui alterne image et vidéo
+  doit produire deux chargements, pas quatre. Cela se vérifie sur un faux moteur
+  qui compte les chargements, sans rien générer.
+- La construction de la ligne de commande : chemins relatifs, jamais absolus.
+- Le refus avant chargement quand la VRAM déclarée manque.
+
+Ce qui exige la carte — la génération elle-même — reste vérifié à la main, avec
+les chiffres du §3 comme référence.
 
 ---
 
