@@ -37,6 +37,18 @@ public static class AssistantRecherche
 
     public static IReadOnlyList<AssistantLocal.Capacite> Creer(Action<string>? journal)
     {
+        // Ce qui ne peut pas repondre n'est pas propose.
+        //
+        // Les deux recherches distantes dependent d'une instance configuree dans les reglages, et
+        // c'est un fait sur la machine, pas sur le modele : aucune consigne ne rattrape une
+        // capacite declaree qui echoue a chaque appel. Mesure dans la session du 7 septembre 2026 —
+        // demande « cherche sur le web », recherche_web refusee, recherche_documents refusee,
+        // recherche_fichiers hors sujet, contexte plein, main rendue.
+        //
+        // Les retirer rend deux tours et, ce qui compte davantage ici, la place que leur
+        // declaration occupait dans un contexte qui saturait.
+        var reglages = SearchPolicyStore.Load(journal);
+
         return
         [
             new AssistantLocal.Capacite(
@@ -60,7 +72,7 @@ public static class AssistantRecherche
                 [new AssistantLocal.Parametre("termes", "Les mots a chercher dans les messages.", [])],
                 args => Courrier(args.GetValueOrDefault("termes") ?? "", journal)),
 
-            new AssistantLocal.Capacite(
+            .. reglages.Web.IsUsable ? new[] { new AssistantLocal.Capacite(
                 "recherche_web",
                 "Cherche sur le web via l'instance configuree dans les reglages. Rend au plus "
                 + MaximumResultats + " resultats, chacun avec [web], son titre, son adresse et un "
@@ -68,9 +80,9 @@ public static class AssistantRecherche
                 + "web n'est pas configuree ou a ete desactivee, le dit clairement : ne conclus "
                 + "alors pas que le sujet n'existe pas.",
                 [new AssistantLocal.Parametre("termes", "Les mots a chercher sur le web.", [])],
-                args => Web(args.GetValueOrDefault("termes") ?? "", journal)),
+                args => Web(args.GetValueOrDefault("termes") ?? "", journal)) } : [],
 
-            new AssistantLocal.Capacite(
+            .. reglages.Docs.IsUsable ? new[] { new AssistantLocal.Capacite(
                 "recherche_documents",
                 "Cherche dans le corpus documentaire indexe (Meilisearch), par le CONTENU des "
                 + "documents et non par leur nom. Rend au plus " + MaximumResultats + " resultats, "
@@ -78,7 +90,7 @@ public static class AssistantRecherche
                 + "A preferer a recherche_fichiers quand tu cherches ce qu'un document DIT plutot "
                 + "que comment il s'appelle.",
                 [new AssistantLocal.Parametre("termes", "Les mots a chercher dans le contenu des documents.", [])],
-                args => Documents(args.GetValueOrDefault("termes") ?? "", journal)),
+                args => Documents(args.GetValueOrDefault("termes") ?? "", journal)) } : [],
 
             new AssistantLocal.Capacite(
                 "ouvrir",
@@ -312,10 +324,14 @@ public static class AssistantRecherche
 
         var reglages = SearchPolicyStore.Load(journal).Web;
 
-        if (reglages.Effective.Provider == WebSearchProvider.Disabled)
+        // Normalement jamais atteint, puisque la capacite n'est plus declaree quand elle ne peut
+        // pas repondre. Gardee pour le cas ou les reglages changent au milieu d'une session, et
+        // formulee pour que le modele s'arrete et le dise au lieu d'essayer autre chose.
+        if (!reglages.IsUsable)
         {
-            return "La recherche web est desactivee dans les reglages. Ne conclus pas que le sujet "
-                + "n'existe pas : la question n'a pas ete posee.";
+            return "La recherche web ne peut pas repondre ici : aucune instance n'est configuree "
+                + "dans les reglages. ARRETE-TOI et dis-le a l'utilisateur — n'essaie pas de la "
+                + "remplacer par une autre recherche, et ne conclus pas que le sujet n'existe pas.";
         }
 
         try

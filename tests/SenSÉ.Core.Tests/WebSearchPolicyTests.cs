@@ -115,4 +115,50 @@ public class WebSearchPolicyTests
         Assert.Equal("https://recherche.ecole", resolved.Effective.InstanceUrl);
         Assert.Equal(SafeSearch.Strict, resolved.Effective.SafeSearch);
     }
+
+    /// <summary>Seule une instance peut répondre à un programme.</summary>
+    /// <remarks>
+    /// <b>C'est le réglage par défaut qui rendait la capacité inutilisable.</b> En mode navigateur —
+    /// celui d'une installation neuve — <c>web:</c> envoie l'utilisateur vers son moteur dans son
+    /// navigateur : cela le sert très bien et ne sert l'assistant en rien, puisque rien ne revient
+    /// qu'un programme puisse lire. La capacité était pourtant déclarée, appelait SearXNG, et
+    /// recevait « L'adresse de l'instance de recherche n'est pas valide » à chaque fois.
+    ///
+    /// <para>
+    /// Mesuré le 7 septembre 2026 : à « cherche sur le web », l'assistant a essuyé ce refus, tenté
+    /// le corpus documentaire, tenté l'index des fichiers, rempli son contexte et rendu la main
+    /// sans rien avoir cherché.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void OnlyAnInstanceCanAnswerAProgram()
+    {
+        var navigateur = WebSearchPolicy.Resolve(
+            new WebSearchSettings(WebSearchProvider.Browser), policy: null);
+
+        var instance = WebSearchPolicy.Resolve(
+            new WebSearchSettings(WebSearchProvider.Instance, "https://recherche.ecole"), policy: null);
+
+        Assert.False(navigateur.IsUsable);
+        Assert.True(instance.IsUsable);
+    }
+
+    // Une instance sans adresse ne repond pas davantage, et c'est l'etat ou l'on tombe en ayant
+    // choisi le bon mode sans avoir fini de le configurer.
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AnInstanceWithoutAnAddressAnswersNothing(string adresse)
+        => Assert.False(
+            WebSearchPolicy
+                .Resolve(new WebSearchSettings(WebSearchProvider.Instance, adresse), policy: null)
+                .IsUsable);
+
+    // Desactivee, evidemment — mais l'ecrire garde les trois etats sous le meme test.
+    [Fact]
+    public void DisabledIsNotUsable()
+        => Assert.False(
+            WebSearchPolicy
+                .Resolve(new WebSearchSettings(WebSearchProvider.Disabled), policy: null)
+                .IsUsable);
 }

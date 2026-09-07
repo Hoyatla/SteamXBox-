@@ -38,6 +38,25 @@ public sealed record WebSearchSettings(
 public sealed record ResolvedWebSearch(WebSearchSettings Effective, IReadOnlySet<string> Locked)
 {
     public bool IsLocked(string field) => Locked.Contains(field);
+
+    /// <summary>Whether a caller can get <i>results back</i> from it.</summary>
+    /// <remarks>
+    /// <b>Only an instance can answer a program.</b> <see cref="WebSearchProvider.Browser"/> — the
+    /// default — sends the user to their own engine in their own browser, which serves them well
+    /// and serves the assistant not at all: nothing comes back that code can read.
+    ///
+    /// <para>
+    /// The distinction was missing and it cost a whole session. Asked to search the web, the
+    /// assistant called the capacity, got « L'adresse de l'instance de recherche n'est pas
+    /// valide » — the SearXNG client refusing an address that mode never sets — then tried the
+    /// document corpus, then the file index, and filled its context flailing. The capacity was
+    /// declared on an installation where it could not work, and no amount of instruction fixes
+    /// that: it is a fact about the settings, not about the model.
+    /// </para>
+    /// </remarks>
+    public bool IsUsable =>
+        Effective.Provider == WebSearchProvider.Instance
+        && !string.IsNullOrWhiteSpace(Effective.InstanceUrl);
 }
 
 /// <summary>

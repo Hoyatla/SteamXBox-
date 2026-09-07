@@ -933,9 +933,17 @@ public sealed class AssistantLocal
                 + "travail » et je repars de la première étape non cochée.";
         }
 
+        // Nommée comme une dernière étape, jamais rendue comme une réponse.
+        //
+        // Elle l'était : la boucle s'arrêtait, et la dernière sortie d'outil partait telle quelle
+        // à l'utilisateur. Il a lu « deplace a (300,150) » comme message de l'assistant, à qui il
+        // venait de demander un résumé sur la pomme de terre. Ce n'est pas une réponse, c'est la
+        // trace de la dernière chose tentée — utile, à condition de dire ce qu'elle est.
+        var tours = ToursMaximum.ToString(CultureInfo.InvariantCulture);
+
         return dernierResultat.Length > 0
-            ? dernierResultat
-            : $"L'assistant n'a pas abouti en {ToursMaximum.ToString(CultureInfo.InvariantCulture)} échanges.";
+            ? $"Je n'y suis pas arrivé en {tours} échanges. Dernière étape effectuée : {dernierResultat}"
+            : $"L'assistant n'a pas abouti en {tours} échanges.";
     }
 
     /// <summary>Le contexte est-il assez plein pour qu'il faille le renouveler ?</summary>
