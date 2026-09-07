@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using SenSÉ.Atelier.Execution;
+using SenSÉ.Atelier.Langages;
 using SenSÉ.Atelier.Modele;
 
 namespace SenSÉ.Atelier.Bibliotheque.Codage;
@@ -124,45 +125,9 @@ public static class Primitives
             }
         ));
 
-        // 8. executer_python
-        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "executer_python", "Exécuter Python", "Execute un script Python et capture stdout/stderr.",
-            Espace.Codage, "Code",
-            new List<Port> { new("code", TypePort.Texte, true) },
-            new List<Port>
-            {
-                new("stdout", TypePort.Texte, false),
-                new("stderr", TypePort.Texte, false),
-            },
-            new List<ParametreNoeud> { new("python", "Chemin python.exe", "chemin", "python") },
-            async ctx =>
-            {
-                var code = ctx.Entree("code") ?? ctx.Ch("code");
-                if (string.IsNullOrEmpty(code)) return ResultatExecution.Fail("code vide");
-                var py = ctx.Ch("python", "python");
-                var tmp = Path.Combine(Path.GetTempPath(), "atelier_" + Guid.NewGuid().ToString("N") + ".py");
-                File.WriteAllText(tmp, code);
-                try
-                {
-                    var psi = new ProcessStartInfo(py, "\"" + tmp + "\"")
-                    {
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    };
-                    using var p = Process.Start(psi)!;
-                    var so = p.StandardOutput.ReadToEnd();
-                    var se = p.StandardError.ReadToEnd();
-                    p.WaitForExit(30_000);
-                    return ResultatExecution.Ok(new() { ["stdout"] = so, ["stderr"] = se });
-                }
-                finally
-                {
-                    try { File.Delete(tmp); } catch { }
-                }
-            }
-        ));
+
+        // 8. executer_code (nouveau, absorbe executer_python)
+        ExecuterCode.Enregistrer();
 
         // 9. executer_commande
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(

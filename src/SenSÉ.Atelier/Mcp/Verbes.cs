@@ -10,6 +10,7 @@ using SenSÉ.Atelier.Custom;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
 using SenSÉ.Atelier.Diffusion;
+using SenSÉ.Atelier.Langages;
 using SenSÉ.Atelier.Serialisation;
 
 namespace SenSÉ.Atelier.Mcp;
@@ -61,6 +62,7 @@ public sealed class Verbes
                 "custom/supprimer"         => CustomSupprimer(body!),
                 "custom/lister"            => CustomLister(),
                 "modeles"                  => ModelesLister(),
+                "langages"                => LangagesLister(),
                 "etat"                     => ExecutionEtat(query),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
@@ -543,5 +545,15 @@ public sealed class Verbes
             racine = m.Racine, fichier_diffusion = m.Fichiers.GetValueOrDefault("diffusion"),
         }));
         return new { ok = true, data = new { modeles = liste } };
+    }
+
+    /// <summary>Liste les langages detectes sur la machine (executer_code).</summary>
+    private object LangagesLister()
+    {
+        var liste = SenSÉ.Atelier.Langages.Detecteur.Moteurs.Select(m => new {
+            id = m.Id, nom = m.Nom, rang = m.Rang, extensions = m.Extensions,
+            latence_ms = m.LatenceMs, taille_mo = m.TailleMo, executable = m.Executable,
+        });
+        return new { ok = true, data = new { langages = liste } };
     }
 }
