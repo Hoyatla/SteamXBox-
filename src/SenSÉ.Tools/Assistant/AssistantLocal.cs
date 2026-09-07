@@ -129,6 +129,59 @@ public sealed class AssistantLocal
     /// <summary>Ce que le serveur a compté de jetons au dernier échange.</summary>
     private int _jetons;
 
+    /// <summary>Ce que le fil occupe, en jetons, d'après le dernier compte du serveur.</summary>
+    /// <remarks>
+    /// Rendu pour être montré. La place se remplissait sans que rien ne le dise, et l'utilisateur
+    /// n'apprenait qu'elle avait débordé qu'en voyant un travail repartir de son début.
+    /// </remarks>
+    public int Jetons => _jetons;
+
+    /// <summary>La place totale, en jetons.</summary>
+    public static int Place => ServeurModele.Contexte;
+
+    /// <summary>À partir d'où l'assistant se compacte de lui-même.</summary>
+    /// <remarks>
+    /// Montré sur la jauge, pour que le seuil ne soit pas une surprise : ce qui déclenche une
+    /// reprise doit être visible avant de se déclencher.
+    /// </remarks>
+    public static double Seuil => PartPleine;
+
+    /// <summary>
+    /// Jette le fil et garde la consigne. Immédiat, et sans appel.
+    /// </summary>
+    /// <remarks>
+    /// <b>La différence avec <see cref="Compacter"/> est ce qui survit.</b> Compacter demande au
+    /// modèle où il en est, écrit la réponse au carnet, et repart : ce qui a été établi est gardé,
+    /// au prix d'une génération. Vider ne demande rien à personne — ce qui n'a pas été noté est
+    /// perdu, et c'est précisément ce qu'on veut quand le fil est parti de travers.
+    ///
+    /// <para>Les carnets ne sont pas touchés : ils sont sur le disque, et c'est tout leur intérêt.
+    /// Le rappel les replace aussitôt devant le modèle.</para>
+    /// </remarks>
+    public void Vider(Action<string>? journal, bool autonome = false)
+    {
+        var consigne = _messages[0];
+
+        _messages.Clear();
+        _messages.Add(consigne!);
+        _jetons = 0;
+
+        Rappeler(journal, autonome);
+
+        journal?.Invoke("Contexte vidé : le fil est jeté, la consigne et les carnets restent.");
+    }
+
+    /// <summary>
+    /// Écrit où en est le travail, puis repart sur un fil neuf. Rend faux s'il n'y avait rien à garder.
+    /// </summary>
+    /// <remarks>
+    /// Le même geste que l'assistant fait seul quand sa place déborde — voir
+    /// <see cref="Consolider"/> — offert au bouton pour qu'on puisse le faire avant, plutôt que de
+    /// le subir au milieu d'une tâche.
+    /// </remarks>
+    public bool Compacter(Action<string>? journal, CancellationToken arret, bool autonome = false)
+        => Consolider(journal, arret, autonome);
+
     /// <summary>
     /// La consigne du systeme : la partie fixe, suivie des chemins reels de cette machine.
     /// </summary>

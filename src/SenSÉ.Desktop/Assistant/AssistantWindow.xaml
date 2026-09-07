@@ -16,6 +16,7 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0" Margin="0,0,0,12">
@@ -116,7 +117,45 @@
                      Background="Transparent" BorderThickness="0"
                      Foreground="{StaticResource AccentBrush}"/>
 
-        <Grid Grid.Row="4" Margin="0,12,0,0">
+        <!-- La place de travail du modele, montree plutot que devinee.
+
+             Elle se remplit sans que rien ne le dise, et quand elle deborde l'assistant repart sur
+             un fil neuf au milieu d'une tache — ce que l'utilisateur ne voit qu'apres coup, sous la
+             forme d'un travail qui recommence. Une jauge coute une ligne et supprime la surprise.
+
+             Les deux boutons sont les deux facons de faire de la place, et elles ne se valent pas :
+             compacter garde ce qui a ete etabli en le passant au carnet, vider jette le fil. Le
+             second est immediat et sans appel, le premier demande une generation au modele. -->
+        <Grid Grid.Row="4" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock x:Name="ContexteTexte" FontSize="10"
+                           Foreground="{StaticResource TextDimBrush}"/>
+
+                <ProgressBar x:Name="Contexte" Height="4" Margin="0,3,12,0"
+                             Minimum="0" Maximum="100" Value="0"
+                             Background="{StaticResource BgMediumBrush}" BorderThickness="0"
+                             Foreground="{StaticResource AccentBrush}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="Compacter" Content="Compacter"
+                        Padding="10,4" FontSize="11"
+                        ToolTip="Écrit où en est le travail dans le carnet, puis repart sur un fil neuf. Ce qui a été établi survit. Demande une génération au modèle."
+                        Click="CompacterClic"/>
+
+                <Button x:Name="Vider" Content="Vider le contexte"
+                        Margin="6,0,0,0" Padding="10,4" FontSize="11"
+                        ToolTip="Jette le fil de la conversation. La consigne et les carnets restent ; ce qui n'a pas été noté est perdu."
+                        Click="ViderClic"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -163,6 +202,21 @@
                 <CheckBox x:Name="Seul" Content="Faire tout seul"
                           VerticalAlignment="Center" Margin="12,0,0,0"
                           ToolTip="L'assistant choisit les outils lui-même et enchaîne, au lieu de proposer."/>
+
+                <!-- Le pilotage d'applications reelles, en developpement, et donc a demander.
+
+                     Prendre le premier plan, taper au clavier d'une autre fenetre, deplacer la
+                     souris : ces verbes agissent sur ce que l'utilisateur est en train de faire, et
+                     ils sont ceux qui echouent le plus. Une case, pas un bouton, pour la meme
+                     raison que « Faire tout seul » : c'est un etat qu'on doit voir durer.
+
+                     Decoche, les verbes ne sont pas seulement refuses, ils ne sont pas declares.
+                     Un modele ne peut pas s'entetter sur ce qu'il ignore, et la place que leur
+                     declaration occupait revient a la conversation. -->
+                <CheckBox x:Name="Interactif" Content="Mode interactif"
+                          VerticalAlignment="Center" Margin="12,0,0,0"
+                          ToolTip="En développement. Donne à l'assistant le clavier, la souris et le premier plan des autres fenêtres. Décoché, il travaille par les fichiers et les outils."
+                          Checked="InteractifChange" Unchecked="InteractifChange"/>
 
                 <Button x:Name="Envoyer" Content="Envoyer"
                         Margin="8,0,0,0" Padding="16,8"

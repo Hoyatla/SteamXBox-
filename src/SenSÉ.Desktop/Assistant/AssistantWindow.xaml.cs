@@ -159,6 +159,129 @@ public partial class AssistantWindow : Window
     /// qui ne l'était pas.
     /// </para>
     /// </remarks>
+    /// <summary>Écrit sur la jauge ce que le fil occupe.</summary>
+    /// <remarks>
+    /// <b>En jetons et en pour cent, les deux.</b> Le pour cent dit s'il faut s'inquiéter, le
+    /// nombre dit de combien on parle — et c'est lui qui rend la jauge utilisable pour décider
+    /// entre compacter et vider. Le seuil de reprise automatique est nommé plutôt que caché : ce
+    /// qui va déclencher un redémarrage de fil doit se voir venir.
+    ///
+    /// <para>
+    /// Le compte vient du serveur, à chaque réponse. Avant le premier échange il vaut zéro, et la
+    /// jauge le dit ainsi plutôt que de faire semblant d'estimer.
+    /// </para>
+    /// </remarks>
+    private void Jauger()
+    {
+        var jetons = _agent.Jetons;
+        var place = AssistantLocal.Place;
+        var part = place > 0 ? (double)jetons / place : 0;
+
+        Contexte.Value = Math.Clamp(part * 100, 0, 100);
+
+        var seuil = (int)(AssistantLocal.Seuil * 100);
+
+        ContexteTexte.Text = jetons == 0
+            ? $"Contexte vide sur {place:N0} jetons."
+            : $"Contexte : {jetons:N0} / {place:N0} jetons — {part:P0}. "
+              + $"L'assistant se compacte seul au-delà de {seuil} %.";
+
+        // Orange des le seuil franchi, et pas a quatre-vingt-quinze pour cent : c'est a ce moment-la
+        // que la prochaine reponse repartira sur un fil neuf, donc a ce moment-la qu'il faut le
+        // voir. Orange et non rouge : le contexte qui se remplit est le fonctionnement normal, pas
+        // une panne — c'est un avertissement, et le rouge de ce theme dit l'echec.
+        Contexte.Foreground = part >= AssistantLocal.Seuil
+            ? (System.Windows.Media.Brush)FindResource("AccentOrangeBrush")
+            : (System.Windows.Media.Brush)FindResource("AccentBrush");
+
+        Compacter.IsEnabled = !_occupe && jetons > 0;
+        Vider.IsEnabled = !_occupe && jetons > 0;
+    }
+
+    /// <summary>Compacte à la demande, avant que la place ne déborde d'elle-même.</summary>
+    private async void CompacterClic(object sender, RoutedEventArgs e)
+    {
+        if (_occupe)
+        {
+            return;
+        }
+
+        _occupe = true;
+        Travail.Visibility = Visibility.Visible;
+        Jauger();
+
+        try
+        {
+            _arret?.Dispose();
+            _arret = new CancellationTokenSource();
+
+            var jeton = _arret.Token;
+
+            // Le modele est interroge : hors du fil d'affichage, comme un echange ordinaire.
+            var garde = await Task.Run(() => _agent.Compacter(
+                message => Dispatcher.Invoke(() => Dire("systeme", message)),
+                jeton,
+                Seul.IsChecked == true));
+
+            Dire("systeme", garde
+                ? "Contexte compacté : l'état du travail est passé au carnet, le fil repart neuf."
+                : "Rien à compacter : aucun travail en cours à écrire dans un carnet.");
+        }
+        catch (Exception exception)
+        {
+            _journal?.Invoke($"compacter failed: {exception.GetType().Name}: {exception.Message}");
+            Dire("systeme", exception.Message);
+        }
+        finally
+        {
+            Travail.Visibility = Visibility.Collapsed;
+            _occupe = false;
+            Rafraichir();
+        }
+    }
+
+    /// <summary>Jette le fil, après avoir dit ce que cela coûte.</summary>
+    /// <remarks>
+    /// Confirmé parce que c'est irréversible et que le bouton voisin, lui, ne l'est pas : deux
+    /// boutons côte à côte dont un seul détruit demandent qu'on distingue lequel avant le clic et
+    /// non après.
+    /// </remarks>
+    private void ViderClic(object sender, RoutedEventArgs e)
+    {
+        if (_occupe)
+        {
+            return;
+        }
+
+        var reponse = MessageBox.Show(
+            "Vider le contexte de l'assistant ?\n\n"
+            + "Le fil de la conversation est jeté. La consigne et les carnets restent — "
+            + "ce qui n'a pas été noté dans un carnet est perdu.\n\n"
+            + "« Compacter » fait de la place en gardant ce qui a été établi.",
+            "Vider le contexte",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+
+        if (reponse != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        _agent.Vider(message => Dire("systeme", message), Seul.IsChecked == true);
+        Rafraichir();
+    }
+
+    /// <summary>Dit ce que le mode change, au moment où on le change.</summary>
+    private void InteractifChange(object sender, RoutedEventArgs e)
+        => Dire(
+            "systeme",
+            Interactif.IsChecked == true
+                ? "Mode interactif armé : l'assistant peut prendre le premier plan, taper au "
+                  + "clavier d'une autre fenêtre et déplacer la souris. En développement — "
+                  + "attendez-vous à ce qu'il échoue, et gardez la main."
+                : "Mode interactif désarmé : l'assistant travaille par les fichiers et les outils. "
+                  + "Il ne touche ni au clavier, ni à la souris, ni au premier plan.");
+
     private void Rafraichir()
     {
         // Les capacités du carnet s'exécutent dans le Task.Run qui fait tourner le modèle, donc hors
@@ -169,6 +292,8 @@ public partial class AssistantWindow : Window
             Dispatcher.Invoke(Rafraichir);
             return;
         }
+
+        Jauger();
 
         Travaux.Children.Clear();
 
@@ -439,7 +564,11 @@ public partial class AssistantWindow : Window
             // Le modèle met plusieurs secondes, et davantage s'il doit d'abord charger. Tenir cette
             // attente sur le fil d'affichage figerait la fenêtre — y compris la barre censée dire
             // que ça travaille.
-            var capacites = Capacites(outils, journal, autonome);
+            // Lu ici, sur le fil d'affichage, et non dans le Task.Run : une case a cocher ne se
+            // consulte pas depuis un autre fil.
+            var interactif = Interactif.IsChecked == true;
+
+            var capacites = Capacites(outils, journal, autonome, interactif);
 
             var reponse = await Task.Run(() => _agent.Repondre(
                 demande,
@@ -625,7 +754,8 @@ public partial class AssistantWindow : Window
     private IReadOnlyList<AssistantLocal.Capacite> Capacites(
         IReadOnlyList<PluginManifest> outils,
         Action<string>? journal,
-        bool autonome = false)
+        bool autonome = false,
+        bool interactif = false)
     {
         // Les outils compilés — calculatrice, capture, presse-papiers — n'ont pas de manifeste :
         // ils sont dans le produit. Les omettre revenait à cacher à l'assistant la moitié de ce que
@@ -797,8 +927,26 @@ public partial class AssistantWindow : Window
 
         // Memoire 3 niveaux, branchee sur le disque.
         capacites.AddRange(AssistantMemoire.Creer());
-        capacites.AddRange(SenSÉ.Tools.Assistant.AssistantDebug.Creer());
-        capacites.AddRange(AssistantSaisie.Creer());
+
+        // Le pilotage d'applications reelles, seulement s'il a ete arme.
+        //
+        // Ces deux familles agissent sur ce que l'utilisateur est en train de faire : prendre le
+        // premier plan, taper au clavier d'une autre fenetre, deplacer la souris. Elles sont aussi
+        // celles qui echouent le plus — le premier plan refuse par Windows, la fenetre trouvee mais
+        // pas l'endroit ou ecrire — et un modele qui les a sous la main y revient tour apres tour.
+        //
+        // Non declarees plutot que refusees : on ne s'entete pas sur ce qu'on ignore, et leur
+        // declaration rend sa place a la conversation. C'est la meme regle que pour les recherches
+        // distantes non configurees.
+        if (interactif)
+        {
+            capacites.AddRange(SenSÉ.Tools.Assistant.AssistantDebug.Creer());
+            capacites.AddRange(AssistantSaisie.Creer());
+        }
+
+        // Le navigateur reste, arme ou non : il pilote une page par le protocole, sans toucher au
+        // clavier, a la souris ni au premier plan de l'utilisateur. C'est precisement l'alternative
+        // au mode interactif, pas un morceau de celui-ci.
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantCdp.Creer());
         capacites.AddRange(AssistantRecherche.Creer(journal));
 

@@ -152,6 +152,36 @@ public class ConsigneTests : IDisposable
             AssistantLocal.Regles,
             StringComparison.Ordinal);
 
+    /// <summary>Vider rend la place, et ne touche pas aux carnets.</summary>
+    /// <remarks>
+    /// <b>C'est toute la différence avec « Compacter », et elle doit tenir.</b> Vider jette le fil
+    /// sans rien demander au modèle ; ce qui a été écrit dans un carnet est sur le disque et lui
+    /// survit. Si l'un des deux cédait, le bouton deviendrait ce que son voisin promet de ne pas
+    /// être — une perte de travail sans avertissement.
+    /// </remarks>
+    [Fact]
+    public void EmptyingGivesThePlaceBackAndLeavesTheNotebooks()
+    {
+        FichierTravail.Noter("Animer trois photos", ["choisir", "animer"], null);
+
+        var assistant = new AssistantLocal();
+        assistant.Vider(null);
+
+        Assert.Equal(0, assistant.Jetons);
+        Assert.Equal(
+            ["choisir", "animer"],
+            FichierTravail.Lire("Animer trois photos", null)!.Taches.Select(t => t.Texte));
+    }
+
+    // La jauge divise par cette place : nulle, elle divise par zero, et le seuil hors de ]0,1[ ne
+    // declencherait jamais ou toujours.
+    [Fact]
+    public void TheGaugeHasSomethingToDivideBy()
+    {
+        Assert.True(AssistantLocal.Place > 0);
+        Assert.InRange(AssistantLocal.Seuil, 0.01, 0.99);
+    }
+
     /// <summary>Plusieurs travaux ouverts apparaissent tous.</summary>
     /// <remarks>
     /// C'est la situation où le choix se pose vraiment : deux carnets, une demande ambiguë, et la
