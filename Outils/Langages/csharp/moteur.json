@@ -1,0 +1,13 @@
+{
+  "id": "csharp",
+  "nom": "C# 10 (dotnet run)",
+  "espace": "Codage",
+  "rang": "demande",
+  "extensions": [".cs"],
+  "detection": "dotnet --version",
+  "executable": "dotnet",
+  "commande": ["{executable}", "run", "{fichier}"],
+  "compile": false,
+  "latence_ms": 2610,
+  "taille_mo": 2907
+}

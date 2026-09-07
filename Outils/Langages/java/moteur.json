@@ -1,0 +1,13 @@
+{
+  "id": "java",
+  "nom": "Java 17 (single-file source)",
+  "espace": "Codage",
+  "rang": "demande",
+  "extensions": [".java"],
+  "detection": "java --version",
+  "executable": "java",
+  "commande": ["{executable}", "{fichier}"],
+  "compile": false,
+  "latence_ms": 548,
+  "taille_mo": 60
+}

@@ -1,0 +1,13 @@
+{
+  "id": "python",
+  "nom": "Python 3.11",
+  "espace": "Codage",
+  "rang": "embarque",
+  "extensions": [".py"],
+  "detection": "python --version",
+  "executable": "../../Python/python.exe",
+  "commande": ["{executable}", "{fichier}"],
+  "compile": false,
+  "latence_ms": 210,
+  "taille_mo": 301
+}

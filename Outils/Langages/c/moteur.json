@@ -1,0 +1,14 @@
+{
+  "id": "c",
+  "nom": "C (MinGW-W64 gcc)",
+  "espace": "Codage",
+  "rang": "demande",
+  "extensions": [".c"],
+  "detection": "gcc --version",
+  "executable": "gcc",
+  "commande_compilation": ["{executable}", "{fichier}", "-o", "{sortie}"],
+  "commande": ["{sortie}"],
+  "compile": true,
+  "latence_ms": 1507,
+  "taille_mo": 914
+}

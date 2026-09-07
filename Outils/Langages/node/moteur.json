@@ -1,0 +1,13 @@
+{
+  "id": "node",
+  "nom": "JavaScript / TypeScript (Node 24)",
+  "espace": "Codage",
+  "rang": "embarque",
+  "extensions": [".js", ".mjs", ".cjs"],
+  "detection": "node --version",
+  "executable": "node.exe",
+  "commande": ["{executable}", "{fichier}"],
+  "compile": false,
+  "latence_ms": 342,
+  "taille_mo": 101
+}

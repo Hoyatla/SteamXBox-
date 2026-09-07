@@ -1,0 +1,14 @@
+{
+  "id": "rust",
+  "nom": "Rust 1.98 (rustc)",
+  "espace": "Codage",
+  "rang": "detecte",
+  "extensions": [".rs"],
+  "detection": "rustc --version",
+  "executable": "rustc",
+  "commande_compilation": ["{executable}", "-O", "{fichier}", "-o", "{sortie}"],
+  "commande": ["{sortie}"],
+  "compile": true,
+  "latence_ms": 1694,
+  "taille_mo": 4571
+}
