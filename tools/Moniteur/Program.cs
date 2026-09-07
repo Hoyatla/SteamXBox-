@@ -114,7 +114,38 @@ internal static class Program
         }
     }
 
-    private static void Main()
+    /// <summary>Le guet du pointeur, demandé plutôt que subi.</summary>
+    /// <remarks>
+    /// <b>Il coûtait à toute la machine, en permanence, pour une question qu'on ne pose presque
+    /// jamais.</b> <see cref="PointerPump"/> installe un crochet bas niveau : Windows remet chaque
+    /// événement souris à chaque processus crocheté et l'attend — trois cents millisecondes par
+    /// défaut — avant que l'événement n'atteigne l'application sous le curseur.
+    ///
+    /// <para>
+    /// Signalé le 7 septembre 2026 : l'assistant génère, le bureau cesse de répondre, et le
+    /// processeur reste entre huit et trente pour cent. Pas de la saturation — ce fil ordonnancé en
+    /// retard, et chaque mouvement de souris qui l'attend. Tuer ce processus a rendu le bureau
+    /// fluide, ce qui l'a désigné.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Le crochet n'est pourtant pas de trop : il est la réponse.</b> Mesuré le même jour :
+    /// l'entrée brute — celle qui a remplacé le crochet clavier du bureau — ne rapporte pas la
+    /// souris injectée. Inscription acceptée, aucun événement sur dix injections. Or « injecté sans
+    /// que le curseur bouge » est précisément ce que cet outil existe pour voir. Convertir l'aurait
+    /// rendu muet en silence, ce qui est pire qu'un outil lent.
+    /// </para>
+    ///
+    /// <para>
+    /// Reste donc à ne pas le poser quand personne ne l'a demandé. Trois exemplaires orphelins ont
+    /// été trouvés dans la même journée, parent mort, crochet vivant depuis des heures. Sans le
+    /// drapeau, un moniteur égaré n'observe plus le pointeur et ne coûte plus rien à personne ; les
+    /// fenêtres, les touches et le shell restent surveillés comme avant.
+    /// </para>
+    /// </remarks>
+    private const string DrapeauPointeur = "--pointeur";
+
+    private static void Main(string[] arguments)
     {
         Console.OutputEncoding = Encoding.UTF8;
         Flotter();
@@ -141,7 +172,19 @@ internal static class Program
         var shellWell = true;
         var foreground = "";
 
-        StartPointerWatch();
+        var pointeur = Array.Exists(
+            arguments, a => string.Equals(a, DrapeauPointeur, StringComparison.OrdinalIgnoreCase));
+
+        if (pointeur)
+        {
+            StartPointerWatch();
+        }
+        else
+        {
+            Loud($"pointeur : non surveillé. Relancez avec « {DrapeauPointeur} » pour distinguer "
+                 + "l'injecté du physique — au prix d'un crochet que toute la machine paie.");
+            Loud("");
+        }
 
         while (true)
         {
@@ -151,7 +194,7 @@ internal static class Program
             WatchKeys(keys, reported);
             shellWell = WatchShell(shellWell);
             foreground = WatchForeground(foreground);
-            WatchPointer();
+            if (pointeur) { WatchPointer(); }
         }
     }
 
