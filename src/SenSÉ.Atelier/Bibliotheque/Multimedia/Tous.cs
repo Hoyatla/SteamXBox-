@@ -2,60 +2,139 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using SenSÉ.Atelier.Diffusion;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
-using SenSÉ.Atelier.Mcp;
 using SenSÉ.Atelier.ModeleLocal;
 
 namespace SenSÉ.Atelier.Bibliotheque.Multimedia;
 
 /// <summary>
-/// Les 10 noeuds multimedia. Toutes les lambdas sont async pour permettre
-/// l'await sur les clients HTTP et Process.
+/// Les 10 noeuds multimedia. Les 4 qui touchent au GPU passent par
+/// <see cref="ServeurDiffusion"/> ; les 6 restants (TTS, ffmpeg, LLM vision)
+/// restent locaux.
 /// </summary>
 public static class Tous
 {
+    /// <summary>Chemin racine des manifestes modele.json. Partage par les 4 noeuds GPU.</summary>
+    private static string ModelesRacine => Path.Combine(AppContext.BaseDirectory, "Outils", "Modeles");
+
     public static void Enregistrer()
     {
+        EnregistrerTexteVersImage();
+        EnregistrerTexteVersVideo();
+        EnregistrerImageVersVideo();
+        EnregistrerChargerModele();
+        EnregistrerTexteVersSon();
+        EnregistrerAudioVersTexte();
+        EnregistrerImageVersTexte();
+        EnregistrerExtraireFrames();
+        EnregistrerFusionnerVideos();
+        EnregistrerDecouperVideo();
+        EnregistrerRedimensionnerImage();
+    }
+
+    private static void EnregistrerTexteVersImage()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "texte_vers_image", "Texte vers Image", "Genere une image a partir d'un prompt (ComfyUI).",
+            "texte_vers_image", "Texte vers Image", "Genere une image via Flux schnell (sd-server).",
             Espace.Multimedia, "Generation",
             new List<Port> { new("prompt", TypePort.Texte, true) },
             new List<Port> { new("image", TypePort.Image, false) },
-            new List<ParametreNoeud> { new("modele", "Modele", "texte", "sdxl_base") },
+            new List<ParametreNoeud>
+            {
+                new("modele", "Modele", "texte", "flux-schnell"),
+                new("largeur", "Largeur (px)", "nombre", 1024),
+                new("hauteur", "Hauteur (px)", "nombre", 1024),
+                new("steps", "Steps", "nombre", 4),
+                new("cfg", "CFG scale", "nombre", 1.0),
+                new("seed", "Seed (-1 = aleatoire)", "nombre", -1L),
+            },
             async ctx =>
             {
                 try
                 {
                     var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
-                    var modele = ctx.Ch("modele");
-                    var path = await new ClientComfyui().TexteVersImageAsync(prompt, modele);
+                    if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
+                    var modeleId = ctx.Ch("modele");
+                    var spec = TrouverModele(modeleId) ?? TrouverPremierModele("image")
+                        ?? throw new Exception("aucun modele image installe dans Outils/Modeles/image/");
+                    var serveur = new ServeurDiffusion();
+                    var demarrage = serveur.Demarrer(spec, msg => ctx.Journal?.Invoke(msg));
+                    if (demarrage is not null) return ResultatExecution.Fail(demarrage);
+
+                    var path = await ServeurDiffusion.GenererImageAsync(
+                        prompt, negatif: null,
+                        largeur: ctx.ChInt("largeur", 1024),
+                        hauteur: ctx.ChInt("hauteur", 1024),
+                        steps: ctx.ChInt("steps", 4),
+                        cfg: ctx.ChDouble("cfg", 1.0),
+                        seed: ctx.ChInt("seed", -1));
+
+                    // Verifie la sortie SUR LE DISQUE, pas dans le message du binaire
+                    if (!File.Exists(path) || new FileInfo(path).Length < 1024)
+                        return ResultatExecution.Fail("sortie invalide : " + path);
                     return ResultatExecution.Ok(new() { ["image"] = path });
                 }
-                catch (Exception ex) { return ResultatExecution.Fail("ComfyUI: " + ex.Message); }
-            }
+                catch (Exception ex) { return ResultatExecution.Fail("sd-server: " + ex.Message); }
+            },
+            ModeleId: "flux-schnell"
         ));
+    }
 
+    private static void EnregistrerTexteVersVideo()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "texte_vers_video", "Texte vers Vidéo", "Genere une video a partir d'un prompt.",
+            "texte_vers_video", "Texte vers Vidéo", "Genere une video via Wan 2.2 T2V (sd-server).",
             Espace.Multimedia, "Generation",
             new List<Port> { new("prompt", TypePort.Texte, true) },
             new List<Port> { new("video", TypePort.Video, false) },
-            new List<ParametreNoeud> { new("duree", "Duree (s)", "nombre", 4.0) },
+            new List<ParametreNoeud>
+            {
+                new("modele", "Modele", "texte", "wan22-t2v"),
+                new("largeur", "Largeur (px)", "nombre", 832),
+                new("hauteur", "Hauteur (px)", "nombre", 480),
+                new("frames", "Frames", "nombre", 16),
+                new("steps", "Steps", "nombre", 20),
+                new("cfg", "CFG scale", "nombre", 7.0),
+                new("seed", "Seed (-1 = aleatoire)", "nombre", -1L),
+            },
             async ctx =>
             {
                 try
                 {
                     var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
-                    var path = await new ClientComfyui().TexteVersImageAsync(prompt);
+                    if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
+                    var modeleId = ctx.Ch("modele");
+                    var spec = TrouverModele(modeleId) ?? TrouverPremierModele("video")
+                        ?? throw new Exception("aucun modele video installe dans Outils/Modeles/video/");
+                    var serveur = new ServeurDiffusion();
+                    var demarrage = serveur.Demarrer(spec, msg => ctx.Journal?.Invoke(msg));
+                    if (demarrage is not null) return ResultatExecution.Fail(demarrage);
+
+                    var path = await ServeurDiffusion.GenererVideoAsync(
+                        prompt, imageInitiale: null,
+                        frames: ctx.ChInt("frames", 16),
+                        largeur: ctx.ChInt("largeur", 832),
+                        hauteur: ctx.ChInt("hauteur", 480),
+                        steps: ctx.ChInt("steps", 20),
+                        cfg: ctx.ChDouble("cfg", 7.0),
+                        seed: ctx.ChInt("seed", -1));
+
+                    if (!File.Exists(path) || new FileInfo(path).Length < 1024)
+                        return ResultatExecution.Fail("sortie invalide : " + path);
                     return ResultatExecution.Ok(new() { ["video"] = path });
                 }
-                catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
-            }
+                catch (Exception ex) { return ResultatExecution.Fail("sd-server: " + ex.Message); }
+            },
+            ModeleId: "wan22-t2v"
         ));
+    }
 
+    private static void EnregistrerImageVersVideo()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
-            "image_vers_video", "Image vers Vidéo", "Anime une image (img2vid ComfyUI).",
+            "image_vers_video", "Image vers Vidéo", "Anime une image via Wan 2.2 I2V (sd-server).",
             Espace.Multimedia, "Generation",
             new List<Port>
             {
@@ -63,10 +142,81 @@ public static class Tous
                 new("prompt", TypePort.Texte, true),
             },
             new List<Port> { new("video", TypePort.Video, false) },
-            new List<ParametreNoeud> { new("duree", "Duree (s)", "nombre", 4.0) },
-            async ctx => ResultatExecution.Fail("non implemente MVP - necessite workflow ComfyUI img2vid")
-        ));
+            new List<ParametreNoeud>
+            {
+                new("modele", "Modele", "texte", "wan22-i2v"),
+                new("largeur", "Largeur (px)", "nombre", 832),
+                new("hauteur", "Hauteur (px)", "nombre", 480),
+                new("frames", "Frames", "nombre", 16),
+                new("steps", "Steps", "nombre", 20),
+                new("cfg", "CFG scale", "nombre", 7.0),
+                new("seed", "Seed (-1 = aleatoire)", "nombre", -1L),
+            },
+            async ctx =>
+            {
+                try
+                {
+                    var prompt = ctx.Entree("prompt") ?? ctx.Ch("prompt");
+                    var image = ctx.Entree("image") ?? ctx.Ch("image");
+                    if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
+                    if (string.IsNullOrEmpty(image) || !File.Exists(image))
+                        return ResultatExecution.Fail("image introuvable : " + image);
+                    var modeleId = ctx.Ch("modele");
+                    var spec = TrouverModele(modeleId) ?? TrouverPremierModeleI2V()
+                        ?? throw new Exception("aucun modele I2V installe dans Outils/Modeles/video/");
+                    var serveur = new ServeurDiffusion();
+                    var demarrage = serveur.Demarrer(spec, msg => ctx.Journal?.Invoke(msg));
+                    if (demarrage is not null) return ResultatExecution.Fail(demarrage);
 
+                    var path = await ServeurDiffusion.GenererVideoAsync(
+                        prompt, imageInitiale: image,
+                        frames: ctx.ChInt("frames", 16),
+                        largeur: ctx.ChInt("largeur", 832),
+                        hauteur: ctx.ChInt("hauteur", 480),
+                        steps: ctx.ChInt("steps", 20),
+                        cfg: ctx.ChDouble("cfg", 7.0),
+                        seed: ctx.ChInt("seed", -1));
+
+                    if (!File.Exists(path) || new FileInfo(path).Length < 1024)
+                        return ResultatExecution.Fail("sortie invalide : " + path);
+                    return ResultatExecution.Ok(new() { ["video"] = path });
+                }
+                catch (Exception ex) { return ResultatExecution.Fail("sd-server: " + ex.Message); }
+            },
+            ModeleId: "wan22-i2v"
+        ));
+    }
+
+    private static void EnregistrerChargerModele()
+    {
+        CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
+            "charger_modele", "Charger modele", "Force le pre-chargement d'un modele (utile en debut de graphe).",
+            Espace.Multimedia, "Generation",
+            new List<Port>(),
+            new List<Port> { new("ok", TypePort.Texte, false) },
+            new List<ParametreNoeud>
+            {
+                new("modele", "Modele (id)", "texte", "flux-schnell"),
+            },
+            async ctx =>
+            {
+                try
+                {
+                    var modeleId = ctx.Ch("modele");
+                    var spec = TrouverModele(modeleId) ?? throw new Exception("modele introuvable : " + modeleId);
+                    var serveur = new ServeurDiffusion();
+                    var demarrage = serveur.Demarrer(spec, msg => ctx.Journal?.Invoke(msg));
+                    if (demarrage is not null) return ResultatExecution.Fail(demarrage);
+                    return ResultatExecution.Ok(new() { ["ok"] = spec.Id });
+                }
+                catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
+            },
+            ModeleId: "__charger__"
+        ));
+    }
+
+    private static void EnregistrerTexteVersSon()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "texte_vers_son", "Texte vers Son", "Synthese vocale SAPI locale.",
             Espace.Multimedia, "Generation",
@@ -92,7 +242,10 @@ public static class Tous
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
+    }
 
+    private static void EnregistrerAudioVersTexte()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "audio_vers_texte", "Audio vers Texte", "Transcription audio via whisper.cpp.",
             Espace.Multimedia, "Generation",
@@ -101,7 +254,10 @@ public static class Tous
             new List<ParametreNoeud>(),
             async ctx => ResultatExecution.Fail("whisper non disponible - installe llama.cpp ou un autre ASR")
         ));
+    }
 
+    private static void EnregistrerImageVersTexte()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "image_vers_texte", "Image vers Texte", "Description d'une image par le LLM multimodal.",
             Espace.Multimedia, "Vision",
@@ -125,7 +281,10 @@ public static class Tous
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
+    }
 
+    private static void EnregistrerExtraireFrames()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "extraire_frames", "Extraire frames", "Extrait les frames d'une video a N fps (ffmpeg).",
             Espace.Multimedia, "Transformation",
@@ -154,7 +313,10 @@ public static class Tous
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
+    }
 
+    private static void EnregistrerFusionnerVideos()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "fusionner_videos", "Fusionner vidéos", "Concatene plusieurs videos (ffmpeg concat demuxer).",
             Espace.Multimedia, "Transformation",
@@ -188,7 +350,10 @@ public static class Tous
                 finally { try { File.Delete(listFile); } catch { } }
             }
         ));
+    }
 
+    private static void EnregistrerDecouperVideo()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "decouper_video", "Découper vidéo", "Coupe un segment d'une video entre deux temps (secondes).",
             Espace.Multimedia, "Transformation",
@@ -220,7 +385,10 @@ public static class Tous
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
+    }
 
+    private static void EnregistrerRedimensionnerImage()
+    {
         CatalogueNoeuds.Enregistrer(new DefinitionNoeud(
             "redimensionner_image", "Redimensionner image", "Redimensionne une image (ffmpeg).",
             Espace.Multimedia, "Transformation",
@@ -252,5 +420,37 @@ public static class Tous
                 catch (Exception ex) { return ResultatExecution.Fail(ex.Message); }
             }
         ));
+    }
+
+    // === Helpers de resolution des manifestes modele.json ===
+
+    private static ServeurDiffusion.ModeleSpec? TrouverModele(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        foreach (var racine in new[] { Path.Combine(ModelesRacine, "image"), Path.Combine(ModelesRacine, "video") })
+        {
+            foreach (var m in ServeurDiffusion.ChargerModeles(racine))
+            {
+                if (m.Id == id) return m;
+            }
+        }
+        return null;
+    }
+
+    private static ServeurDiffusion.ModeleSpec? TrouverPremierModele(string racine)
+    {
+        var dir = Path.Combine(ModelesRacine, racine);
+        var liste = ServeurDiffusion.ChargerModeles(dir);
+        return liste.Count > 0 ? liste[0] : null;
+    }
+
+    private static ServeurDiffusion.ModeleSpec? TrouverPremierModeleI2V()
+    {
+        var dir = Path.Combine(ModelesRacine, "video");
+        foreach (var m in ServeurDiffusion.ChargerModeles(dir))
+        {
+            if (m.Id.Contains("i2v", StringComparison.OrdinalIgnoreCase)) return m;
+        }
+        return null;
     }
 }

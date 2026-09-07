@@ -6,6 +6,7 @@ using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Execution;
 using SenSÉ.Atelier.Modele;
 using SenSÉ.Atelier.ModeleLocal;
+using SenSÉ.Atelier.Diffusion;
 using SenSÉ.Atelier.Mcp;
 
 namespace SenSÉ.Atelier.Composite;
@@ -159,13 +160,30 @@ public static class Tous
             if (string.IsNullOrEmpty(prompt)) return ResultatExecution.Fail("prompt vide");
             if (string.IsNullOrEmpty(sortie)) sortie = Path.Combine(Path.GetTempPath(),
                 "atelier_anim_" + Guid.NewGuid().ToString("N") + ".mp4");
-            var img = await new ClientComfyui().TexteVersImageAsync(prompt);
+            var serveur = new ServeurDiffusion();
+            var spec = ChargerSpec("flux-schnell");
+            if (spec is null) return ResultatExecution.Fail("modele flux-schnell introuvable");
+            var demarrage = serveur.Demarrer(spec, msg => ctx.Journal?.Invoke(msg));
+            if (demarrage is not null) return ResultatExecution.Fail(demarrage);
+            var img = await ServeurDiffusion.GenererImageAsync(prompt, seed: -1);
             return ResultatExecution.Ok(new() { ["chemin_video"] = img });
         }
-        catch (Exception ex) { return ResultatExecution.Fail("ComfyUI: " + ex.Message); }
+        catch (Exception ex) { return ResultatExecution.Fail("sd-server: " + ex.Message); }
     }
 
-    private static string StripCodeFences(string reponse, string langage)
+
+    private static ServeurDiffusion.ModeleSpec? ChargerSpec(string id)
+    {
+        var racine = Path.Combine(AppContext.BaseDirectory, "Outils", "Modeles");
+        foreach (var r in new[] { Path.Combine(racine, "image"), Path.Combine(racine, "video") })
+        {
+            foreach (var m in ServeurDiffusion.ChargerModeles(r))
+            {
+                if (m.Id == id) return m;
+            }
+        }
+        return null;
+    }    private static string StripCodeFences(string reponse, string langage)
     {
         if (string.IsNullOrEmpty(reponse)) return "";
         var fence = "```";
