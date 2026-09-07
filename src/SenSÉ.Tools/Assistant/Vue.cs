@@ -26,9 +26,10 @@ public static class Vue
 {
     /// <summary>Les images qu'un message peut porter, au-delà desquelles on n'en joint plus.</summary>
     /// <remarks>
-    /// Une image coûte plus de mille jetons. Deux tiennent sans peine dans les trente-deux mille du
-    /// contexte ; dix les rempliraient à elles seules, et l'utilisateur qui dépose un dossier entier
-    /// ne s'attend pas à ce que sa conversation en meure.
+    /// Une image coûte plus de mille jetons. Deux tiennent sans peine dans le contexte — voir
+    /// <see cref="ServeurModele.Contexte"/>, qui est la seule place où ce nombre est écrit ; dix les
+    /// rempliraient à elles seules, et l'utilisateur qui dépose un dossier entier ne s'attend pas à
+    /// ce que sa conversation en meure.
     /// </remarks>
     public const int Maximum = 2;
 

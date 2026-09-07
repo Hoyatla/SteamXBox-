@@ -78,8 +78,24 @@ public static class ServeurModele
     /// conversation pour tenir dans huit mille jetons, commentaire à l'appui, des semaines après
     /// que le serveur eut été porté à trente-deux mille. Il jetait donc ce qu'il venait
     /// d'apprendre pour faire de la place dont il disposait déjà.
+    ///
+    /// <para>
+    /// <b>Soixante-cinq mille, et cela coûte moins que trente-deux mille en coûtait.</b> Mesuré le
+    /// 7 septembre 2026 sur cette machine, serveur lancé à vide : 32 768 jetons en f16 tenaient
+    /// 3,39 Gio engagés et 4,66 Gio résidents ; 65 536 avec le cache KV en <c>q8_0</c> et
+    /// flash-attention en tiennent 2,10 et 2,80. Deux fois la place de travail pour 1,3 Gio de
+    /// moins — voir les drapeaux dans <see cref="Demarrer"/>, qui sont ce qui rend l'échange
+    /// possible.
+    /// </para>
+    ///
+    /// <para>
+    /// Le modèle, lui, en déclare 262 144. Ce n'est pas lui qui borne : à 808 jetons par seconde
+    /// mesurés en lecture d'invite, une invite pleine de 200 000 jetons demanderait quatre minutes
+    /// avant le premier mot écrit. Sur processeur, le plafond utile est celui du temps, pas celui
+    /// du modèle.
+    /// </para>
     /// </remarks>
-    public const int Contexte = 32768;
+    public const int Contexte = 65536;
 
     /// <summary>Le modèle retenu : le premier <c>.gguf</c> qui n'est pas un projecteur d'images.</summary>
     /// <remarks>
@@ -335,7 +351,7 @@ public static class ServeurModele
                 "-ngl", "0",
                 "-t", fils,
 
-                // Trente-deux mille jetons, et un seul emplacement de conversation.
+                // Soixante-cinq mille jetons, et un seul emplacement de conversation.
                 //
                 // Le produit étouffait à huit mille. Mesuré dans une vraie session : la
                 // consigne, les carnets ouverts et la déclaration de tous les outils installés
@@ -352,6 +368,24 @@ public static class ServeurModele
                 // quadrupler ce que l'assistant peut retenir.
                 "-c", Contexte.ToString(CultureInfo.InvariantCulture),
                 "--parallel", "1",
+
+                // Le cache KV en huit bits, et l'attention qui n'a plus besoin de le matérialiser.
+                //
+                // Ces deux drapeaux sont ce qui rend les 65 536 jetons abordables : le cache est la
+                // seule chose qui grandisse avec le contexte, et le passer de seize à huit bits le
+                // divise par deux, pendant que flash-attention supprime les tampons intermédiaires
+                // que l'attention classique alloue par tête et par couche.
+                //
+                // Mesuré à vide sur cette machine, processus complet : 32 768 en f16 tenaient
+                // 3,39 Gio engagés et 4,66 Gio résidents ; 65 536 ainsi en tiennent 2,10 et 2,80.
+                // Doubler la place de travail rend 1,3 Gio au lieu d'en prendre.
+                //
+                // Ce qui n'est pas mesuré, et qu'il faut donc dire : l'effet de la quantification du
+                // cache sur la qualité des réponses. Elle est réputée quasi sans perte à huit bits
+                // — c'est la raison de ne pas être descendu à quatre, où elle ne l'est plus.
+                "-fa", "on",
+                "-ctk", "q8_0",
+                "-ctv", "q8_0",
 
                 // Sans --jinja, le serveur ignore le gabarit de conversation du modèle et l'appel
                 // d'outils ne fonctionne pas. C'est tout ce qui sépare un assistant d'une boîte à
