@@ -18,6 +18,11 @@ namespace SenSÉ.Atelier.Bibliotheque;
 /// <param name="PortsSortie">Ports de sortie declares.</param>
 /// <param name="Params">Champs editables dans l'inspecteur.</param>
 /// <param name="Executeur">Fonction appelee au runtime.</param>
+/// <param name="ModeleId">Id du modele (dans Outils/Modeles/{image,video}/) que ce noeud
+/// fait tourner. Vide/null = pas de GPU. Plusieurs noeuds du meme graphe peuvent
+/// partager le meme id : le moteur les traite ensemble, un seul chargement.
+/// <b>Positionne en dernier avec defaut null</b> pour ne pas casser les call sites
+/// existants (qui passent 9 arguments et ignorent le modele).</param>
 public sealed record DefinitionNoeud(
     string Id,
     string Nom,
@@ -27,7 +32,8 @@ public sealed record DefinitionNoeud(
     IReadOnlyList<Port> PortsEntree,
     IReadOnlyList<Port> PortsSortie,
     IReadOnlyList<ParametreNoeud> Params,
-    Func<ContexteExecution, Task<ResultatExecution>> Executeur
+    Func<ContexteExecution, Task<ResultatExecution>> Executeur,
+    string? ModeleId = null
 );
 
 /// <summary>
