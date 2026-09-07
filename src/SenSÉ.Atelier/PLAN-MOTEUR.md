@@ -91,21 +91,34 @@ chargés, et qu'on arrête avec la fenêtre.
 
 ## 4. Les deux pièges, mesurés
 
-### a. Le binaire ne lit pas les chemins accentués
+### a. Le binaire ne lit pas les chemins accentués — mais la solution est gratuite
 
-`C:\Program Files\SenSÉ\...` échoue en `file not found`, sur **tous** les
-arguments de fichier. Le nom court 8.3 ne sauve pas : `SenSÉ` fait moins de huit
-caractères, Windows ne lui génère pas d'alias.
+`C:\Program Files\SenSÉ\...` échoue en `file not found` sur **tous** les arguments
+de fichier. Le nom court 8.3 ne sauve pas : `SenSÉ` fait moins de huit caractères,
+Windows ne lui génère pas d'alias. Passer par `CreateProcessW` avec des arguments
+en UTF-16 ne sauve pas non plus — essayé, même échec. Le défaut est dans le
+binaire, qui ouvre ses fichiers en octets étroits.
 
-Trois issues, à trancher :
+**Seuls les *arguments* sont touchés. Le répertoire courant, non.**
 
-1. **Une jonction ASCII** créée au démarrage (`C:\sense-modeles` → le vrai
-   dossier). Instantané, pas de copie. C'est ce qui a servi aux essais.
-2. **Ranger les modèles hors du dossier produit**, sous un chemin sans accent.
-3. Corriger `stable-diffusion.cpp` en amont — le plus propre, le plus lent.
+La solution tient en deux lignes et ne sort jamais du dossier du produit :
 
-L'option 1 est recommandée pour démarrer : elle ne déplace pas un octet et se
-défait d'une ligne.
+```csharp
+psi.WorkingDirectory = <dossier des modèles>;   // peut porter l'accent
+psi.ArgumentList.Add("--diffusion-model");
+psi.ArgumentList.Add(@"unet\flux1-schnell-Q5_K_S.gguf");   // relatif, sans accent
+```
+
+Vérifié : Flux généré en 16,12 s par cette voie, depuis
+`C:\Program Files\SenSÉ\Outils\...\models` comme répertoire courant.
+
+**Corollaire de dessin :** tous les chemins passés à `sd-server` doivent être
+relatifs à un dossier racine unique. Le manifeste de l'étape 2 doit donc décrire
+les fichiers d'un modèle en chemins relatifs, jamais absolus.
+
+Ce qu'il ne faut **pas** faire : créer une jonction ASCII hors du dossier produit.
+C'est ce que les premiers essais ont utilisé, et c'est une extension du projet
+au-delà de ses sources — inutile puisque le répertoire courant suffit.
 
 ### b. Wan 2.2 ne tient pas en VRAM par la voie directe
 
@@ -126,10 +139,29 @@ C'est ainsi que les 63 secondes ci-dessus ont été obtenues.
 
 `--offload-to-cpu` ne suffit pas — essayé, échoue.
 
-**Conséquence de dessin :** le moteur doit choisir son placement selon le modèle
-et la VRAM libre au moment de l'appel, pas selon une constante écrite en dur.
-Flux tient en VRAM ; Wan n'y tient pas. Le placement est une décision par
-exécution.
+**Conséquence de dessin :** le placement est une décision par exécution, pas une
+constante. Flux tient en VRAM ; Wan n'y tient pas.
+
+Bonne nouvelle : **`sd.cpp` sait déjà décider seul.** Il annonce son plan avant de
+commencer, et le plan est juste pour Flux :
+
+```
+CUDA0  free 11071 MiB, budget 10559 MiB
+RAM    free 20456 MiB, params budget 18408 MiB
+DiT          params 7880 MiB -> compute CUDA0, params CUDA0
+Conditioner  params 4776 MiB -> compute CUDA0, params cpu
+VAE          params  319 MiB -> compute CUDA0, params cpu
+auto-fit: --backend "diffusion=CUDA0,te=CUDA0,vae=CUDA0" --params-backend "te=cpu,vae=cpu"
+```
+
+Le moteur n'a donc pas à calculer le placement lui-même. Il doit :
+
+1. laisser l'auto-fit décider par défaut ;
+2. **forcer `--params-backend diffusion=cpu` pour les modèles vidéo**, où
+   l'auto-fit se trompe et échoue après avoir chargé les poids — c'est-à-dire
+   après dix secondes perdues ;
+3. lire le plan annoncé et le journaliser, pour que l'échec soit lisible quand il
+   arrive.
 
 ---
 
@@ -175,6 +207,34 @@ mal le jour où un format de plus arrive.
 Ceci remplace la règle actuelle de `ServeurModele` — « un seul `.gguf` à la
 racine, les autres dans `autres\` » — **qui est ce qui interdit aujourd'hui la
 flottille de modèles**.
+
+### Étape 2 bis — un seul modèle à la fois, et l'ordre des nœuds
+
+Les tailles mesurées ne laissent pas le choix :
+
+| | poids en VRAM | carte |
+|---|---|---|
+| Flux schnell Q5_K_S | 7 880 Mio (DiT) | 12 282 Mio |
+| Wan 2.2 A14B Q4, **un** expert | 9 651 Mio | dont ~11 000 utilisables |
+
+**Deux modèles de diffusion ne tiennent jamais ensemble.** Ils travaillent chacun
+leur tour, et le passage de l'un à l'autre est un rechargement — mesuré entre
+**7 et 10 secondes** de lecture de tenseurs.
+
+Trois conséquences pour le moteur :
+
+1. `sd-server` garde **un** modèle chargé, pas une flottille. Charger le suivant
+   décharge le précédent.
+2. Le moteur doit **ordonner l'exécution du graphe par modèle** : tous les nœuds
+   image, puis tous les nœuds vidéo. Un graphe qui alterne image/vidéo/image
+   paierait deux rechargements pour rien — vingt secondes gaspillées sur un
+   graphe de trois nœuds.
+3. Un nœud doit pouvoir dire de quel modèle il dépend **avant** de s'exécuter,
+   sinon l'ordonnancement du point 2 est impossible. C'est une propriété de la
+   `DefinitionNoeud`, à ajouter.
+
+C'est aussi la raison pour laquelle le texte reste sur processeur et RAM : la
+carte est déjà pleine avec un seul modèle de diffusion.
 
 ### Étape 3 — les nœuds Multimedia
 
