@@ -60,6 +60,8 @@ public sealed class Verbes
                 "custom/creer"             => CustomCreer(body!),
                 "custom/supprimer"         => CustomSupprimer(body!),
                 "custom/lister"            => CustomLister(),
+                "modeles"                  => ModelesLister(),
+                "etat"                     => ExecutionEtat(query),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
         }
