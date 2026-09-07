@@ -1,0 +1,15 @@
+{
+  "id": "flux-schnell",
+  "nom": "Flux schnell (Q5_K_S)",
+  "moteur": "sd.cpp",
+  "espace": "Multimedia",
+  "racine": "image",
+  "fichiers": {
+    "diffusion": "../unet-flux1-schnell-Q5_K_S.gguf",
+    "vae":        "../ae.safetensors",
+    "t5xxl":      "../t5xxl.safetensors",
+    "clip_l":     "../clip_l.safetensors"
+  },
+  "vram_mo": 0,
+  "produit": "image"
+}

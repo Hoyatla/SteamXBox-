@@ -1,0 +1,16 @@
+{
+  "id": "wan22-t2v",
+  "nom": "Wan 2.2 T2V (A14B Q4_K_M)",
+  "moteur": "sd.cpp",
+  "espace": "Multimedia",
+  "racine": "video",
+  "fichiers": {
+    "diffusion":            "../Wan2.2-T2V-LowNoise-Q4_K_M.gguf",
+    "diffusion_haut_bruit": "../Wan2.2-T2V-HighNoise-Q4_K_M.gguf",
+    "vae":                  "../wan_2.1_vae.safetensors",
+    "umt5":                 "../umt5-xxl-encoder-Q4_K_M.gguf"
+  },
+  "vram_mo": 0,
+  "params_backend": "diffusion=cpu",
+  "produit": "video"
+}
