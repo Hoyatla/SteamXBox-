@@ -115,3 +115,12 @@ Outils/Cdp/*
 !Outils/Cdp/
 !Outils/Cdp/.gitkeep
 Outils/CdpUserData/
+
+# Captures d'ecran de mcp-saisie : une image par appel, nommee a la milliseconde.
+# Une sortie d'outil, pas une source — l'assistant les regarde puis les oublie.
+/Captures/
+
+# Copies d'avant correctif. Git est la sauvegarde : une copie a cote du fichier
+# fait doublon avec l'historique, et l'une d'elles pesait cent cinquante-cinq
+# megaoctets.
+*.avant-*
