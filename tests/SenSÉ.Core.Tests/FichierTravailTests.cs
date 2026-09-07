@@ -198,57 +198,48 @@ public class FichierTravailTests : IDisposable
 
     /// <summary>Un carnet neuf attend l'accord, et le dit.</summary>
     /// <remarks>
-    /// <b>Un plan se montre avant de s'exécuter.</b> Une génération d'image coûte cinq minutes :
-    /// six étapes lancées sur une intention mal comprise en coûtent une demi-heure, et l'erreur ne
-    /// se découvre qu'à la fin. Le défaut est donc l'attente, jamais le départ.
+    /// <b>Un carnet neuf est prêt à servir, il n'attend plus.</b> L'accord préalable protégeait
+    /// d'un plan lancé sur une intention mal comprise ; il faisait surtout approuver une seconde
+    /// fois une demande que l'utilisateur venait de formuler, et arrêtait l'assistant au milieu
+    /// d'un travail commandé. Ce qui protège vraiment est ailleurs : rien ne s'installe, rien ne
+    /// s'écrase, rien ne se referme sans qu'il le dise.
     /// </remarks>
     [Fact]
-    public void ANewNotebookWaitsForTheUsersAgreement()
+    public void ANewNotebookIsReadyToUse()
     {
         var note = FichierTravail.Noter("Animer trois photos", ["a", "b"], null);
 
-        Assert.False(note.Accepte);
-        Assert.Contains(
-            "EN ATTENTE DE L'ACCORD", FichierTravail.Resumer(note), StringComparison.Ordinal);
-    }
-
-    /// <summary>L'accord donné se garde sur le disque, et la mention disparaît.</summary>
-    [Fact]
-    public void TheAgreementIsKept()
-    {
-        FichierTravail.Noter("Animer trois photos", ["a", "b"], null);
-        FichierTravail.Accepter("Animer trois photos", null);
-
-        var relu = FichierTravail.Lire("Animer trois photos", null)!;
-
-        Assert.True(relu.Accepte);
         Assert.DoesNotContain(
-            "EN ATTENTE", FichierTravail.Resumer(relu), StringComparison.Ordinal);
+            "EN ATTENTE", FichierTravail.Resumer(note), StringComparison.Ordinal);
     }
 
-    /// <summary>Corriger le plan ne redemande pas l'accord déjà donné.</summary>
+    /// <summary>Ce qui reste à faire est nommé, et c'est ce qui garde un carnet ouvert.</summary>
     /// <remarks>
-    /// L'assistant réécrit son carnet quand il découvre une étape en route. Repartir à zéro sur
-    /// l'accord aurait arrêté le travail au milieu, à un moment où l'utilisateur a déjà dit oui —
-    /// et l'aurait entraîné à cliquer sans lire, ce qui vide la question de son sens.
+    /// La fenêtre s'en sert pour dire ce qu'on perd en refermant, et <c>travail_terminer</c> pour
+    /// refuser de refermer. Le 7 septembre 2026 un travail s'était rangé dans Finis avec sa
+    /// dernière étape non faite : rien ne regardait.
     /// </remarks>
     [Fact]
-    public void RevisingThePlanKeepsTheAgreement()
+    public void WhatIsLeftIsNamed()
     {
         FichierTravail.Noter("Animer trois photos", ["a", "b"], null);
-        FichierTravail.Accepter("Animer trois photos", null);
+        FichierTravail.Cocher("Animer trois photos", "a", null);
 
-        var revu = FichierTravail.Noter("Animer trois photos", ["a", "b", "c"], null);
+        var carnet = FichierTravail.Lire("Animer trois photos", null)!;
 
-        Assert.True(revu.Accepte);
+        Assert.Equal(["b"], FichierTravail.Restantes(carnet));
     }
 
-    /// <summary>Accepter un carnet qui n'existe pas ne le crée pas.</summary>
+    /// <summary>Un carnet tout coché n'a plus rien à retenir.</summary>
     [Fact]
-    public void AgreeingToNothingCreatesNothing()
+    public void NothingIsLeftOnAFinishedNotebook()
     {
-        Assert.Null(FichierTravail.Accepter("Jamais ouvert", null));
-        Assert.Empty(FichierTravail.Lister(null));
+        FichierTravail.Noter("Animer trois photos", ["a"], null);
+        FichierTravail.Cocher("Animer trois photos", "a", null);
+
+        var carnet = FichierTravail.Lire("Animer trois photos", null)!;
+
+        Assert.Empty(FichierTravail.Restantes(carnet));
     }
 
     /// <summary>Vieillit un carnet en réécrivant sa date d'ouverture.</summary>

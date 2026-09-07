@@ -47,7 +47,6 @@ public class RappelTravauxTests : IDisposable
 
         FichierTravail.Noter("Animer trois photos", ["choisir", "animer"], null);
         FichierTravail.Cocher("Animer trois photos", "choisir", null);
-        FichierTravail.Accepter("Animer trois photos", null);
 
         Assert.Equal(avant, AssistantLocal.Regles);
     }

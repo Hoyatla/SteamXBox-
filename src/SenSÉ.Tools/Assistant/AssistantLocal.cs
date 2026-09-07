@@ -199,12 +199,21 @@ public sealed class AssistantLocal
         + "occuper quand le moment s'y prête — sans interrompre ce que l'utilisateur te demande "
         + "maintenant.\n\n"
 
-        + "ACCORD. Après avoir noté un carnet, ÉNONCE le plan en une phrase par étape, puis demande "
-        + "à l'utilisateur s'il veut COMMENCER, MODIFIER ou ABANDONNER. N'exécute aucune étape "
-        + "avant qu'il ait choisi. S'il accepte, appelle travail_accepter puis commence ; s'il "
-        + "demande un changement, réécris le carnet avec travail_noter et redemande. Une génération "
-        + "d'image prend cinq minutes : six étapes lancées sur une intention mal comprise coûtent "
-        + "une demi-heure, et cela ne se découvre qu'à la fin."
+        + "COCHE CHAQUE ÉTAPE DÈS QU'ELLE EST FAITE, avec travail_cocher, avant de passer à la "
+        + "suivante. Ce n'est pas de la comptabilité : quand ton contexte se remplit, le fil "
+        + "repart à neuf et le carnet est TOUT ce qui reste. Une étape faite mais non cochée sera "
+        + "refaite, et tu tourneras en rond sans jamais avancer. Coche, puis continue — sans "
+        + "attendre la fin du travail pour tout cocher d'un coup, car cette fin peut ne jamais "
+        + "venir.\n\n"
+
+        + "COMMENCER. Après avoir noté un carnet, ÉNONCE le plan en une phrase par étape — puis "
+        + "COMMENCE, sans demander la permission : l'utilisateur vient de te confier ce travail, "
+        + "la lui redemander serait lui faire répéter ce qu'il a déjà dit. Il reste libre de te "
+        + "corriger en cours de route, et la fenêtre le lui rappelle ; s'il demande un changement, "
+        + "réécris le carnet avec travail_noter et reprends. "
+        + "Ce qui, en revanche, ne part JAMAIS de ta seule initiative : installer un logiciel, "
+        + "écraser un fichier existant, fermer une application, refermer un carnet. Là, tu "
+        + "proposes et tu attends."
         + "\n\n"
         + "DEBUG UIA. Tu as CINQ Capacites qui parlent au pc-agent (un subprocess Rust sur 127.0.0.1:8765 qui expose l'API UI Automation de Windows) : "
         + "debug_uia_dump (l'arbre UIA de la fenetre au premier plan : nom, type, automationId, rectangle), "
@@ -260,6 +269,12 @@ public sealed class AssistantLocal
         + "et du meme thread, sinon la frappe atterrit dans la fenetre qui avait "
         + "reellement le focus."
 
+        + "NE RELISTE PAS LES FENETRES A CHAQUE GESTE. Un appel a debug_uia_list_windows rend "
+        + "dix-sept lignes qui restent dans ton contexte. Appelle-le UNE fois au debut, et de "
+        + "nouveau seulement quand tu attends une fenetre NOUVELLE — apres avoir lance une "
+        + "application, ou apres un Ctrl+S qui doit ouvrir une boite. Entre deux, tu as deja les "
+        + "hwnd sous les yeux."
+
         + "LE HWND EST CRITIQUE. Prends-le dans debug_uia_list_windows en lisant "
         + "l'objet ENTIER : chaque entree est {\"hwnd\":N,\"title\":\"...\"} et le hwnd "
         + "precede son titre. Un hwnd lu de travers ecrit dans la mauvaise application. "
@@ -273,8 +288,18 @@ public sealed class AssistantLocal
         + "quittent pas la machine), recherche_web (quand la reponse n'est pas ici). "
         + "Chaque ligne rendue commence par sa NATURE entre crochets — [fichier], [dossier], "
         + "[application], [lecteur], [document], [courriel], [web] — et c'est elle qui te dit quoi "
-        + "en faire : un [fichier] se passe par son chemin a un autre outil, une [application] se "
-        + "lance, un [web] se cite avec son adresse. Ne confonds pas « aucun resultat » avec "
+        + "en faire : un [fichier] ou un [dossier] s'ouvre avec la capacite ouvrir(chemin), un "
+        + "[web] se cite ou s'ouvre pareil. CHERCHER N'EST PAS AGIR : quand on te demande "
+        + "d'ouvrir quelque chose, la recherche n'est que la premiere moitie — enchaine sur "
+        + "ouvrir, ne te contente pas d'annoncer le chemin trouve. "
+        + "Et si tu ne trouves pas ce qu'on te demande d'ouvrir, DIS-LE : « ce programme ne "
+        + "semble pas installe, je ne vois que son installeur » est une reponse utile, refaire "
+        + "deux fois la meme recherche ne l'est pas. "
+        + "Une [application] s'ouvre avec ouvrir, comme le reste : « ouvre-moi LibreOffice » "
+        + "attend que tu le lances, pas que tu en annonces le chemin. Seul ce qui INSTALLE ou "
+        + "execute du code — .msi, .bat, .ps1, un .exe nomme setup ou install — te sera refuse, et "
+        + "passe alors par proposer_choix. "
+        + "Ne confonds pas « aucun resultat » avec "
         + "« source non configuree » : quand une recherche te repond qu'elle est desactivee ou "
         + "sans index, la question n'a pas ete posee, et tu ne peux rien conclure du sujet."
 
@@ -342,9 +367,20 @@ public sealed class AssistantLocal
         + "consigne, section DOSSIERS, avec un exemple complet a imiter. Recopie-les tels "
         + "quels."
 
-        + "LE NOM DE FICHIER EST COURT. Trois a six mots tires du SUJET du document, "
-        + "separes par des tirets, plus l'extension. JAMAIS le contenu du document comme "
-        + "nom. Pas d'accents ni de ponctuation dans le nom, et moins de 60 caracteres."
+        + "LE NOM DE FICHIER VIENT DE LA DEMANDE. Prends-le dans ce que l'utilisateur a "
+        + "demande — sa demande mot pour mot est dans ton carnet — et pas dans le nom que "
+        + "l'application propose par defaut. « ecris Bonjour et sauvegarde » donne "
+        + "'bonjour.odt' ; « fais-moi le compte-rendu de reunion » donne "
+        + "'compte-rendu-reunion.odt'. Trois a six mots, separes par des tirets, plus "
+        + "l'extension. JAMAIS le contenu entier du document comme nom. Pas d'accents ni "
+        + "de ponctuation, et moins de 60 caracteres."
+
+        + "SI LE NOM EXISTE DEJA, CHANGE DE NOM. N'ecrase pas : le fichier qui porte deja "
+        + "ce nom est celui de l'utilisateur, et tu ne sais pas ce qu'il contient. Ajoute "
+        + "un numero — 'bonjour-2.odt', puis 'bonjour-3.odt' — et recommence l'entree. "
+        + "Ne confirme un remplacement que si l'utilisateur te l'a demande explicitement. "
+        + "Une boite qui previent qu'un fichier existe n'est pas un blocage : c'est un nom "
+        + "a changer, et tu peux le faire seul."
 
         + "APRES l'Entree, LibreOffice peut demander de confirmer le format : reponds "
         + "avec debug_uia_invoke_par_nom en visant le bouton qui garde le format demande "
@@ -357,6 +393,8 @@ public sealed class AssistantLocal
         + "  boite existe, la dumper par son titre, set_text du chemin complet dans son "
         + "  champ Edit, invoke_par_nom(Enregistrer), invoke_par_nom pour le format s'il "
         + "  est demande, puis une capture : le titre ne doit plus dire 'Sans nom'. "
+        + "  Si une boite annonce que le fichier existe deja, reviens au champ du nom, "
+        + "  ajoute un numero, et renvoie Entree — sans jamais confirmer le remplacement. "
         + "- 'ecris X dans LibreOffice' -> debug_uia_list_windows, lis le hwnd de la "
         + "  ligne LibreOffice, puis debug_uia_focus_and_type(hwnd, X), puis verifie le "
         + "  champ title de la reponse. "
@@ -496,7 +534,7 @@ public sealed class AssistantLocal
         // video que l'utilisateur venait de donner. Le carnet etait sous ses yeux, ses etapes
         // aussi ; ce qui manquait, c'etait la consigne de s'en servir plutot que de repartir de la
         // question.
-        var encours = carnets.FirstOrDefault(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+        var encours = carnets.FirstOrDefault(c => c.Taches.Exists(t => !t.Faite));
 
         if (encours is not null)
         {
@@ -867,6 +905,9 @@ public sealed class AssistantLocal
                 _messages.Add(resultat);
             }
 
+            // Les resultats d'outils vieillissent en s'abregeant.
+            Abreger();
+
             if (arret.IsCancellationRequested)
             {
                 return Interrompu(dernierResultat);
@@ -876,7 +917,7 @@ public sealed class AssistantLocal
         // Ce qui reste a faire est dans le carnet, et c'est ce qui change tout : la phrase ne dit
         // plus « je n'y arrive pas », elle dit ou en est le travail et comment le relancer.
         var ouvert = FichierTravail.Lister(journal)
-            .FirstOrDefault(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+            .FirstOrDefault(c => c.Taches.Exists(t => !t.Faite));
 
         if (ouvert is not null)
         {
@@ -977,7 +1018,6 @@ public sealed class AssistantLocal
         }
 
         FichierTravail.Noter(titre, reste, journal);
-        FichierTravail.Accepter(titre, journal);
 
         if (acquis.Count > 0)
         {
@@ -1048,6 +1088,73 @@ public sealed class AssistantLocal
     /// La consigne est gardée quoi qu'il arrive : c'est elle qui dit au modèle ce qu'il est. Le
     /// reste est taillé par la fin, la plus récente étant la plus utile.
     /// </remarks>
+    /// <summary>Combien de résultats d'outils restent lisibles en entier.</summary>
+    /// <remarks>
+    /// Deux : celui sur lequel le modèle travaille, et le précédent, qu'il compare souvent au
+    /// nouveau — la liste des fenêtres avant et après avoir lancé une application, par exemple.
+    /// Au-delà, un résultat sert de trace, pas de matière.
+    /// </remarks>
+    private const int ResultatsEntiers = 2;
+
+    /// <summary>Ce qu'il reste d'un résultat abrégé.</summary>
+    private const int LongueurAbregee = 200;
+
+    /// <summary>
+    /// Abrège les résultats d'outils que le modèle a dépassés.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le défaut que ceci corrige.</b> <see cref="Elaguer"/> compte les messages, jamais leur
+    /// taille, et son seuil de quarante-huit n'est jamais atteint : le budget de jetons cède bien
+    /// avant. Un dump UIA de soixante-deux nœuds pèse six kilo-octets, une liste de fenêtres un et
+    /// demi, et le modèle rappelle l'une et l'autre à chaque étape. Mesuré le 7 septembre 2026,
+    /// deux fois de suite : « contexte plein » au moment d'ouvrir la boîte d'enregistrement, après
+    /// quoi le fil repart neuf et refait ce qui était déjà fait.
+    ///
+    /// <para>Ce qui est gardé entier, c'est ce sur quoi il travaille — les deux derniers. Ce qui
+    /// précède devient une trace : de quoi savoir que l'appel a eu lieu et ce qu'il a répondu en
+    /// substance, sans en porter le poids. La structure ne bouge pas : le rôle et l'identifiant
+    /// d'appel restent, car un résultat sans son appel fait refuser la requête entière.</para>
+    ///
+    /// <para>Les images sont le cas extrême — mille jetons chacune, d'après la mesure inscrite plus
+    /// haut dans ce fichier — et la seule chose qu'une image ancienne apporte encore est le fait
+    /// qu'on l'a regardée. C'est ce que la trace conserve.</para>
+    /// </remarks>
+    private void Abreger()
+    {
+        var restants = ResultatsEntiers;
+
+        for (var rang = _messages.Count - 1; rang >= 1; rang--)
+        {
+            if (_messages[rang] is not JsonObject message
+                || message["role"]?.GetValue<string>() is not "tool")
+            {
+                continue;
+            }
+
+            if (restants > 0)
+            {
+                restants--;
+                continue;
+            }
+
+            var contenu = message["content"];
+
+            if (contenu is JsonArray)
+            {
+                message["content"] = "[image affichée, retirée du fil pour tenir dans le contexte]";
+                continue;
+            }
+
+            if (contenu?.GetValue<string>() is not { } texte || texte.Length <= LongueurAbregee)
+            {
+                continue;
+            }
+
+            message["content"] =
+                texte[..LongueurAbregee] + $"… [abrégé, {texte.Length} caractères en tout]";
+        }
+    }
+
     private void Elaguer()
     {
         while (_messages.Count > MessagesGardes + 1)

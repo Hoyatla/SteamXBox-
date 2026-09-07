@@ -210,28 +210,22 @@ public partial class AssistantWindow : Window
             Text = $"{carnet.Titre}  ({faites}/{carnet.Taches.Count})",
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource(
-                carnet.Accepte ? "TextPrimaryBrush" : "AccentOrangeBrush"),
+            Foreground = (Brush)FindResource("TextPrimaryBrush"),
         });
 
-        if (!carnet.Accepte)
+        // Ce qui reste dicible sans bouton : corriger un plan.
+        //
+        // L'accord préalable a disparu, pas la possibilité de changer d'avis. Changer un plan,
+        // c'est dire en quoi, et cela s'écrit dans la conversation — un bouton ne saurait pas quoi
+        // demander. La phrase reste donc, pour que la zone ne se lise pas comme un aller simple.
+        corps.Children.Add(new TextBlock
         {
-            // Les trois issues sont nommées, y compris celle qui n'a pas de bouton.
-            //
-            // « Modifier » ne peut pas en avoir un : changer un plan, c'est dire en quoi, et cela
-            // s'écrit dans la conversation. Mais une zone qui ne montre que « d'accord » et
-            // « abandonner » laisse croire qu'il n'y a que ces deux portes — et l'utilisateur qui
-            // voulait corriger une étape abandonne tout, ou accepte un plan qu'il sait imparfait.
-            corps.Children.Add(new TextBlock
-            {
-                Text = "En attente de votre accord — rien ne sera lancé avant. "
-                    + "Pour changer quelque chose, dites-le simplement dans la conversation.",
-                FontSize = 11,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 2, 0, 0),
-                Foreground = (Brush)FindResource("TextDimBrush"),
-            });
-        }
+            Text = "Pour changer quelque chose, dites-le simplement dans la conversation.",
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 0),
+            Foreground = (Brush)FindResource("TextDimBrush"),
+        });
 
         foreach (var tache in carnet.Taches)
         {
@@ -252,27 +246,6 @@ public partial class AssistantWindow : Window
             Margin = new Thickness(0, 6, 0, 0),
         };
 
-        if (!carnet.Accepte)
-        {
-            var accord = new Button
-            {
-                Content = "Je suis d'accord",
-                Padding = new Thickness(10, 4, 10, 4),
-                Margin = new Thickness(0, 0, 8, 0),
-            };
-
-            // L'accord donné au clic et l'accord donné à l'oral mènent au même drapeau : en tenir
-            // deux traces ferait diverger ce que le modèle croit de ce que l'utilisateur voit.
-            accord.Click += (_, _) =>
-            {
-                FichierTravail.Accepter(carnet.Titre, _journal);
-                Dire("systeme", $"Vous avez accepté le plan « {carnet.Titre} ».");
-                Rafraichir();
-            };
-
-            boutons.Children.Add(accord);
-        }
-
         // « Terminé » disait le contraire de ce qu'il faisait.
         //
         // Le mot se lit comme un accord — « c'est bon, vas-y » — alors que le bouton efface le
@@ -288,22 +261,30 @@ public partial class AssistantWindow : Window
         // craindre de perdre quelque chose. Après, c'est un travail qu'on referme parce qu'il
         // convient. Le libellé unique « Terminé » avait déjà causé un dégât : lu comme « c'est bon,
         // vas-y », il effaçait le carnet au moment où l'utilisateur voulait donner son accord.
+        var restantes = FichierTravail.Restantes(carnet);
+
         var refermer = new Button
         {
-            Content = carnet.Accepte ? "Effacer ce travail" : "Abandonner",
+            Content = restantes.Count == 0 ? "Terminer ce travail" : "Refermer sans finir",
             Padding = new Thickness(10, 4, 10, 4),
         };
 
+        // Ce qui reste est nommé, pas compté.
+        //
+        // « Êtes-vous sûr ? » ne dit rien que l'utilisateur ne sache déjà. Les étapes non cochées,
+        // écrites une par une, disent ce qu'il perd s'il se trompe de bouton — et c'est la seule
+        // question à laquelle il a besoin de répondre.
         refermer.Click += (_, _) =>
         {
+            var reste = restantes.Count == 0
+                ? ""
+                : "\n\nIl reste :\n· " + string.Join("\n· ", restantes);
+
             var reponse = MessageBox.Show(
-                carnet.Accepte
-                    ? $"Effacer le travail « {carnet.Titre} » et ses {carnet.Taches.Count} étape(s) ?"
-                      + "\n\nL'assistant l'oubliera. Cela ne supprime aucun fichier produit."
-                    : $"Abandonner le plan « {carnet.Titre} » ?"
-                      + "\n\nRien n'a encore été lancé. Pour le corriger plutôt que l'abandonner, "
-                      + "fermez cette fenêtre et dites dans la conversation ce qu'il faut changer.",
-                carnet.Accepte ? "Effacer ce travail" : "Abandonner ce plan",
+                $"Refermer le travail « {carnet.Titre} » ?{reste}"
+                + "\n\nIl sera rangé dans Travaux\\Finis, où il reste lisible. "
+                + "Cela ne supprime aucun fichier produit.",
+                restantes.Count == 0 ? "Terminer ce travail" : "Refermer sans finir",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Question);
 
@@ -316,9 +297,10 @@ public partial class AssistantWindow : Window
 
             Dire(
                 "systeme",
-                carnet.Accepte
+                restantes.Count == 0
                     ? $"Travail « {carnet.Titre} » terminé, rangé dans Travaux\\Finis."
-                    : $"Plan « {carnet.Titre} » abandonné.");
+                    : $"Travail « {carnet.Titre} » refermé avec {restantes.Count} étape(s) non faite(s), "
+                      + "rangé dans Travaux\\Finis.");
 
             Rafraichir();
         };
@@ -426,11 +408,11 @@ public partial class AssistantWindow : Window
         // Autonome par la case, par le bouton, ou parce qu'un travail est déjà en route.
         //
         // Ce dernier cas est le point 4 : un travail commencé se reprend seul. Redemander quel
-        // outil employer au milieu d'un plan que l'utilisateur a accepté reviendrait à lui faire
-        // rejouer un choix qu'il a déjà fait, à chaque étape.
+        // outil employer au milieu d'un travail en cours reviendrait à faire rejouer à
+        // l'utilisateur un choix qu'il a déjà fait, à chaque étape.
         var autonome = seul
             || Seul.IsChecked == true
-            || FichierTravail.Lister(_journal).Any(c => c.Accepte && c.Taches.Exists(t => !t.Faite));
+            || FichierTravail.Lister(_journal).Any(c => c.Taches.Exists(t => !t.Faite));
 
         _occupe = true;
 
@@ -596,7 +578,6 @@ public partial class AssistantWindow : Window
         etapes.Add(texte);
 
         FichierTravail.Noter(Miennes, etapes, _journal);
-        FichierTravail.Accepter(Miennes, _journal);
 
         Tache.Clear();
         Dire("systeme", $"Tâche ajoutée : {texte}");
@@ -861,37 +842,13 @@ public partial class AssistantWindow : Window
 
                     Rafraichir();
 
-                    return Resumer(note)
-                        + (note.Accepte
-                            ? ""
-                            : "\nÉnonce ce plan à l'utilisateur et attends son accord avant "
-                              + "d'exécuter quoi que ce soit.");
-                },
-                Interne: true),
-
-            new AssistantLocal.Capacite(
-                "travail_accepter",
-                "Enregistre l'accord de l'utilisateur sur un plan. À appeler quand il a dit oui, "
-                + "et seulement alors : c'est ce qui t'autorise à commencer.",
-                [new AssistantLocal.Parametre("titre", "Le titre du carnet.", [])],
-                reglages =>
-                {
-                    var accepte = FichierTravail.Accepter(
-                        Valeur(reglages, "titre"), journal);
-
-                    Rafraichir();
-
-                    // L'échec doit dire quoi faire, sinon il ne change rien.
+                    // Plus d'accord à attendre : le plan est noté et le travail commence.
                     //
-                    // « Aucun carnet de ce nom. » n'était pas une consigne : le modèle l'a lu, l'a
-                    // ignoré, et a lancé le travail sans accord. Le carnet venait d'être effacé par
-                    // l'utilisateur, ce qui est son droit — c'est la réponse qui devait le
-                    // ramener au plan.
-                    return accepte is null
-                        ? "Aucun carnet de ce nom : il a été effacé, ou tu t'es trompé de titre. "
-                          + "N'exécute rien. Renote le plan avec travail_noter, énonce-le, et "
-                          + "attends de nouveau l'accord."
-                        : "Accord enregistré, tu peux commencer.\n" + Resumer(accepte);
+                    // « Énonce ce plan et attends son accord » faisait redemander la permission
+                    // d'exécuter une demande que l'utilisateur venait de formuler. Il reste libre
+                    // de corriger en le disant — la zone des travaux le rappelle — mais le défaut
+                    // est d'avancer, pas d'attendre.
+                    return Resumer(note) + "\nCommence maintenant par la première étape.";
                 },
                 Interne: true),
 
@@ -954,17 +911,46 @@ public partial class AssistantWindow : Window
 
             new AssistantLocal.Capacite(
                 "travail_terminer",
-                "Efface un carnet. À n'appeler QUE lorsque l'utilisateur a confirmé que le travail "
-                + "lui convient. Ne l'appelle jamais de ta propre initiative, même si toutes les "
-                + "étapes sont cochées : c'est lui qui juge du résultat, pas toi.",
+                "Referme un carnet et le range dans Travaux\\Finis. À n'appeler QUE lorsque "
+                + "l'utilisateur a confirmé que le travail lui convient. Ne l'appelle jamais de ta "
+                + "propre initiative, même si toutes les étapes sont cochées : c'est lui qui juge "
+                + "du résultat, pas toi. Refusé tant qu'une étape reste à faire.",
                 [new AssistantLocal.Parametre("titre", "Le titre du carnet.", [])],
                 reglages =>
                 {
-                    var efface = FichierTravail.Effacer(Valeur(reglages, "titre"), journal);
+                    var titre = Valeur(reglages, "titre");
+
+                    // Un carnet ne se referme pas sur des étapes non cochées.
+                    //
+                    // Le 7 septembre 2026, un travail s'est rangé dans Finis alors que sa dernière
+                    // étape — ouvrir le dossier — n'avait pas été faite. Rien ne l'en empêchait :
+                    // le verbe effaçait sans regarder. Le carnet devient alors un compte rendu qui
+                    // se contredit, coché à moitié et pourtant clos, et la seule trace de ce qui
+                    // restait à faire disparaît avec lui.
+                    //
+                    // Le refus nomme ce qui manque, pour être une consigne et non un mur : la
+                    // réponse dit quoi faire ensuite, cocher ou reprendre.
+                    if (FichierTravail.Lire(titre, journal) is { } carnet)
+                    {
+                        var restantes = FichierTravail.Restantes(carnet);
+
+                        if (restantes.Count > 0)
+                        {
+                            return $"Refusé : « {titre} » a encore {restantes.Count} étape(s) non "
+                                + "faite(s) : « " + string.Join(" », « ", restantes) + " ». "
+                                + "Termine-les, ou coche-les avec travail_cocher si elles sont "
+                                + "faites. Si tu ne peux pas les finir, dis-le à l'utilisateur et "
+                                + "laisse-lui refermer le carnet lui-même.";
+                        }
+                    }
+
+                    var efface = FichierTravail.Effacer(titre, journal);
 
                     Rafraichir();
 
-                    return efface ? "Carnet refermé." : "Aucun carnet de ce nom.";
+                    return efface
+                        ? "Carnet refermé, rangé dans Travaux\\Finis."
+                        : "Aucun carnet de ce nom.";
                 },
                 Interne: true),
         ];

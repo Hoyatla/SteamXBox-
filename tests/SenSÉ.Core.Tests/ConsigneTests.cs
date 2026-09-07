@@ -83,17 +83,37 @@ public class ConsigneTests : IDisposable
             AssistantLocal.Regles,
             StringComparison.Ordinal);
 
-    /// <summary>Trois issues sont offertes, pas deux.</summary>
+    /// <summary>Le plan s'énonce puis démarre, et reste corrigible.</summary>
     /// <remarks>
-    /// Commencer, modifier, abandonner. Sans la deuxième, l'utilisateur qui voulait corriger une
-    /// étape n'a que le choix de tout abandonner ou d'accepter un plan qu'il sait imparfait — et il
-    /// accepte, parce que refaire coûte plus cher que subir.
+    /// Ce test demandait les trois issues « COMMENCER, MODIFIER ou ABANDONNER » posées avant
+    /// d'agir. La question a été retirée : elle faisait approuver une seconde fois une demande
+    /// déjà formulée, et arrêtait l'assistant au milieu d'un travail commandé.
+    ///
+    /// <para>Ce qui devait survivre, et que ce test garde : le plan est <b>énoncé</b>, donc
+    /// lisible avant d'être subi, et il reste <b>corrigible</b> en cours de route. Sans cette
+    /// seconde moitié, l'utilisateur qui veut changer une étape n'aurait plus qu'à tout laisser
+    /// filer.</para>
     /// </remarks>
     [Fact]
-    public void ThreeOutcomesAreOfferedNotTwo()
+    public void ThePlanIsAnnouncedThenStartedAndStaysCorrectable()
     {
-        Assert.Contains("COMMENCER, MODIFIER ou ABANDONNER", AssistantLocal.Regles, StringComparison.Ordinal);
+        Assert.Contains("ÉNONCE le plan", AssistantLocal.Regles, StringComparison.Ordinal);
         Assert.Contains("réécris le carnet", AssistantLocal.Regles, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ce qui ne part jamais de la seule initiative du modèle reste énuméré.</summary>
+    /// <remarks>
+    /// C'est ce qui remplace l'accord préalable : au lieu d'une permission demandée pour tout, une
+    /// liste courte d'actes irréversibles pour lesquels il faut la demander. Perdre cette liste
+    /// rendrait le retrait de l'accord dangereux au lieu de simplement plus rapide.
+    /// </remarks>
+    [Fact]
+    public void TheIrreversibleActsStillNeedTheUser()
+    {
+        foreach (var acte in new[] { "installer un logiciel", "écraser un fichier", "fermer une application", "refermer un carnet" })
+        {
+            Assert.Contains(acte, AssistantLocal.Regles, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>Rattacher au mauvais travail se demande, jamais ne se devine.</summary>

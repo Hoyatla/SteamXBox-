@@ -28,23 +28,17 @@ public sealed class Travail
     [JsonPropertyName("touche")]
     public DateTime Touche { get; set; }
 
-    /// <summary>
-    /// L'utilisateur a-t-il donné son accord au plan ?
-    /// </summary>
-    /// <remarks>
-    /// <b>Un plan se montre avant de s'exécuter.</b> Lancer six générations de cinq minutes sur une
-    /// intention mal comprise coûte une demi-heure et se découvre à la fin. La consigne demande donc
-    /// à l'assistant de présenter son plan et d'attendre ; mais une consigne est un espoir, pas une
-    /// garantie, sur un modèle de quatre milliards de paramètres.
-    ///
-    /// <para>
-    /// D'où ce drapeau, qui rend l'espoir vérifiable : tant qu'il est faux, le carnet s'affiche
-    /// « en attente de votre accord » dans la fenêtre. Si l'assistant se lance quand même,
-    /// l'utilisateur le voit — un écart visible plutôt qu'un écart silencieux.
-    /// </para>
-    /// </remarks>
-    [JsonPropertyName("accepte")]
-    public bool Accepte { get; set; }
+    // Le drapeau « accepte » a été retiré, et avec lui le bouton « Je suis d'accord ».
+    //
+    // Il protégeait d'un plan lancé sur une intention mal comprise. Le prix s'est révélé plus
+    // élevé que le risque : une demande déjà formulée devait être approuvée une seconde fois,
+    // et l'assistant s'arrêtait au milieu d'un travail que l'utilisateur venait de commander
+    // pour redemander la permission de l'exécuter. Demander deux fois n'est pas plus sûr,
+    // c'est seulement plus lent — et ça apprend à cliquer sans lire.
+    //
+    // Ce qui reste, et qui protège vraiment, ce sont les gardes sur les actes irréversibles :
+    // rien ne s'installe, rien ne s'écrase, rien ne se ferme sans que l'utilisateur le dise.
+    // Les anciens carnets portent encore ce champ dans leur JSON ; il est ignoré à la lecture.
 
     [JsonPropertyName("taches")]
     public List<Tache> Taches { get; set; } = [];
@@ -73,8 +67,8 @@ public sealed class Travail
     /// </summary>
     /// <remarks>
     /// <b>Le défaut que ceci corrige.</b> Les acquis dépendent du modèle : c'est à lui d'appeler
-    /// <c>travail_retenir</c>, et sur quatre milliards de paramètres c'est un espoir, pas une
-    /// garantie — la même réserve que porte déjà <see cref="Accepte"/>. Mesuré le 6 septembre
+    /// <c>travail_retenir</c>, et sur un modèle de quatre milliards de paramètres c'est un espoir,
+    /// pas une garantie. Mesuré le 6 septembre
     /// 2026 : le contexte sature en plein travail, le fil repart neuf, et l'assistant rappelle
     /// <c>focus_and_type</c> avec <c>texte:""</c>. Le texte de deux cents caractères qu'on lui
     /// avait demandé d'écrire n'existait plus nulle part — ni dans le fil élagué, ni dans un
@@ -221,11 +215,6 @@ public static class FichierTravail
             Cree = ancien?.Cree ?? maintenant,
             Touche = maintenant,
 
-            // Un accord déjà donné survit à une révision du plan : l'assistant qui ajoute une étape
-            // en cours de route ne doit pas redemander la permission de continuer. Un carnet neuf,
-            // lui, attend.
-            Accepte = ancien?.Accepte ?? false,
-
             // Les acquis survivent aussi, et pour une raison plus forte encore : réviser un plan ne
             // rend pas faux ce qu'on a appris en l'exécutant. Les perdre ici rendrait la reprise
             // impossible au moment précis où elle sert — quand le plan s'est révélé trop court.
@@ -341,26 +330,13 @@ public static class FichierTravail
         return reste.Trim();
     }
 
-    /// <summary>Enregistre l'accord de l'utilisateur sur un plan.</summary>
+    /// <summary>Les étapes qui restent à faire.</summary>
     /// <remarks>
-    /// Appelé par l'assistant quand l'utilisateur a dit oui, ou par la fenêtre quand il presse le
-    /// bouton. Les deux chemins mènent au même drapeau : l'accord donné à l'oral et l'accord donné
-    /// au clic sont le même accord, et en tenir deux traces ferait diverger ce que le modèle croit
-    /// de ce que l'utilisateur voit.
+    /// Ce que <see cref="Effacer"/> consulte avant de refermer, et ce que la fenêtre nomme dans sa
+    /// demande de confirmation : « il reste deux étapes » vaut mieux que « êtes-vous sûr ».
     /// </remarks>
-    public static Travail? Accepter(string titre, Action<string>? journal)
-    {
-        if (Lire(titre, journal) is not { } travail)
-        {
-            return null;
-        }
-
-        travail.Accepte = true;
-        travail.Touche = DateTime.UtcNow;
-        Ecrire(travail, journal);
-
-        return travail;
-    }
+    public static IReadOnlyList<string> Restantes(Travail travail)
+        => [.. travail.Taches.Where(tache => !tache.Faite).Select(tache => tache.Texte)];
 
     /// <summary>Relit un carnet, et note qu'on l'a ouvert.</summary>
     public static Travail? Lire(string titre, Action<string>? journal, bool toucher = false)
@@ -534,7 +510,7 @@ public static class FichierTravail
             .Append('/')
             .Append(travail.Taches.Count.ToString(CultureInfo.InvariantCulture))
             .Append(')')
-            .AppendLine(travail.Accepte ? "" : "  — EN ATTENTE DE L'ACCORD DE L'UTILISATEUR");
+            .AppendLine();
 
         // La demande avant les etapes : c'est la seule ligne qui dit ce qu'on cherche a
         // obtenir, et apres un contexte plein c'est la seule qui reste pour le dire.

@@ -74,4 +74,51 @@ public static class IndexPlan
 
     /// <inheritdoc cref="MaxUserFolders"/>
     public const int MaxUserFiles = 250;
+
+    /// <summary>
+    /// Combien de niveaux descendre sous un dossier utilisateur pour y trouver un exécutable.
+    /// </summary>
+    /// <remarks>
+    /// <b>Ce que zéro niveau coûtait.</b> Les dossiers utilisateur n'étaient lus qu'à leur premier
+    /// niveau, et les exécutables seulement dans les dossiers du <c>PATH</c>. Une application
+    /// portable — celles qu'on range précisément dans ses Documents parce qu'elles ne s'installent
+    /// pas — était donc introuvable. Constaté : chercher « libreoffice » ne rendait que
+    /// l'installeur dans Téléchargements, pendant que
+    /// <c>Documents\Portable API\PortableApps\LibreOfficePortable\…\soffice.exe</c> attendait trois
+    /// niveaux plus bas. Ni la barre de recherche ni l'Assistant ne pouvaient l'ouvrir.
+    ///
+    /// <para>Quatre, parce que c'est la profondeur où vivent réellement ces applications :
+    /// <c>PortableApps\LibreOfficePortable\App\libreoffice\program\soffice.exe</c> en demande cinq
+    /// depuis Documents, et un dossier de rangement personnel en ajoute souvent un. Descendre sans
+    /// limite ferait parcourir des arbres de code source et des dépôts entiers, pour des binaires
+    /// que personne ne cherche par leur nom.</para>
+    /// </remarks>
+    public const int UserExecutableDepth = 4;
+
+    /// <summary>
+    /// Plafond du balayage d'exécutables sous les dossiers utilisateur.
+    /// </summary>
+    /// <remarks>
+    /// Séparé de <see cref="MaxUserFiles"/> : un seul <c>node_modules</c> ou un dossier de
+    /// compilation rendrait des milliers de binaires, qui noieraient le menu Démarrer — lequel est
+    /// presque toujours la réponse voulue.
+    /// </remarks>
+    public const int MaxUserExecutables = 400;
+
+    /// <summary>
+    /// Dossiers qu'on ne traverse pas en cherchant un exécutable.
+    /// </summary>
+    /// <remarks>
+    /// Ce sont des arbres de construction et de dépendances : profonds, pleins de binaires, et dont
+    /// aucun n'est ce que quelqu'un tape dans une barre de recherche. Les exclure est ce qui rend
+    /// la descente abordable.
+    /// </remarks>
+    public static bool IsBuildDirectory(string name)
+        => name.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("obj", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("bin", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("target", StringComparison.OrdinalIgnoreCase)
+        || name.Equals(".git", StringComparison.OrdinalIgnoreCase)
+        || name.Equals(".venv", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("__pycache__", StringComparison.OrdinalIgnoreCase);
 }

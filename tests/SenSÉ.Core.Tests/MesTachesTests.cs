@@ -75,11 +75,9 @@ public class MesTachesTests : IDisposable
     public void AListWrittenByTheUserNeedsNoApprovalFromHim()
     {
         FichierTravail.Noter(Miennes, ["trier le dossier"], null);
-        FichierTravail.Accepter(Miennes, null);
 
         var carnet = FichierTravail.Lire(Miennes, null)!;
 
-        Assert.True(carnet.Accepte);
         Assert.DoesNotContain(
             "EN ATTENTE", FichierTravail.Resumer(carnet), StringComparison.Ordinal);
     }

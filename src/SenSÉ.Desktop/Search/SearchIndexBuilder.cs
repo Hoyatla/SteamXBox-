@@ -202,6 +202,69 @@ public static class SearchIndexBuilder
             {
                 Add(items, path, SearchItemKind.File, IndexPlan.UserFolderPriority, userPath: true);
             }
+
+            foreach (var path in ExecutablesUnder(root, log))
+            {
+                Add(items, path, SearchItemKind.Application, IndexPlan.UserFolderPriority, userPath: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The executables sitting a few levels down inside a user folder.
+    /// </summary>
+    /// <remarks>
+    /// <b>Portable applications lived in a blind spot.</b> Executables were indexed only from the
+    /// directories of the <c>PATH</c>, and user folders only at their first level. An application
+    /// that installs nothing — which is the whole point of a portable one, and why it gets dropped
+    /// into Documents — was therefore in the index in name only: the folder holding it was found,
+    /// the program inside it never. Searching "libreoffice" returned the installer sitting in
+    /// Downloads while
+    /// <c>Documents\Portable API\PortableApps\LibreOfficePortable\…\soffice.exe</c> waited three
+    /// levels below, and neither the launcher nor the Assistant could open it.
+    ///
+    /// <para>Bounded on every axis, because this is the one walk that could grow without end:
+    /// <see cref="IndexPlan.UserExecutableDepth"/> levels, <see cref="IndexPlan.MaxUserExecutables"/>
+    /// entries, and <see cref="IndexPlan.IsBuildDirectory"/> pruning the trees where binaries breed
+    /// but nobody searches. Breadth first, so a deep source tree cannot exhaust the budget before a
+    /// portable application two levels down has been seen.</para>
+    /// </remarks>
+    private static IEnumerable<string> ExecutablesUnder(string root, Action<string>? log)
+    {
+        var found = 0;
+        var niveau = new List<string> { root };
+
+        for (var profondeur = 0; profondeur < IndexPlan.UserExecutableDepth && niveau.Count > 0; profondeur++)
+        {
+            var suivant = new List<string>();
+
+            foreach (var directory in niveau)
+            {
+                // Le premier niveau est deja couvert par Files(root, "*") plus haut.
+                if (profondeur > 0)
+                {
+                    foreach (var path in Files(directory, "*.exe", SearchOption.TopDirectoryOnly, log))
+                    {
+                        if (found >= IndexPlan.MaxUserExecutables)
+                        {
+                            yield break;
+                        }
+
+                        found++;
+                        yield return path;
+                    }
+                }
+
+                foreach (var enfant in Directories(directory, log))
+                {
+                    if (!IndexPlan.IsBuildDirectory(Path.GetFileName(enfant)))
+                    {
+                        suivant.Add(enfant);
+                    }
+                }
+            }
+
+            niveau = suivant;
         }
     }
 

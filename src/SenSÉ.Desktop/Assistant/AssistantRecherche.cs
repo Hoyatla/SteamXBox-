@@ -79,7 +79,123 @@ public static class AssistantRecherche
                 + "que comment il s'appelle.",
                 [new AssistantLocal.Parametre("termes", "Les mots a chercher dans le contenu des documents.", [])],
                 args => Documents(args.GetValueOrDefault("termes") ?? "", journal)),
+
+            new AssistantLocal.Capacite(
+                "ouvrir",
+                "Ouvre un document, un dossier ou une adresse web, par son chemin complet — celui "
+                + "que rend recherche_fichiers. C'est ce qui te permet d'AGIR sur ce que tu as "
+                + "trouve au lieu de seulement l'annoncer. "
+                + "Ouvre aussi une [application] : c'est ce qu'on attend de toi quand on te demande "
+                + "d'ouvrir un logiciel. "
+                + "REFUSE en revanche ce qui installe ou execute du code — .msi, .bat, .cmd, .ps1, "
+                + "et les .exe dont le nom annonce un installeur : ceux-la passent par "
+                + "proposer_choix. "
+                + "Si le chemin n'existe pas, le dit au lieu de faire semblant.",
+                [new AssistantLocal.Parametre("chemin", "Le chemin complet du document ou du dossier, ou une adresse http/https.", [])],
+                args => Ouvrir(args.GetValueOrDefault("chemin") ?? "", journal)),
         ];
+    }
+
+    /// <summary>Ce qui installe ou execute du code arbitraire, et qu'on n'ouvre donc pas.</summary>
+    /// <remarks>
+    /// <b>Ce qui n'y est pas, et pourquoi.</b> Le <c>.exe</c> ordinaire en est absent. La premiere
+    /// version refusait toute extension executable, et c'etait une impasse : l'utilisateur
+    /// demandait « ouvre LibreOffice », passait par proposer_choix, acceptait le plan — et le verbe
+    /// refusait encore, parce que le fichier finissait par <c>.exe</c>. Le garde ne pouvait pas
+    /// savoir que l'accord avait ete donne, donc il bloquait pour toujours ; l'assistant a boucle
+    /// puis renonce.
+    ///
+    /// <para>Lancer une application que l'utilisateur a nommee n'est pas installer un logiciel. Le
+    /// contrat du produit le dit dans l'autre sens : « aucun verbe qui n'existe pas deja pour
+    /// l'utilisateur » — or il ouvre cette application d'un double-clic. Ce qui reste refuse, c'est
+    /// ce qui MODIFIE la machine plutot que de s'y executer : les installeurs, et les scripts, qui
+    /// sont du code arbitraire sous une extension anodine.</para>
+    /// </remarks>
+    private static readonly string[] ExtensionsRefusees =
+        [".msi", ".msix", ".appx", ".bat", ".cmd", ".ps1", ".vbs", ".scr", ".com", ".reg"];
+
+    /// <summary>Un executable dont le nom annonce qu'il installe.</summary>
+    /// <remarks>
+    /// Un installeur se distingue mal d'une application par son extension — les deux sont des
+    /// <c>.exe</c> — mais tres bien par son nom, que celui qui le publie choisit pour etre lu.
+    /// C'est faillible dans les deux sens, et c'est assumé : le cas qui compte est celui d'un
+    /// installeur trouve par une recherche, comme le LibreOffice_26.2.5_Win_x86-64.msi des
+    /// Telechargements, et non d'un piege qu'on chercherait a dejouer.
+    /// </remarks>
+    private static bool RessembleAUnInstalleur(string nomFichier)
+    {
+        var nom = nomFichier.ToLowerInvariant();
+
+        return nom.Contains("setup", StringComparison.Ordinal)
+            || nom.Contains("install", StringComparison.Ordinal)
+            || nom.Contains("uninstall", StringComparison.Ordinal)
+            || nom.Contains("updater", StringComparison.Ordinal);
+    }
+
+    private static string Ouvrir(string chemin, Action<string>? journal)
+    {
+        var cible = chemin.Trim().Trim('"');
+
+        if (cible.Length == 0)
+        {
+            return "ouvrir : donne un chemin.";
+        }
+
+        var estAdresseWeb =
+            cible.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || cible.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+        if (!estAdresseWeb)
+        {
+            var extension = System.IO.Path.GetExtension(cible);
+            var nomFichier = System.IO.Path.GetFileName(cible);
+
+            if (ExtensionsRefusees.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            {
+                return $"Refuse : « {nomFichier} » installe ou execute du code, et ca appartient a "
+                    + "l'utilisateur. Propose-le-lui avec proposer_choix en disant ce que ca "
+                    + "ferait, et laisse-le lancer lui-meme.";
+            }
+
+            if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                && RessembleAUnInstalleur(nomFichier))
+            {
+                return $"Refuse : « {nomFichier} » a tout d'un installeur, et installer un logiciel "
+                    + "appartient a l'utilisateur. Propose-le-lui avec proposer_choix en disant ce "
+                    + "que ca ferait.";
+            }
+
+            if (!System.IO.File.Exists(cible) && !System.IO.Directory.Exists(cible))
+            {
+                return $"Rien a ouvrir : « {cible} » n'existe pas.";
+            }
+        }
+
+        try
+        {
+            if (estAdresseWeb && SenSÉ.Mcp.Bus.ChromiumEmbarque.Exe() is { } chromium)
+            {
+                var departWeb = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = chromium,
+                    UseShellExecute = false,
+                };
+                departWeb.ArgumentList.Add(cible);
+                System.Diagnostics.Process.Start(departWeb)?.Dispose();
+
+                return $"Ouvert dans le navigateur du projet : {cible}";
+            }
+
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(cible) { UseShellExecute = true })?.Dispose();
+
+            return $"Ouvert : {cible}";
+        }
+        catch (Exception exception)
+        {
+            journal?.Invoke($"ouvrir « {cible} » : {exception.GetType().Name}: {exception.Message}");
+            return $"Impossible d'ouvrir « {cible} » : {exception.Message}";
+        }
     }
 
     /// <summary>Le mot que l'Assistant lira devant chaque ligne.</summary>

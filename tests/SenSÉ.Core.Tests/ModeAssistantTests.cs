@@ -59,7 +59,6 @@ public class ModeAssistantTests : IDisposable
     public void AnAcceptedUnfinishedWorkOrdersAResume()
     {
         FichierTravail.Noter("Vidéo par texte", ["composer le flux", "lancer"], null);
-        FichierTravail.Accepter("Vidéo par texte", null);
         FichierTravail.Cocher("Vidéo par texte", "composer le flux", null);
 
         var rappel = AssistantLocal.RappelTravaux(null);
@@ -71,21 +70,25 @@ public class ModeAssistantTests : IDisposable
         Assert.Contains("lancer", rappel, StringComparison.Ordinal);
     }
 
-    // Un plan qui attend encore l'accord n'est pas un travail commencé : le reprendre seul
-    // court-circuiterait exactement la garde que l'accord représente.
+    // Un plan tout juste noté se reprend sans étape intermédiaire.
+    //
+    // Ce test disait l'inverse : un plan en attente d'accord n'était pas repris, et c'était la
+    // garde que l'accord représentait. L'accord a été retiré — il faisait approuver une seconde
+    // fois une demande déjà formulée — et l'invariant s'inverse avec lui : ce qui a des étapes non
+    // faites est un travail en cours, point. C'est aussi ce qui rend la garde de travail_terminer
+    // nécessaire, puisque plus rien n'attend en amont.
     [Fact]
-    public void APlanAwaitingApprovalIsNotResumed()
+    public void AJustNotedPlanIsResumedStraightAway()
     {
         FichierTravail.Noter("Vidéo par texte", ["composer le flux"], null);
 
-        Assert.DoesNotContain("REPRISE", AssistantLocal.RappelTravaux(null), StringComparison.Ordinal);
+        Assert.Contains("REPRISE", AssistantLocal.RappelTravaux(null), StringComparison.Ordinal);
     }
 
     [Fact]
     public void AFinishedWorkIsNotResumed()
     {
         FichierTravail.Noter("Vidéo par texte", ["composer le flux"], null);
-        FichierTravail.Accepter("Vidéo par texte", null);
         FichierTravail.Cocher("Vidéo par texte", "composer le flux", null);
 
         Assert.DoesNotContain("REPRISE", AssistantLocal.RappelTravaux(null), StringComparison.Ordinal);
