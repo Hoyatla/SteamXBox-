@@ -52,30 +52,30 @@ public static class Vulgarisation
     {
         // ----- Codage : primitives -----
         ["texte"] = (
-            "Texte",
+            "Note",
             "Une boite ou tu ecris du texte libre. Sert a donner une consigne ou une phrase aux noeuds suivants."),
         ["nombre"] = (
             "Nombre",
             "Une valeur numerique. Tu peux choisir entre un minimum et un maximum."),
         ["booleen"] = (
-            "Oui / Non",
+            "Interrupteur",
             "Un interrupteur : oui ou non. Sert a activer ou desactiver une branche du graphe."),
         ["fichier_lire"] = (
-            "Lire un fichier",
+            "Ouvrir un fichier",
             "Ouvre un fichier sur ton disque et donne son contenu aux noeuds suivants."),
         ["fichier_ecrire"] = (
-            "Ecrire dans un fichier",
+            "Sauver dans un fichier",
             "Ecrit le texte qu'il recoit dans un fichier sur ton disque. Tu choisis ou."),
         ["lister_fichiers"] = (
             "Lister des fichiers",
             "Liste tous les fichiers d'un dossier, avec un motif pour filtrer (ex: *.txt)."),
         ["concatener"] = (
-            "Coller des textes",
+            "Fusionner des textes",
             "Colle plusieurs textes bout a bout, avec un separateur entre chaque."),
 
         // ----- Codage : execution code -----
         ["executer_code"] = (
-            "Executer du code",
+            "Lancer du code",
             "Fait tourner du code source. Choisis le langage, ecris ton code, et appuie sur F5 pour executer. Le resultat (sortie, erreurs, duree) apparait dans la console en bas du canvas."),
         ["executer_commande"] = (
             "Lancer une commande",
@@ -83,7 +83,7 @@ public static class Vulgarisation
 
         // ----- Codage : LLM (10) -----
         ["llm_generer_code"] = (
-            "Faire generer du code",
+            "Ecrire du code",
             "Decris ce que tu veux que le code fasse, le modele local l'ecrit pour toi dans le langage que tu choisis."),
         ["llm_completer_code"] = (
             "Completer du code",
@@ -92,10 +92,10 @@ public static class Vulgarisation
             "Expliquer du code",
             "Le modele local te dit en francais ce que fait ce code, ligne par ligne ou en bloc."),
         ["llm_reviser_code"] = (
-            "Faire relire du code",
+            "Relire du code",
             "Le modele local relit ton code et propose une version amelioree (lisibilite, perfs, securite)."),
         ["llm_generer_tests"] = (
-            "Generer des tests",
+            "Ecrire des tests",
             "Le modele local ecrit des tests pour ton code, dans le langage et le framework que tu choisis."),
         ["llm_traduire_code"] = (
             "Traduire du code",
@@ -104,13 +104,13 @@ public static class Vulgarisation
             "Documenter du code",
             "Le modele local ajoute des commentaires et de la documentation a ton code."),
         ["llm_refactorer"] = (
-            "Refactorer du code",
+            "Ameliorer du code",
             "Le modele local reorganise ton code sans changer ce qu'il fait, pour le rendre plus propre."),
         ["llm_generer_nom"] = (
-            "Trouver un nom",
+            "Suggerer un nom",
             "Le modele local propose un nom de variable ou de fonction adapte a ce que tu decris."),
         ["llm_repondre_question"] = (
-            "Poser une question",
+            "Demander a l'IA",
             "Le modele local repond a ta question, en utilisant le contexte que tu lui donnes."),
 
         // ----- Codage : MCP saisie / CDP (6) -----
@@ -124,10 +124,10 @@ public static class Vulgarisation
             "Taper du texte",
             "Tape du texte au clavier dans la fenetre qui a le focus. Pour remplir un formulaire, par exemple."),
         ["mcp_cdp_naviguer"] = (
-            "Aller sur un site",
+            "Ouvrir une page web",
             "Ouvre une URL dans un navigateur (Chrome, Edge). Pour interagir avec un site web."),
         ["mcp_cdp_eval_js"] = (
-            "Executer du JavaScript",
+            "Lancer du JavaScript",
             "Execute du code JavaScript dans la page web courante et recupere le resultat."),
         ["mcp_cdp_screenshot"] = (
             "Capturer une page web",
@@ -135,18 +135,18 @@ public static class Vulgarisation
 
         // ----- Codage : workflows -----
         ["workflow_code_complet"] = (
-            "Pipeline code complet",
+            "Code complet (auto)",
             "Enchaine : generer du code + le relire + le sauver. Un graphe tout pret pour avoir du code propre."),
         ["workflow_tests_unitaires"] = (
-            "Pipeline de tests",
+            "Tests (auto)",
             "Enchaine : generer les tests + les sauver + les executer. Verifie qu'un code marche."),
         ["workflow_refactor_securise"] = (
-            "Pipeline refactor securise",
+            "Refactor (auto)",
             "Enchaine : refactorer + relire + sauver. Ameliore un code en gardant son fonctionnement."),
 
         // ----- Multimedia : generation (4) -----
         ["texte_vers_image"] = (
-            "Dessiner une image",
+            "Creer une image",
             "Decris ce que tu veux voir, le modele te le dessine. Choisis un style si tu veux."),
         ["texte_vers_video"] = (
             "Creer une video",
@@ -160,10 +160,10 @@ public static class Vulgarisation
 
         // ----- Multimedia : TTS / ASR / vision (3) -----
         ["texte_vers_son"] = (
-            "Generer un son",
+            "Creer une voix-off",
             "Ecris un texte, le modele le dit a voix haute. Choisis la voix si tu veux."),
         ["audio_vers_texte"] = (
-            "Transcrire un audio",
+            "Transcrire l'audio",
             "Transforme un fichier audio en texte. Sert a retranscrire une reunion, par exemple."),
         ["image_vers_texte"] = (
             "Decrire une image",
