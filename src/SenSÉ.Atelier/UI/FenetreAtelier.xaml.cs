@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.ComponentModel;
+using System.Text.Json.Nodes;
 using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Custom;
 using SenSÉ.Atelier.Execution;
@@ -348,27 +350,188 @@ private void OngletFermer_Click(object sender, MouseButtonEventArgs e)
         OngletsGraphes.ItemsSource = _onglets;
     }
 
+    // Memoire de l'execution courante (pour le bouton Annuler).
+    private string? _executionEnCours;
+    private CancellationTokenSource? _pollingCts;
+
     private void BtnExecuter_Click(object sender, RoutedEventArgs e) => ExecuterGraphe();
+
     private void ExecuterGraphe()
     {
         if (_grapheActif is null) return;
-        Statut.Text = "Exécution en cours...";
-        var exec = Moteur.Instance.LancerAsync(_grapheActif);
+        if (_executionEnCours is not null)
+        {
+            Statut.Text = "Une execution est deja en cours.";
+            return;
+        }
+
+        // Reset visuel : efface les statuts precedents et ouvre le panel.
+        CanvasCtl.ReinitialiserStatuts();
+        PanelExecution.Visibility = Visibility.Visible;
+        TexteSorties.Text = "";
+        ProgressionExec.Value = 0;
+        TexteProgression.Text = "0 / 0 noeuds";
+        Statut.Text = "Execution en cours...";
+
+        // Lance l'execution via HTTP (le subprocess headless, ou l'in-process
+        // si l'Atelier a ete demarre avec une fenetre). L'execution est
+        // asynchrone cote moteur.
+        var resp = _serveur.AppelerVerbeSync("executer",
+            new JsonObject { ["graphe_id"] = JsonValue.Create(_grapheActif.Id) }, null);
+        if (resp is not JsonObject obj || obj["ok"]?.GetValue<bool>() != true)
+        {
+            var err = resp?["error"]?.GetValue<string>() ?? "inconnu";
+            Statut.Text = "Echec lancement : " + err;
+            PanelExecution.Visibility = Visibility.Collapsed;
+            return;
+        }
+        _executionEnCours = obj["data"]?["execution_id"]?.GetValue<string>();
+        if (_executionEnCours is null)
+        {
+            Statut.Text = "execution_id absent de la reponse";
+            PanelExecution.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // Poll l'etat toutes les 250ms jusqu'a terminaison.
+        _pollingCts = new CancellationTokenSource();
+        var token = _pollingCts.Token;
         Task.Run(async () =>
         {
-            while (exec.Statut == StatutExecution.EnAttente || exec.Statut == StatutExecution.EnCours)
-                await Task.Delay(200);
-            Dispatcher.Invoke(() =>
+            try
             {
-                Statut.Text = exec.Statut switch
+                while (!token.IsCancellationRequested)
                 {
-                    StatutExecution.Reussi => "✓ Terminé",
-                    StatutExecution.Echec => "✗ " + (exec.Erreur ?? "echec"),
-                    StatutExecution.Annule => "Annulé",
-                    _ => "?",
+                    var st = _serveur.AppelerVerbeSync("execution/etat", null,
+                        new Dictionary<string, string> { ["execution_id"] = _executionEnCours });
+                    Dispatcher.Invoke(() => MettreAJourUiExecution(st));
+                    if (st is JsonObject stObj
+                        && stObj["ok"]?.GetValue<bool>() == true
+                        && stObj["data"]?["statut"]?.GetValue<string>() is { } s
+                        && s != "EnCours" && s != "EnAttente")
+                    {
+                        break; // fini
+                    }
+                    await Task.Delay(250, token);
+                }
+            }
+            catch (OperationCanceledException) { /* normal, on a demande l'arret */ }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() => Statut.Text = "Erreur polling : " + ex.Message);
+            }
+        }, token);
+    }
+
+    /// <summary>
+    /// Met a jour la barre de progression, la mini-console, les bordures des
+    /// noeuds, et le statut texte, d'apres la reponse JSON de /execution/etat.
+    /// </summary>
+    private void MettreAJourUiExecution(JsonObject? resp)
+    {
+        if (resp is null || resp["ok"]?.GetValue<bool>() != true) return;
+        var data = resp["data"] as JsonObject;
+        if (data is null) return;
+
+        // Progression
+        var noeuds = data["noeuds"] as JsonArray;
+        var total = noeuds?.Count ?? 0;
+        var reussis = 0;
+        var enCours = 0;
+        var enEchec = 0;
+        if (noeuds is not null)
+        {
+            foreach (var n in noeuds)
+            {
+                if (n is not JsonObject no) continue;
+                var st = no["statut"]?.GetValue<string>() ?? "";
+                if (st == "Reussi") reussis++;
+                else if (st == "EnCours") enCours++;
+                else if (st == "Echec") enEchec++;
+
+                // Met a jour la bordure du noeud correspondant
+                var nid = no["noeud_id"]?.GetValue<string>();
+                if (nid is null) continue;
+                StatutExecution statut = st switch
+                {
+                    "EnAttente" => StatutExecution.EnAttente,
+                    "EnCours"   => StatutExecution.EnCours,
+                    "Reussi"    => StatutExecution.Reussi,
+                    "Echec"     => StatutExecution.Echec,
+                    "Annule"    => StatutExecution.Annule,
+                    _ => StatutExecution.EnAttente,
                 };
-            });
-        });
+                var err = no["erreur"]?.GetValue<string>();
+                CanvasCtl.DefinirStatutNoeud(nid, statut, err);
+            }
+        }
+        ProgressionExec.Value = total > 0 ? (reussis + enEchec) * 100.0 / total : 0;
+        TexteProgression.Text = reussis + " / " + total + " noeuds"
+            + (enEchec > 0 ? " (" + enEchec + " en echec)" : "")
+            + (enCours > 0 ? " (" + enCours + " en cours)" : "");
+
+        // Mini-console : stdout/stderr des noeuds reussis et en erreur
+        var sb = new System.Text.StringBuilder();
+        if (noeuds is not null)
+        {
+            foreach (var n in noeuds)
+            {
+                if (n is not JsonObject no) continue;
+                var type = no["type"]?.GetValue<string>() ?? "?";
+                var sorties = no["sorties"] as JsonObject;
+                if (sorties is null) continue;
+                var stdout = sorties["stdout"]?.GetValue<string>();
+                var stderr = sorties["stderr"]?.GetValue<string>();
+                var codeRetour = sorties["code_retour"]?.GetValue<int?>();
+                if (!string.IsNullOrEmpty(stdout))
+                    sb.AppendLine("[" + type + "] stdout:");
+                if (!string.IsNullOrEmpty(stdout))
+                    sb.AppendLine(stdout);
+                if (!string.IsNullOrEmpty(stderr))
+                {
+                    sb.AppendLine("[" + type + "] stderr:");
+                    sb.AppendLine(stderr);
+                }
+            }
+        }
+        if (sb.Length > 0) TexteSorties.Text = sb.ToString();
+
+        // Statut global
+        var statutGlobal = data["statut"]?.GetValue<string>() ?? "?";
+        Statut.Text = statutGlobal switch
+        {
+            "EnCours"   => "Execution en cours...",
+            "Reussi"    => "✓ Termine",
+            "Echec"     => "✗ " + (data["erreur"]?.GetValue<string>() ?? "echec"),
+            "Annule"    => "Annule",
+            _ => statutGlobal,
+        };
+
+        // Si fini, on coupe le polling et on remet l'UI en place
+        if (statutGlobal is "Reussi" or "Echec" or "Annule")
+        {
+            _pollingCts?.Cancel();
+            _executionEnCours = null;
+            // Cache le panel apres 3 secondes pour un reussi propre
+            if (statutGlobal == "Reussi")
+            {
+                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                timer.Tick += (s, e) =>
+                {
+                    timer.Stop();
+                    PanelExecution.Visibility = Visibility.Collapsed;
+                };
+                timer.Start();
+            }
+        }
+    }
+
+    private void BtnAnnulerExec_Click(object sender, RoutedEventArgs e)
+    {
+        if (_executionEnCours is null) return;
+        _serveur.AppelerVerbeSync("execution/annuler",
+            new JsonObject { ["execution_id"] = JsonValue.Create(_executionEnCours) }, null);
+        // La reponse du polling terminera naturellement l'UI
     }
 
     private void BtnSauvegarder_Click(object sender, RoutedEventArgs e)

@@ -32,10 +32,62 @@ public partial class VueNoeud : UserControl
         MettreAJourBord();
     }
 
+    /// <summary>
+    /// Statut courant du noeud dans une execution en cours. Null si le noeud
+    /// n'a jamais ete execute ou n'est pas dans le graphe actif.
+    /// </summary>
+    public StatutExecution? Statut { get; private set; }
+
+    /// <summary>Le message d'erreur si Statut == Echec, sinon null.</summary>
+    public string? ErreurMessage { get; private set; }
+
+    /// <summary>
+    /// Met a jour la bordure et le badge d'etat. Appele par le Canvas quand
+    /// l'etat d'execution d'un noeud change (voir Moteur).
+    /// </summary>
+    public void DefinirStatutExecution(StatutExecution? statut, string? erreur = null)
+    {
+        Statut = statut;
+        ErreurMessage = erreur;
+        if (BadgeStatut is not null)
+        {
+            BadgeStatut.Text = statut switch
+            {
+                StatutExecution.EnCours => "●",
+                StatutExecution.Reussi  => "✓",
+                StatutExecution.Echec   => "✗",
+                StatutExecution.Annule  => "⊘",
+                _ => "",
+            };
+            BadgeStatut.Foreground = statut switch
+            {
+                StatutExecution.EnCours => System.Windows.Media.Brushes.Goldenrod,
+                StatutExecution.Reussi  => System.Windows.Media.Brushes.LightGreen,
+                StatutExecution.Echec   => System.Windows.Media.Brushes.Salmon,
+                StatutExecution.Annule  => System.Windows.Media.Brushes.Gray,
+                _ => System.Windows.Media.Brushes.Transparent,
+            };
+        }
+        if (ZoneErreur is not null)
+        {
+            ZoneErreur.Visibility = (statut == StatutExecution.Echec && !string.IsNullOrEmpty(erreur))
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+        if (TexteErreur is not null) TexteErreur.Text = erreur ?? "";
+        MettreAJourBord();
+    }
+
     private void MettreAJourBord()
     {
         if (Bord is null) return;
-        if (EstSelectionne && EstFocused)
+        // Priorite : etat d'execution > selection/focus > repos
+        if (Statut == StatutExecution.EnCours)
+            Bord.Style = (Style)FindResource("BordEnCours");
+        else if (Statut == StatutExecution.Echec)
+            Bord.Style = (Style)FindResource("BordEchec");
+        else if (Statut == StatutExecution.Reussi)
+            Bord.Style = (Style)FindResource("BordReussi");
+        else if (EstSelectionne && EstFocused)
             Bord.Style = (Style)FindResource("BordFocusedSelected");
         else if (EstSelectionne)
             Bord.Style = (Style)FindResource("BordSelected");

@@ -21,6 +21,19 @@
             <Setter Property="BorderBrush" Value="#F39C12" />
             <Setter Property="BorderThickness" Value="3" />
         </Style>
+        <!-- Etats d'execution. Priorite : EnCours > Echec > Reussi > selection/focus. -->
+        <Style x:Key="BordEnCours" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#FFD93D" />
+            <Setter Property="BorderThickness" Value="3" />
+        </Style>
+        <Style x:Key="BordReussi" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#7EE787" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style x:Key="BordEchec" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#FF6B6B" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
     </UserControl.Resources>
     <Border x:Name="Bord" CornerRadius="6"
             Background="#2A2A3D" BorderBrush="#3B3B52" BorderThickness="1"
@@ -31,10 +44,18 @@
             <!-- En-tete -->
             <Border x:Name="Entete" Background="#34344A" CornerRadius="6,6,0,0"
                     Padding="10,6" MouseLeftButtonDown="Entete_MouseLeftButtonDown">
-                <StackPanel>
-                    <TextBlock x:Name="Titre" Text="Noeud" Foreground="White" FontWeight="SemiBold" FontSize="13" />
-                    <TextBlock x:Name="SousTitre" Text="type" Foreground="#A0A0B8" FontSize="10" />
-                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock x:Name="Titre" Text="Noeud" Foreground="White" FontWeight="SemiBold" FontSize="13" />
+                        <TextBlock x:Name="SousTitre" Text="type" Foreground="#A0A0B8" FontSize="10" />
+                    </StackPanel>
+                    <TextBlock x:Name="BadgeStatut" Grid.Column="1" Text="" FontSize="14" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="6,0,0,0" />
+                </Grid>
             </Border>
             <!-- Ports entree -->
             <ItemsControl x:Name="ListeEntrees" Margin="0,6,0,0">
@@ -66,6 +87,10 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Border x:Name="ZoneErreur" Background="#3A1F1F" BorderBrush="#FF6B6B"
+                    BorderThickness="0,1,0,0" Padding="8,4" Visibility="Collapsed" MaxWidth="240">
+                <TextBlock x:Name="TexteErreur" Foreground="#FFB4B4" FontSize="10" TextWrapping="Wrap" />
+            </Border>
         </StackPanel>
     </Border>
 </UserControl>

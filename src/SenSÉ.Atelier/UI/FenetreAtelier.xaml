@@ -117,8 +117,36 @@
             <local:Inspecteur x:Name="InspecteurCtl" Grid.Column="2" />
         </Grid>
 
+        <!-- Barre d'execution : progression + mini-console. Cachee quand pas d'execution. -->
+        <Border x:Name="PanelExecution" Grid.Row="4" Visibility="Collapsed"
+                Background="{StaticResource FondPanneauBrush}" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,1"
+                Padding="8,4" MaxHeight="180">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ProgressBar x:Name="ProgressionExec" Width="200" Height="14" Minimum="0" Maximum="100" Value="0" />
+                        <TextBlock x:Name="TexteProgression" Text="0 / 0 noeuds" Margin="10,0" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TexteSecondaireBrush}" FontSize="11" />
+                    </StackPanel>
+                    <Button Grid.Column="1" x:Name="BtnAnnulerExec" Content="Annuler" Padding="10,2" Click="BtnAnnulerExec_Click" />
+                </Grid>
+                <ScrollViewer x:Name="ScrollSorties" Grid.Row="1" Margin="0,4,0,0" VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="TexteSorties" FontFamily="Consolas, Courier New, monospace" FontSize="11"
+                               Foreground="#D0D0E0" TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
         <!-- Barre de statut -->
-        <Border Grid.Row="4" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="5" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,0">
             <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt.  F5=Exécuter, Ctrl+S=Sauver, Ctrl+Z=Annuler, Ctrl+F=Filtrer, F2=Renommer onglet" />
         </Border>
     </Grid>

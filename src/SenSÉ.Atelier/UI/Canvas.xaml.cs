@@ -432,4 +432,30 @@ public partial class CanvasAtelier : UserControl
     }
 
     public void SauvegarderSiNecessaire() => GrapheModifie?.Invoke();
+
+    /// <summary>
+    /// Met a jour le statut d'execution d'un noeud identifie par son id.
+    /// Si le noeud n'est pas dans le canvas, l'appel est ignore (no-op).
+    /// Utilise par FenetreAtelier pour suivre une execution en cours via le
+    /// verbe HTTP /atelier/execution/etat.
+    /// </summary>
+    public void DefinirStatutNoeud(string noeudId, StatutExecution statut, string? erreur = null)
+    {
+        if (_vuesNoeuds.TryGetValue(noeudId, out var v))
+        {
+            v.DefinirStatutExecution(statut, erreur);
+        }
+    }
+
+    /// <summary>
+    /// Remet tous les noeuds a "non execute" (statut = null). Appele au debut
+    /// d'une nouvelle execution pour effacer l'etat de la precedente.
+    /// </summary>
+    public void ReinitialiserStatuts()
+    {
+        foreach (var kv in _vuesNoeuds)
+        {
+            kv.Value.DefinirStatutExecution(null, null);
+        }
+    }
 }
