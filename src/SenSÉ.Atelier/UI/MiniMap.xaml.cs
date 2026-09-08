@@ -101,6 +101,10 @@ public partial class MiniMap : UserControl
         _viewportH = viewport.Height * _scale;
         if (_viewportW > ActualWidth - 4) _viewportW = ActualWidth - 4;
         if (_viewportH > ActualHeight - 4) _viewportH = ActualHeight - 4;
+        // Garde-fou : en headless (UserControl pas encore mesure), ActualWidth/ActualHeight
+        // peuvent etre 0, ce qui rend ActualWidth - 4 = -4 (valeur interdite pour Width).
+        if (_viewportW < 0) _viewportW = 0;
+        if (_viewportH < 0) _viewportH = 0;
         if (_viewportX < 0) _viewportX = 0;
         if (_viewportY < 0) _viewportY = 0;
         Canvas.SetLeft(ViewportRect, _viewportX);
