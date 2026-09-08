@@ -16,6 +16,11 @@ public sealed class ContexteExecution
     public Action<string>? Journal { get; set; }
     public CancellationToken Annulation { get; set; }
 
+    /// <summary>Si un Executeur met ce flag a true (via controle_si),
+    /// le moteur skip tous les noeuds en aval dans la meme branche.
+    /// MVP : le moteur collecte les IDs downstream et les desactive.</summary>
+    public bool DesactiveAval { get; set; }
+
     public ContexteExecution(string noeudId, string noeudType)
     {
         NoeudId = noeudId;

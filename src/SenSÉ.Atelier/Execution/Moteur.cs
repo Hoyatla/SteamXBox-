@@ -26,6 +26,8 @@ public sealed class Moteur
     private Moteur() { }
 
     private readonly Dictionary<string, ExecutionGraphe> _executions = new();
+    private readonly Dictionary<string, ManualResetEventSlim> _terminaisons = new();
+    private readonly Dictionary<string, HashSet<string>> _saute = new();
     private readonly object _lock = new();
 
     public ExecutionGraphe? EtatExecution(string executionId)
@@ -64,9 +66,19 @@ public sealed class Moteur
                 Statut = StatutExecution.EnAttente,
             });
         }
-        lock (_lock) _executions[exec.ExecutionId] = exec;
+        lock (_lock) { _executions[exec.ExecutionId] = exec; _terminaisons[exec.ExecutionId] = new ManualResetEventSlim(false); }
         _ = Task.Run(() => ExecuterInterneAsync(exec, g, entree ?? new(), ct), ct);
         return exec;
+    }
+
+    /// <summary>Variante synchrone de LancerAsync. Bloque jusqu'a la fin et renvoie l'ExecutionGraphe final.</summary>
+    public ExecutionGraphe LancerSync(Graphe g, Dictionary<string, object?>? entree = null)
+    {
+        var exec = LancerAsync(g, entree);
+        ManualResetEventSlim? ev;
+        lock (_lock) { _terminaisons.TryGetValue(exec.ExecutionId, out ev); }
+        ev?.Wait();
+        return EtatExecution(exec.ExecutionId) ?? exec;
     }
 
     /// <summary>Execute un seul noeud (test isole) et renvoie l'execution.</summary>
@@ -103,6 +115,16 @@ public sealed class Moteur
                 if (noeud is null) continue;
                 var def = CatalogueNoeuds.Trouver(noeud.Type);
                 var etat = exec.Noeuds.First(e => e.NoeudId == noeudId);
+                // Check skip downstream (controle_si avec DesactiveAval=true)
+                HashSet<string>? aSaute;
+                lock (_lock) { _saute.TryGetValue(exec.ExecutionId, out aSaute); }
+                if (aSaute is not null && aSaute.Contains(noeudId))
+                {
+                    etat.Statut = StatutExecution.Reussi;
+                    etat.Sorties = new Dictionary<string, object?>();
+                    sortiesParNoeud[noeudId] = new Dictionary<string, object?>();
+                    continue;
+                }
                 etat.Statut = StatutExecution.EnCours;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -165,6 +187,7 @@ public sealed class Moteur
                     exec.TermineeLe = DateTime.UtcNow;
                     return;
                 }
+                if (res.DesactiveAval) PropagerSkip(exec.ExecutionId, noeudId, g);
                 etat.Statut = StatutExecution.Reussi;
             }
 
@@ -193,6 +216,7 @@ public sealed class Moteur
             exec.Erreur = ex.Message;
             exec.TermineeLe = DateTime.UtcNow;
         }
+        finally { SetEventTerminaison(exec.ExecutionId); }
     }
 
     /// <summary>
@@ -219,5 +243,38 @@ public sealed class Moteur
             }
         }
         return ordre.Count == g.Noeuds.Count ? ordre : null;
+    }
+
+    private void SetEventTerminaison(string executionId)
+    {
+        ManualResetEventSlim? ev;
+        lock (_lock)
+        {
+            if (_terminaisons.TryGetValue(executionId, out ev)) _terminaisons.Remove(executionId);
+            _saute.Remove(executionId);
+        }
+        if (ev is not null) { try { ev.Set(); ev.Dispose(); } catch { } }
+    }
+
+    /// <summary>Apres un controle_si qui demande a skip, marque tous les noeuds en aval (BFS sur les liens) comme a sauter.</summary>
+    private void PropagerSkip(string executionId, string fromNoeudId, Graphe g)
+    {
+        HashSet<string>? aSaute;
+        lock (_lock)
+        {
+            if (!_saute.TryGetValue(executionId, out aSaute))
+            { aSaute = new HashSet<string>(); _saute[executionId] = aSaute; }
+        }
+        var queue = new Queue<string>();
+        foreach (var l in g.Liens.Where(l => l.NoeudSourceId == fromNoeudId))
+            queue.Enqueue(l.NoeudCibleId);
+        while (queue.Count > 0)
+        {
+            var nid = queue.Dequeue();
+            if (aSaute!.Contains(nid)) continue;
+            aSaute.Add(nid);
+            foreach (var l in g.Liens.Where(l => l.NoeudSourceId == nid))
+                queue.Enqueue(l.NoeudCibleId);
+        }
     }
 }

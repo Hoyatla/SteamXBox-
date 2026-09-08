@@ -62,6 +62,9 @@ public sealed class Verbes
                 "custom/supprimer"         => CustomSupprimer(body!),
                 "custom/lister"            => CustomLister(),
                 "modeles"                  => ModelesLister(),
+                "planificateur/ajouter"     => PlanificateurAjouter(body!),
+                "planificateur/lister"      => PlanificateurLister(),
+                "planificateur/retirer"     => PlanificateurRetirer(body!),
                 "langages"                => LangagesLister(),
                 "etat"                     => ExecutionEtat(query),
                 "fenetre/ouvrir"           => FenetreOuvrir(),
@@ -752,4 +755,30 @@ public sealed class Verbes
         }
         return new { ok = true, data = new { markdown = sb.ToString() } };
     }
+    // =============== PLANIFICATEUR ===============
+
+    private object PlanificateurAjouter(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var cron = body["cron"]?.GetValue<string>() ?? "0 9 * * *";
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        if (!SenSÉ.Atelier.Planificateur.Planificateur.Instance.Ajouter(gid, cron, out var prochain, out var err))
+            return new { ok = false, error = err };
+        return new { ok = true, data = new { graphe_id = gid, cron, prochain = prochain.ToString("o") } };
+    }
+
+    private object PlanificateurLister()
+    {
+        var taches = SenSÉ.Atelier.Planificateur.Planificateur.Instance.Lister();
+        return new { ok = true, data = new { taches = taches.Select(t => new { graphe_id = t.GrapheId, cron = t.Cron, dernierdeclenchement = t.DernierDeclenchement?.ToString("o") }).ToList() } };
+    }
+
+    private object PlanificateurRetirer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var ok = SenSÉ.Atelier.Planificateur.Planificateur.Instance.Retirer(gid);
+        return new { ok, data = new { graphe_id = gid } };
+    }
+
 }

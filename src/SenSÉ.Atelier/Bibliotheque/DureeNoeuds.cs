@@ -155,5 +155,16 @@ public static class DureeNoeuds
         ["variable_set"] = CategorieDuree.Rapide,
         ["variable_get"] = CategorieDuree.Rapide,
         ["variable_compteur"] = CategorieDuree.Rapide,
+        // ----- Phase 2 -----
+        ["memoire_set"] = CategorieDuree.Rapide,
+        ["memoire_get"] = CategorieDuree.Rapide,
+        ["memoire_lister"] = CategorieDuree.Rapide,
+        ["boucle_for"] = CategorieDuree.Rapide,
+        ["boucle_while"] = CategorieDuree.Rapide,
+        ["boucle_foreach"] = CategorieDuree.Rapide,
+        ["controle_si"] = CategorieDuree.Rapide,
+        ["planificateur_ajouter"] = CategorieDuree.Rapide,
+        ["sous_graphe_appel"] = CategorieDuree.Moyen,
+    
     };
 }

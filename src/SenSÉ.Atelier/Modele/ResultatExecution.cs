@@ -13,6 +13,8 @@ public enum StatutExecution
 
 public sealed class ResultatExecution
 {
+    /// <summary>Mis a true par un Executeur (controle_si) pour demander au moteur de skip les noeuds en aval.</summary>
+    public bool DesactiveAval { get; set; }
     public bool Succes { get; set; } = true;
     public string? Erreur { get; set; }
     public Dictionary<string, object?> Sorties { get; set; } = new();

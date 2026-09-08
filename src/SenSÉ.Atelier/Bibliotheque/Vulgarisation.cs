@@ -283,7 +283,18 @@ public static class Vulgarisation
         ["variable_compteur"] = (
             "Compteur",
             "Incremente (ou decremente avec un pas negatif) un compteur nomme. Premier appel = la valeur de depart."),
-    };
+    
+
+        // ----- Phase 2 -----
+        ["memoire_set"] = ("Stocker dans la memoire partagee", "Enregistre une valeur dans la memoire partagee. Survit aux redemarrages."),
+        ["memoire_get"] = ("Lire la memoire partagee", "Recupere une valeur de la memoire partagee, ou la valeur par defaut."),
+        ["memoire_lister"] = ("Lister les cles memoire", "Liste toutes les cles de la memoire partagee (sortie JSON liste)."),
+        ["boucle_for"] = ("Repeter N fois", "Repete N fois. iteration = [0..N-1], corps_sortie = entree repetee N fois."),
+        ["boucle_while"] = ("Repeter tant que", "Repete tant que la condition est vraie, plafonne par max_iterations."),
+        ["boucle_foreach"] = ("Pour chaque element", "Pour chaque element d'une liste JSON. element = [...], index = [0..N-1]."),
+        ["controle_si"] = ("Executer si...", "Si la condition matche, propage l'entree. Sinon skip les noeuds en aval."),
+        ["planificateur_ajouter"] = ("Planifier ce graphe", "Ajoute ce graphe au planificateur avec une expression cron (5 champs)."),
+        ["sous_graphe_appel"] = ("Appeler un graphe", "Execute un autre graphe comme sous-programme. Sortie : JSON des sorties terminales."),};
 
     // ============== PARAMETRES ==============
 
