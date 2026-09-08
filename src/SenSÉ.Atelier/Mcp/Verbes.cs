@@ -115,13 +115,19 @@ public sealed class Verbes
     {
         id = d.Id,
         nom = d.Nom,
+        nom_vulgarise = d.NomAffichage,
         description = d.Description,
+        description_longue = d.DescriptionAffichage,
         espace = d.Espace.Id(),
         categorie = d.Categorie,
         ports_entree = d.PortsEntree.Select(p => new { nom = p.Nom, type = p.Type.ToString() }),
         ports_sortie = d.PortsSortie.Select(p => new { nom = p.Nom, type = p.Type.ToString() }),
         params_ = d.Params.Select(p => new {
-            nom = p.Nom, libelle = p.Libelle, type = p.Type, defaut = p.Defaut,
+            nom = p.Nom,
+            libelle = p.Libelle,
+            libelle_affiche = p.LibelleAffichage,
+            tooltip = p.DescriptionAffichage,
+            type = p.Type, defaut = p.Defaut,
             valeurs = p.Valeurs, indice = p.Indice, min = p.Min, max = p.Max,
         }),
     };
@@ -699,11 +705,13 @@ public sealed class Verbes
             var types = CatalogueNoeuds.ParEspace(esp).OrderBy(t => t.Categorie).ThenBy(t => t.Nom);
             foreach (var t in types)
             {
-                sb.AppendLine("### `" + t.Id + "` — " + t.Nom);
-                if (!string.IsNullOrEmpty(t.Description))
+                // Nom vulgarise (via Vulgarisation.LookupNoeud) avec id technique en sub.
+                sb.AppendLine("### " + t.NomAffichage + " (`" + t.Id + "`)");
+                if (!string.IsNullOrEmpty(t.DescriptionAffichage))
+                {
                     sb.AppendLine();
-                if (!string.IsNullOrEmpty(t.Description))
-                    sb.AppendLine(t.Description);
+                    sb.AppendLine(t.DescriptionAffichage);
+                }
                 sb.AppendLine();
                 sb.AppendLine("- **Catégorie** : " + t.Categorie);
                 if (t.PortsEntree.Count > 0)
@@ -723,7 +731,9 @@ public sealed class Verbes
                     sb.AppendLine("- **Paramètres** :");
                     foreach (var p in t.Params)
                     {
-                        var ligne = "  - `" + p.Nom + "` (" + p.Type + ", `" + p.Libelle + "`)";
+                        // Libelle vulgarise (via Vulgarisation.LookupParametre) en titre,
+                        // nom technique entre parentheses pour les devs.
+                        var ligne = "  - **" + p.LibelleAffichage + "** (`" + p.Nom + "`, " + p.Type + ")";
                         if (p.Defaut is not null) ligne += ", défaut `" + p.Defaut + "`";
                         if (p.Valeurs is { Count: > 0 }) ligne += " ∈ {" + string.Join(", ", p.Valeurs.Select(v => "`" + v + "`")) + "}";
                         sb.AppendLine(ligne);

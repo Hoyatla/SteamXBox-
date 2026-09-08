@@ -49,10 +49,13 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Border Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="#2D2D40" Background="Transparent"
-                                PreviewMouseLeftButtonDown="Item_PreviewMouseLeftButtonDown" MouseLeftButtonUp="Item_MouseLeftButtonUp" Cursor="Hand">
+                                PreviewMouseLeftButtonDown="Item_PreviewMouseLeftButtonDown" MouseLeftButtonUp="Item_MouseLeftButtonUp" Cursor="Hand"
+                                ToolTip="{Binding DescriptionAffiche}">
                             <StackPanel>
-                                <TextBlock Text="{Binding Nom}" Foreground="{StaticResource TexteBrush}" FontSize="12" />
-                                <TextBlock Text="{Binding Description}" Foreground="{StaticResource TexteSecondaireBrush}" FontSize="10" TextWrapping="Wrap" />
+                                <!-- Label principal en gros : nom vulgarise. -->
+                                <TextBlock Text="{Binding NomAffiche}" Foreground="{StaticResource TexteBrush}" FontSize="13" FontWeight="SemiBold" />
+                                <!-- Label technique en petit, italique : l'id pour les devs. -->
+                                <TextBlock Text="{Binding IdTechnique}" Foreground="{StaticResource TexteSecondaireBrush}" FontSize="9" FontStyle="Italic" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>

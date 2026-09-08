@@ -146,5 +146,12 @@ public partial class Palette : UserControl
         public string Description { get; set; } = "";
         public string Categorie { get; set; } = "";
         public DefinitionNoeud Def { get; set; } = null!;
+
+        /// <summary>Label vulgarise (via Vulgarisation.LookupNoeud) avec fallback Nom.</summary>
+        public string NomAffiche => Def?.NomAffichage ?? Nom;
+        /// <summary>Tooltip : explication longue (via Vulgarisation) avec fallback Description.</summary>
+        public string DescriptionAffiche => Def?.DescriptionAffichage ?? Description;
+        /// <summary>Id technique (ex: "executer_code"), pour les devs qui debugent.</summary>
+        public string IdTechnique => Def?.Id ?? "";
     }
 }

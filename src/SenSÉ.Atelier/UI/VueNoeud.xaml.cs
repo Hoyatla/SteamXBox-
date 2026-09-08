@@ -127,7 +127,11 @@ public partial class VueNoeud : UserControl
         Noeud = n;
         InitializeComponent();
         var def = CatalogueNoeuds.Trouver(n.Type);
-        Titre.Text = def?.Nom ?? n.Type;
+        // Label principal = nom vulgarise (via Vulgarisation.LookupNoeud),
+        // avec fallback sur le nom technique si la definition est introuvable.
+        // Le tooltip est binde sur DescriptionLongue dans le XAML.
+        Titre.Text = def?.NomAffichage ?? n.Type;
+        // Label technique : l'id pour les devs qui debugent.
         SousTitre.Text = n.Type;
         ListeEntrees.ItemsSource = n.PortsEntree;
         ListeSorties.ItemsSource = n.PortsSortie;

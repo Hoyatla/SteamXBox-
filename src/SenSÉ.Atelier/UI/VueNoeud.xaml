@@ -50,8 +50,11 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock x:Name="Titre" Text="Noeud" Foreground="White" FontWeight="SemiBold" FontSize="13" />
-                        <TextBlock x:Name="SousTitre" Text="type" Foreground="#A0A0B8" FontSize="10" />
+                        <!-- Label principal en gros : nom vulgarise, tooltip = explication longue. -->
+                        <TextBlock x:Name="Titre" Text="Noeud" Foreground="White" FontWeight="SemiBold" FontSize="15"
+                                   ToolTip="{Binding DescriptionLongue, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <!-- Label technique en petit pour les devs qui veulent l'id. -->
+                        <TextBlock x:Name="SousTitre" Text="type" Foreground="#A0A0B8" FontSize="10" FontStyle="Italic" />
                     </StackPanel>
                     <TextBlock x:Name="BadgeStatut" Grid.Column="1" Text="" FontSize="14" FontWeight="Bold"
                                VerticalAlignment="Center" Margin="6,0,0,0" />

@@ -35,15 +35,22 @@ public partial class Inspecteur : UserControl
         _noeudCourant = n;
         _valeursInitiales = new Dictionary<string, object?>(n.Params);
         var def = CatalogueNoeuds.Trouver(n.Type);
-        Titre.Text = def?.Nom ?? n.Type;
+        // Label vulgarise (via Vulgarisation.LookupNoeud), avec fallback Nom.
+        Titre.Text = def?.NomAffichage ?? n.Type;
+        Titre.ToolTip = def?.DescriptionAffichage ?? "";
+        // Description courte sous le titre.
         Description.Text = def?.Description ?? "";
         Form.Children.Clear();
         if (def is null) return;
         foreach (var p in def.Params)
         {
+            // Label utilisateur = LibelleAffichage (vulgarise via Vulgarisation.LookupParametre
+            // ou, a defaut, Libelle / Nom avec underscores remplaces par espaces).
+            // Tooltip = explication longue vulgarisee, ou Description courte a defaut.
             Form.Children.Add(new TextBlock
             {
-                Text = p.Libelle,
+                Text = p.LibelleAffichage,
+                ToolTip = p.DescriptionAffichage,
                 Foreground = (System.Windows.Media.Brush)TryFindResource("TexteSecondaireBrush") ?? System.Windows.Media.Brushes.Gray,
                 FontSize = 11, Margin = new Thickness(0, 8, 0, 2),
             });
@@ -84,7 +91,7 @@ public partial class Inspecteur : UserControl
 
     private ComboBox CreerComboListe(ParametreNoeud p, Noeud n)
     {
-        var cmb = new ComboBox { Tag = p.Nom };
+        var cmb = new ComboBox { Tag = p.Nom, ToolTip = p.DescriptionAffichage };
         if (p.Valeurs is not null)
         {
             foreach (var v in p.Valeurs) cmb.Items.Add(v);
