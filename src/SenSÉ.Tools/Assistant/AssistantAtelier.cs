@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -18,9 +19,11 @@ namespace SenSÉ.Tools.Assistant;
 /// <para><b>Pas d'auth.</b> L'Atelier n'authentifie pas les requetes venant
 /// de 127.0.0.1. Loopback only, comme mcp-saisie et mcp-cdp.</para>
 ///
-/// <para><b>Stade initial.</b> Ce fichier n'expose pour l'instant que
-/// <see cref="Demarrer"/>. Les Capacite (lister/creer/executer des graphes)
-/// sont ajoutees par la suite (cf. <c>Creer()</c>).</para>
+/// <para><b>Mappage verbe -> Capacite.</b> L'Assistant manipule des verbes
+/// en francais (<c>atelier_creer_graphe</c>, <c>atelier_executer_graphe</c>,
+/// etc.). Cette classe les traduit en appels HTTP vers l'Atelier, qui repond
+/// en JSON selon la convention {ok, data} / {ok:false, error}. Le mapping
+/// suit l'API existante de l'Atelier (cf. <c>SenSÉ.Atelier.Mcp.Verbes</c>).</para>
 /// </remarks>
 public static class AssistantAtelier
 {
@@ -37,7 +40,7 @@ public static class AssistantAtelier
         _urlBase = urlBase.TrimEnd('/');
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(30),
+            Timeout = TimeSpan.FromSeconds(60),
         };
         if (!string.IsNullOrWhiteSpace(token))
         {
@@ -45,9 +48,268 @@ public static class AssistantAtelier
         }
     }
 
-    /// <summary>
-    /// L'URL de base du serveur HTTP de l'Atelier. Vide tant que
-    /// <see cref="Demarrer"/> n'a pas ete appele.
-    /// </summary>
+    /// <summary>L'URL de base du serveur HTTP de l'Atelier. Vide tant que <see cref="Demarrer"/> n'a pas ete appele.</summary>
     public static string UrlBase => _urlBase;
+
+    /// <summary>
+    /// Construit la liste des Capacite de l'Atelier que l'Assistant peut appeler.
+    /// A ajouter a la liste passee a <see cref="AssistantLocal.Repondre"/>.
+    /// </summary>
+    /// <remarks>
+    /// Le verbe HTTP reel est un segment apres <c>/atelier/</c> dans l'URL.
+    /// Les Capacite ici sont les operations de haut niveau que l'utilisateur
+    /// peut demander : lister les graphes, en creer un, y ajouter des noeuds,
+    /// executer le tout, lire le resultat. Pour les verbes bas-niveau
+    /// (lien/creer, noeud/ajouter, etc.), voir <c>SenSÉ.Atelier.Mcp.Verbes</c>.
+    /// </remarks>
+    public static IReadOnlyList<AssistantLocal.Capacite> Creer()
+    {
+        return new AssistantLocal.Capacite[]
+        {
+            new(
+                "atelier_lister_graphes",
+                "Liste les graphes de l'Atelier avec leur id, nom, espace, nombre de noeuds, date de modification. Utilise pour decouvrir ce qui existe deja avant d'en creer un nouveau ou d'en modifier un.",
+                Array.Empty<AssistantLocal.Parametre>(),
+                args => AppelerAtelier("graphe/lister", null, query: new Dictionary<string, string>())),
+
+            new(
+                "atelier_creer_graphe",
+                "Cree un nouveau graphe dans l'Atelier. Retourne son id. Le graphe est vide (aucun noeud, aucun lien) : il faut ensuite y ajouter des noeuds avec atelier_noeud_ajouter et les relier avec atelier_lien_creer. Espace: 'codage' (defaut) ou 'multimedia'.",
+                new[]
+                {
+                    new AssistantLocal.Parametre("espace", "Espace de travail : 'codage' ou 'multimedia'. Defaut 'codage'.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("nom", "Nom affiche dans l'onglet du graphe.", Array.Empty<string>()),
+                },
+                args =>
+                {
+                    var body = new Dictionary<string, object?>
+                    {
+                        ["espace"] = args.GetValueOrDefault("espace") ?? "codage",
+                        ["nom"] = args.GetValueOrDefault("nom") ?? "Sans nom",
+                    };
+                    return AppelerAtelier("graphe/nouveau", body);
+                }),
+
+            new(
+                "atelier_ouvrir_graphe",
+                "Charge un graphe par son id. Retourne ses noeuds, ses liens, ses ports. Utilise apres atelier_lister_graphes pour voir la structure complete, ou pour verifier qu'un graphe a ete cree comme attendu.",
+                new[]
+                {
+                    new AssistantLocal.Parametre("graphe_id", "L'id du graphe (GUID renvoye par atelier_creer_graphe ou atelier_lister_graphes).", Array.Empty<string>()),
+                },
+                args =>
+                {
+                    var body = new Dictionary<string, object?>
+                    {
+                        ["graphe_id"] = args.GetValueOrDefault("graphe_id") ?? "",
+                    };
+                    return AppelerAtelier("graphe/charger", body);
+                }),
+
+            new(
+                "atelier_sauvegarder_graphe",
+                "Confirme la sauvegarde du graphe. Cote Atelier, chaque modification (ajout de noeud, de lien, edition de parametre) est ecrite sur disque immediatement : ce verbe sert surtout d'acquittement et a verifier qu'un graphe existe. Retourne un statut simple.",
+                new[]
+                {
+                    new AssistantLocal.Parametre("graphe_id", "L'id du graphe a verifier (sauvegarde implicite).", Array.Empty<string>()),
+                },
+                args =>
+                {
+                    var id = args.GetValueOrDefault("graphe_id") ?? "";
+                    if (string.IsNullOrEmpty(id)) return "atelier_sauvegarder_graphe: graphe_id manquant";
+                    var r = AppelerAtelier("graphe/charger", new Dictionary<string, object?> { ["graphe_id"] = id });
+                    return "atelier_sauvegarder_graphe: graphe " + id + " sauvegarde (auto-save a chaque modification). " + r;
+                }),
+
+            new(
+                "atelier_noeud_ajouter",
+                "Ajoute un noeud a un graphe existant. Le type determine ce que fait le noeud (utilise atelier_catalogue_types pour voir la liste). x/y sont les coordonnees sur le canvas (en pixels, origine en haut a gauche). params est une string JSON dont les cles dependent du type (ex: langage, code, prompt, chemin).",
+                new[]
+                {
+                    new AssistantLocal.Parametre("graphe_id", "L'id du graphe cible.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("type", "L'id du type de noeud (ex: 'texte', 'executer_code', 'llm_generer_code', 'texte_vers_image'). Voir atelier_catalogue_types.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("x", "Position X sur le canvas (pixels). Defaut 100.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("y", "Position Y sur le canvas (pixels). Defaut 100.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("params", "Parametres du noeud en JSON (string serialisee). Optionnel. Voir atelier_catalogue_types pour la liste par type.", Array.Empty<string>()),
+                },
+                args =>
+                {
+                    double x = 100, y = 100;
+                    double.TryParse(args.GetValueOrDefault("x"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out x);
+                    double.TryParse(args.GetValueOrDefault("y"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out y);
+                    var body = new Dictionary<string, object?>
+                    {
+                        ["graphe_id"] = args.GetValueOrDefault("graphe_id") ?? "",
+                        ["type"] = args.GetValueOrDefault("type") ?? "",
+                        ["x"] = x,
+                        ["y"] = y,
+                    };
+                    var pStr = args.GetValueOrDefault("params");
+                    if (!string.IsNullOrEmpty(pStr))
+                    {
+                        try
+                        {
+                            var parsed = JsonNode.Parse(pStr);
+                            if (parsed is JsonObject jo) body["params"] = jo;
+                        }
+                        catch (Exception ex)
+                        {
+                            return "atelier_noeud_ajouter: params invalides: " + ex.Message;
+                        }
+                    }
+                    return AppelerAtelier("noeud/ajouter", body);
+                }),
+
+            new(
+                "atelier_lien_creer",
+                "Cree un lien entre la sortie d'un noeud et l'entree d'un autre. noeud_source_id/port_source et noeud_cible_id/port_cible identifient les extremites. Le moteur refuse les liens entre types incompatibles (cf. atelier_catalogue_types pour la liste des types de ports).",
+                new[]
+                {
+                    new AssistantLocal.Parametre("graphe_id", "L'id du graphe cible.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("noeud_source_id", "L'id du noeud source.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("port_source", "Le nom du port de sortie sur le noeud source (ex: 'valeur', 'code', 'image').", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("noeud_cible_id", "L'id du noeud cible.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre("port_cible", "Le nom du port d'entree sur le noeud cible (ex: 'description', 'code', 'image').", Array.Empty<string>()),
+                },
+                args => AppelerAtelier("lien/creer", new Dictionary<string, object?>
+                {
+                    ["graphe_id"] = args.GetValueOrDefault("graphe_id") ?? "",
+                    ["port_source"] = new Dictionary<string, object?>
+                    {
+                        ["noeud_id"] = args.GetValueOrDefault("noeud_source_id") ?? "",
+                        ["port_nom"] = args.GetValueOrDefault("port_source") ?? "",
+                    },
+                    ["port_cible"] = new Dictionary<string, object?>
+                    {
+                        ["noeud_id"] = args.GetValueOrDefault("noeud_cible_id") ?? "",
+                        ["port_nom"] = args.GetValueOrDefault("port_cible") ?? "",
+                    },
+                })),
+
+            new(
+                "atelier_executer_graphe",
+                "Execute un graphe de maniere asynchrone. Retourne immediatement un execution_id. Utilise ensuite atelier_etat_execution pour suivre la progression et lire les sorties. L'execution reelle peut prendre de quelques secondes (LLM) a plusieurs minutes (generation video).",
+                new[]
+                {
+                    new AssistantLocal.Parametre("graphe_id", "L'id du graphe a executer.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier("executer", new Dictionary<string, object?>
+                {
+                    ["graphe_id"] = args.GetValueOrDefault("graphe_id") ?? "",
+                })),
+
+            new(
+                "atelier_etat_execution",
+                "Retourne l'etat d'une execution : statut global (EnCours/Reussi/Echec/Annule), etat de chaque noeud, sorties finales, duree, erreur eventuelle. A appeler en boucle tant que statut == 'EnCours', ou une seule fois pour lire le resultat final.",
+                new[]
+                {
+                    new AssistantLocal.Parametre("execution_id", "L'id d'execution renvoye par atelier_executer_graphe.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier("execution/etat", null, query: new Dictionary<string, string>
+                {
+                    ["execution_id"] = args.GetValueOrDefault("execution_id") ?? "",
+                })),
+
+            new(
+                "atelier_annuler_execution",
+                "Annule une execution en cours. Le moteur arrete le noeud courant et marque l'execution comme Annule. Utilise si l'utilisateur change d'avis ou si l'execution est bloquee.",
+                new[]
+                {
+                    new AssistantLocal.Parametre("execution_id", "L'id d'execution a annuler.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier("execution/annuler", new Dictionary<string, object?>
+                {
+                    ["execution_id"] = args.GetValueOrDefault("execution_id") ?? "",
+                })),
+
+            new(
+                "atelier_catalogue_espaces",
+                "Liste les espaces disponibles (codage, multimedia) avec le nombre de types de noeuds dans chaque. Premiere chose a appeler pour decouvrir ce que l'Atelier sait faire.",
+                Array.Empty<AssistantLocal.Parametre>(),
+                args => AppelerAtelier("catalogue/espaces", null)),
+
+            new(
+                "atelier_catalogue_types",
+                "Liste les types de noeuds disponibles dans un espace, avec leurs ports d'entree/sortie et leurs parametres. Utilise pour decouvrir comment parametrer un noeud avant de l'ajouter au graphe. Chaque type a un id, un nom affiche, une description, une categorie, et la liste de ses params (nom, libelle, type, defaut, valeurs possibles).",
+                new[]
+                {
+                    new AssistantLocal.Parametre("espace", "Espace : 'codage' (defaut) ou 'multimedia'.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier("catalogue/types", null, query: new Dictionary<string, string>
+                {
+                    ["espace"] = args.GetValueOrDefault("espace") ?? "codage",
+                })),
+        };
+    }
+
+    /// <summary>
+    /// Appelle l'Atelier par verbe HTTP. Le verbe est place apres <c>/atelier/</c>
+    /// dans l'URL. Renvoie la string retournee par l'outil, ou un message d'erreur
+    /// formate si le serveur n'est pas joignable.
+    /// </summary>
+    private static string AppelerAtelier(string verbe, object? body, IReadOnlyDictionary<string, string>? query = null)
+    {
+        if (_http is null || string.IsNullOrEmpty(_urlBase))
+        {
+            return "atelier: client non initialise (AssistantAtelier.Demarrer pas appele)";
+        }
+
+        // Retry sur HttpRequestException : le serveur coupe la connexion apres
+        // chaque requete, donc la 1ere requete apres un idle long peut echouer.
+        for (int essai = 0; essai < 3; essai++)
+        {
+            try
+            {
+                var qs = "";
+                if (query is not null && query.Count > 0)
+                {
+                    qs = "?" + string.Join("&", query.Select(kv =>
+                        Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(kv.Value)));
+                }
+                var url = _urlBase + "/atelier/" + verbe + qs;
+
+                // StringContent, et surtout PAS PostAsJsonAsync. Voir AssistantSaisie.cs
+                // pour la justification detaillee (Content-Length vs Transfer-Encoding).
+                var charge = body is null ? "{}" : JsonSerializer.Serialize(body);
+                var contenu = new StringContent(charge, Encoding.UTF8, "application/json");
+                using var resp = _http.PostAsync(url, contenu).GetAwaiter().GetResult();
+                var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return "atelier: HTTP " + (int)resp.StatusCode + ": " + json;
+                }
+                try
+                {
+                    var node = JsonNode.Parse(json);
+                    if (node is JsonObject obj)
+                    {
+                        if (obj["ok"]?.GetValue<bool>() == false)
+                        {
+                            return "atelier: " + (obj["error"]?.GetValue<string>() ?? json);
+                        }
+                        var data = obj["data"];
+                        if (data is not null) return data.ToJsonString();
+                    }
+                }
+                catch
+                {
+                    // pas du JSON, on retourne le body brut
+                }
+                return json;
+            }
+            catch (HttpRequestException) when (essai < 2)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+            catch (TaskCanceledException) when (essai < 2)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+            catch (Exception ex) when (essai >= 2)
+            {
+                return "erreur atelier: " + ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+        return "erreur atelier: connexion perdue apres 3 essais";
+    }
 }

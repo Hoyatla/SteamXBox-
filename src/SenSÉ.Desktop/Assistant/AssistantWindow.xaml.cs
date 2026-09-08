@@ -950,6 +950,20 @@ public partial class AssistantWindow : Window
         capacites.AddRange(SenSÉ.Tools.Assistant.AssistantCdp.Creer());
         capacites.AddRange(AssistantRecherche.Creer(journal));
 
+        // L'Atelier : un subprocess HTTP qui demarre avec l'environnement (cf. ServeurAtelier).
+        // Declare comme AssistantCdp : disponible que la fenetre soit en mode interactif ou non,
+        // parce que ses Capacite n'agissent pas sur la machine de l'utilisateur. Chargees
+        // seulement si le client HTTP a ete initialise (Atelier lance et Demarrer appele) :
+        // sinon, des Capacite qui echouent a chaque appel font tourner le modele en rond.
+        if (!string.IsNullOrEmpty(SenSÉ.Tools.Assistant.AssistantAtelier.UrlBase))
+        {
+            capacites.AddRange(SenSÉ.Tools.Assistant.AssistantAtelier.Creer());
+        }
+        else
+        {
+            journal?.Invoke("assistant: pas de Capacite Atelier, l'Atelier n'est pas demarre (ServeurAtelier.Demarrer pas appele).");
+        }
+
         return capacites;
     }
 
