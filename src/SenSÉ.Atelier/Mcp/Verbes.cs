@@ -67,6 +67,7 @@ public sealed class Verbes
                 "fenetre/ouvrir"           => FenetreOuvrir(),
                 "fenetre/etat"             => FenetreEtat(),
                 "exemples/lister"           => ExemplesLister(),
+                "catalogue/aide"           => CatalogueAide(),
                 "exemples/charger"          => ExemplesCharger(body!),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
@@ -675,5 +676,66 @@ public sealed class Verbes
             return new { ok = true, data = new { graphe_id = nouveau.Id, nom = nouveau.Nom, espace = nouveau.Espace.Id() } };
         }
         catch (Exception ex) { return new { ok = false, error = ex.Message }; }
+    }
+
+    /// <summary>
+    /// Retourne un resume en Markdown de tous les types de noeuds : id,
+    /// nom, description, categorie, ports, params. Sert a l'Assistant pour
+    /// decouvrir ce que l'Atelier sait faire, et genere Outils/Atelier/README.md
+    /// au premier demarrage si le fichier est absent.
+    /// </summary>
+    private object CatalogueAide()
+    {
+        CatalogueNoeuds.InitialiserSiNecessaire();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Catalogue Atelier SenSÉ");
+        sb.AppendLine();
+        sb.AppendLine("> Généré automatiquement au démarrage. Pour forcer la regénération, supprimer ce fichier et relancer l'Atelier.");
+        sb.AppendLine();
+        foreach (Espace esp in System.Enum.GetValues<Espace>())
+        {
+            sb.AppendLine("## Espace : " + esp.Libelle() + " (`" + esp.Id() + "`)");
+            sb.AppendLine();
+            var types = CatalogueNoeuds.ParEspace(esp).OrderBy(t => t.Categorie).ThenBy(t => t.Nom);
+            foreach (var t in types)
+            {
+                sb.AppendLine("### `" + t.Id + "` — " + t.Nom);
+                if (!string.IsNullOrEmpty(t.Description))
+                    sb.AppendLine();
+                if (!string.IsNullOrEmpty(t.Description))
+                    sb.AppendLine(t.Description);
+                sb.AppendLine();
+                sb.AppendLine("- **Catégorie** : " + t.Categorie);
+                if (t.PortsEntree.Count > 0)
+                {
+                    sb.AppendLine("- **Entrées** : " + string.Join(", ", t.PortsEntree.Select(p => "`" + p.Nom + "` (" + p.Type + ")")));
+                } else {
+                    sb.AppendLine("- **Entrées** : aucune");
+                }
+                if (t.PortsSortie.Count > 0)
+                {
+                    sb.AppendLine("- **Sorties** : " + string.Join(", ", t.PortsSortie.Select(p => "`" + p.Nom + "` (" + p.Type + ")")));
+                } else {
+                    sb.AppendLine("- **Sorties** : aucune");
+                }
+                if (t.Params.Count > 0)
+                {
+                    sb.AppendLine("- **Paramètres** :");
+                    foreach (var p in t.Params)
+                    {
+                        var ligne = "  - `" + p.Nom + "` (" + p.Type + ", `" + p.Libelle + "`)";
+                        if (p.Defaut is not null) ligne += ", défaut `" + p.Defaut + "`";
+                        if (p.Valeurs is { Count: > 0 }) ligne += " ∈ {" + string.Join(", ", p.Valeurs.Select(v => "`" + v + "`")) + "}";
+                        sb.AppendLine(ligne);
+                    }
+                }
+                if (!string.IsNullOrEmpty(t.ModeleId))
+                {
+                    sb.AppendLine("- **Modèle** : `" + t.ModeleId + "`");
+                }
+                sb.AppendLine();
+            }
+        }
+        return new { ok = true, data = new { markdown = sb.ToString() } };
     }
 }
