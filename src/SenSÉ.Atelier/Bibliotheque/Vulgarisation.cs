@@ -300,7 +300,15 @@ public static class Vulgarisation
         ["version_creer"] = ("Sauvegarder une version", "Cree un snapshot git-like du graphe dans Outils/Atelier/Versionning/."),
         ["version_lister"] = ("Versions precedentes", "Liste les versions du graphe (sortie JSON array)."),
         ["version_restaurer"] = ("Restaurer une version", "Restaure le graphe depuis un snapshot precedent. Ecrase le fichier actuel."),
-        ["layout_ranger"] = ("Ranger le graphe", "Range les noeuds en grille (BFS, 250px entre rangees, 200px entre noeuds)."),};
+        ["layout_ranger"] = ("Ranger le graphe", "Range les noeuds en grille (BFS, 250px entre rangees, 200px entre noeuds)."),
+
+        // ----- Phase 4 -----
+        ["template_lister"] = ("Lister les templates", "Liste les templates du marketplace local."),
+        ["template_charger"] = ("Charger un template", "Charge un template comme nouveau graphe."),
+        ["template_publier"] = ("Publier comme template", "Publie le graphe actuel dans le marketplace local."),
+        ["collab_connect"] = ("Se connecter au partage", "Genere un UUID de session collaborative (MVP, sans diffusion temps reel)."),
+        ["collab_diff"] = ("Voir les differences", "Diff simple entre 2 graphes (nb de modifs en attente)."),
+        ["collab_resoudre"] = ("Resoudre un conflit", "Rejoue la modif winner (last-write-wins)."),};
 
     // ============== PARAMETRES ==============
 

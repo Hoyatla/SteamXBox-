@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -19,9 +20,10 @@ namespace SenSÉ.Atelier.Webhook;
 /// (8770 reste l'API MCP de l'Atelier).
 /// </summary>
 /// <remarks>
-/// <b>POST /webhook/{graphe_id}</b> : declenche l'execution du graphe et
-/// retourne {execution_id, statut: 'EnCours'}. Le body est ignore (c'est
-/// juste un trigger), mais il est loggue.
+/// <b>Phase 4.1</b> : auth configurable par webhook (token Bearer ou HMAC-SHA256).
+/// La config est lue depuis Outils/Atelier/Webhook/config.json a chaque
+/// requete (donc les changements de config sont pris en compte sans
+/// redemarrage du serveur).
 ///
 /// <b>Logs</b> : chaque declenchement est append dans
 /// Outils/Atelier/Webhook/logs/YYYY-MM-DD.log au format JSONL.
@@ -31,18 +33,22 @@ public sealed class ServeurWebhook : IDisposable
     private readonly HttpListener _listener;
     private readonly string _racine;
     private readonly Persistance _persistance;
+    private readonly WebhookConfigStore _store;
     private readonly CancellationTokenSource _cts = new();
     private readonly string _logsDir;
     private bool _disposed;
 
     public int Port { get; }
     public string Racine => _racine;
+    public WebhookConfigStore Store => _store;
 
     public ServeurWebhook(string racine, int port = 8772)
     {
         _racine = racine;
         Port = port;
         _persistance = new Persistance(racine);
+        _store = new WebhookConfigStore(racine);
+        _store.Charger();
         _logsDir = Path.Combine(racine, "Webhook", "logs");
         Directory.CreateDirectory(_logsDir);
         _listener = new HttpListener();
@@ -59,7 +65,7 @@ public sealed class ServeurWebhook : IDisposable
         }
         catch (HttpListenerException ex)
         {
-            Log("demarrage", null, "erreur", ex.Message);
+            Log("?", null, "erreur_demarrage", ex.Message);
             throw;
         }
     }
@@ -85,7 +91,7 @@ public sealed class ServeurWebhook : IDisposable
             catch (ObjectDisposedException) { return; }
             catch (Exception ex)
             {
-                Log("boucle", null, "erreur", ex.Message);
+                Log("?", null, "erreur_boucle", ex.Message);
                 continue;
             }
             _ = Task.Run(() => TraiterAsync(ctx));
@@ -96,36 +102,45 @@ public sealed class ServeurWebhook : IDisposable
     {
         var req = ctx.Request;
         var resp = ctx.Response;
-        string grapheId = "?";
+        var chemin = req.Url?.AbsolutePath?.Trim('/') ?? "";
         try
         {
-            // /webhook/{graphe_id} ou /webhook/{graphe_id}/{...}
-            var path = req.Url?.AbsolutePath?.Trim('/') ?? "";
-            var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2 || parts[0] != "webhook")
-            {
-                await Repondre(resp, 404, new { ok = false, error = "endpoint inconnu. Attendu: POST /webhook/{graphe_id}" });
-                return;
-            }
-            grapheId = parts[1];
-
-            string body = "";
-            using (var sr = new StreamReader(req.InputStream, req.ContentEncoding!))
-            {
-                body = await sr.ReadToEndAsync();
-            }
-
             if (req.HttpMethod != "POST")
             {
                 await Repondre(resp, 405, new { ok = false, error = "methode " + req.HttpMethod + " non supportée" });
                 return;
             }
 
-            var graphe = _persistance.ChargerGraphe(grapheId);
+            // Lecture du body
+            string body = "";
+            using (var sr = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8))
+            {
+                body = await sr.ReadToEndAsync();
+            }
+
+            // Lookup par chemin
+            var cfg = _store.TrouverParChemin(chemin);
+            if (cfg is null)
+            {
+                Log(chemin, body, "chemin_inconnu", "");
+                await Repondre(resp, 404, new { ok = false, error = "chemin webhook inconnu : " + chemin });
+                return;
+            }
+
+            // Verification auth
+            if (!VerifierAuth(req, cfg, body, out var errAuth))
+            {
+                Log(chemin, body, "auth_ko", errAuth);
+                await Repondre(resp, 401, new { ok = false, error = "auth: " + errAuth });
+                return;
+            }
+
+            // Lookup graphe
+            var graphe = _persistance.ChargerGraphe(cfg.GrapheId);
             if (graphe is null)
             {
-                Log(grapheId, body, "graphe_introuvable", "");
-                await Repondre(resp, 404, new { ok = false, error = "graphe introuvable : " + grapheId });
+                Log(chemin, body, "graphe_introuvable", cfg.GrapheId);
+                await Repondre(resp, 404, new { ok = false, error = "graphe introuvable : " + cfg.GrapheId });
                 return;
             }
 
@@ -143,25 +158,65 @@ public sealed class ServeurWebhook : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Log(grapheId, body, "body_invalide", ex.Message);
+                    Log(chemin, body, "body_invalide", ex.Message);
                     await Repondre(resp, 400, new { ok = false, error = "body JSON invalide : " + ex.Message });
                     return;
                 }
             }
 
             var exec = Moteur.Instance.LancerAsync(graphe, entree);
-            Log(grapheId, body, "declenche", exec.ExecutionId);
+            Log(chemin, body, "declenche", $"{cfg.GrapheId} -> {exec.ExecutionId}");
             await Repondre(resp, 200, new { ok = true, data = new { execution_id = exec.ExecutionId, statut = exec.Statut.ToString() } });
         }
         catch (Exception ex)
         {
-            Log(grapheId, "", "exception", ex.Message);
+            Log(chemin, "", "exception", ex.Message);
             try { await Repondre(resp, 500, new { ok = false, error = ex.Message }); } catch { }
         }
         finally
         {
             try { resp.Close(); } catch { }
         }
+    }
+
+    /// <summary>Verifie l'auth selon le mode du webhook.</summary>
+    private static bool VerifierAuth(HttpListenerRequest req, WebhookConfig cfg, string body, out string err)
+    {
+        err = "";
+        switch (cfg.Mode)
+        {
+            case WebhookAuthMode.Aucun:
+                return true;
+            case WebhookAuthMode.Token:
+                var auth = req.Headers["Authorization"];
+                if (string.IsNullOrEmpty(auth)) { err = "header Authorization manquant"; return false; }
+                var expected = "Bearer " + cfg.Token;
+                if (!string.Equals(auth, expected, StringComparison.Ordinal)) { err = "token invalide"; return false; }
+                return true;
+            case WebhookAuthMode.Hmac:
+                var sig = req.Headers["X-Signature"];
+                if (string.IsNullOrEmpty(sig)) { err = "header X-Signature manquant"; return false; }
+                if (cfg.SecretHmac is null) { err = "secret_hmac non configure"; return false; }
+                // Format attendu : "sha256=<hex>"
+                var prefix = "sha256=";
+                if (!sig.StartsWith(prefix)) { err = "format signature invalide (attendu: sha256=<hex>)"; return false; }
+                var recuHex = sig.Substring(prefix.Length).Trim();
+                var calcule = HmacSha256Hex(cfg.SecretHmac, body);
+                if (!string.Equals(recuHex, calcule, StringComparison.OrdinalIgnoreCase)) { err = "signature HMAC invalide"; return false; }
+                return true;
+        }
+        err = "mode auth inconnu";
+        return false;
+    }
+
+    /// <summary>Calcule HMAC-SHA256(secret, body) en hex.</summary>
+    public static string HmacSha256Hex(string secret, string body)
+    {
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(body));
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash) sb.Append(b.ToString("x2"));
+        return sb.ToString();
     }
 
     private static async Task Repondre(HttpListenerResponse resp, int code, object payload)
@@ -174,7 +229,7 @@ public sealed class ServeurWebhook : IDisposable
         await resp.OutputStream.WriteAsync(bytes, 0, bytes.Length);
     }
 
-    private void Log(string grapheId, string? body, string statut, string detail)
+    private void Log(string chemin, string? body, string statut, string detail)
     {
         try
         {
@@ -182,7 +237,7 @@ public sealed class ServeurWebhook : IDisposable
             var ligne = JsonSerializer.Serialize(new
             {
                 ts = DateTime.Now.ToString("o"),
-                graphe = grapheId,
+                chemin,
                 body_len = body?.Length ?? 0,
                 body_preview = body is { Length: > 500 } ? body.Substring(0, 500) + "..." : body,
                 statut,
@@ -190,6 +245,6 @@ public sealed class ServeurWebhook : IDisposable
             });
             File.AppendAllText(fichier, ligne + "\n", Encoding.UTF8);
         }
-        catch { /* pas de crash si log impossible */ }
+        catch { }
     }
 }

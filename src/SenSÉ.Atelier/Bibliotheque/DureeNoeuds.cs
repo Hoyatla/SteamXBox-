@@ -172,5 +172,13 @@ public static class DureeNoeuds
         ["version_creer"] = CategorieDuree.Rapide,
         ["version_lister"] = CategorieDuree.Rapide,
         ["version_restaurer"] = CategorieDuree.Rapide,
-        ["layout_ranger"] = CategorieDuree.Rapide,};
+        ["layout_ranger"] = CategorieDuree.Rapide,
+
+        // ----- Phase 4 -----
+        ["template_lister"] = CategorieDuree.Rapide,
+        ["template_charger"] = CategorieDuree.Rapide,
+        ["template_publier"] = CategorieDuree.Rapide,
+        ["collab_connect"] = CategorieDuree.Rapide,
+        ["collab_diff"] = CategorieDuree.Rapide,
+        ["collab_resoudre"] = CategorieDuree.Rapide,};
 }

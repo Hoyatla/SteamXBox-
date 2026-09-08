@@ -76,6 +76,16 @@ public sealed class Verbes
                 "commentaire/creer"          => CommentaireCreer(body!),
                 "commentaire/lister"         => CommentaireLister(body!),
                 "commentaire/supprimer"      => CommentaireSupprimer(body!),
+                "webhook/creer"              => WebhookCreer(body!),
+                "webhook/supprimer"          => WebhookSupprimer(body!),
+                "webhook/lister"             => WebhookLister(),
+                "webhook/regenerer_secret"   => WebhookRegenererSecret(body!),
+                "templates/lister"           => TemplatesLister(),
+                "templates/charger"          => TemplatesCharger(body!),
+                "templates/publier"          => TemplatesPublier(body!),
+                "sync/push"                  => SyncPush(body!),
+                "sync/pull"                  => SyncPull(body!),
+                "sync/diff"                  => SyncDiff(body!),
                 "langages"                => LangagesLister(),
                 "etat"                     => ExecutionEtat(query),
                 "fenetre/ouvrir"           => FenetreOuvrir(),
@@ -923,6 +933,135 @@ public sealed class Verbes
         var ok = g.Commentaires.RemoveAll(c => c.Id == cid) > 0;
         if (ok) _persistance.SauvegarderGraphe(g);
         return new { ok, data = new { commentaire_id = cid } };
+    }
+
+    // =============== WEBHOOKS (4.1) ===============
+
+    private object WebhookCreer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var chemin = body["chemin"]?.GetValue<string>() ?? "/webhook/" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        var mode = body["mode_auth"]?.GetValue<string>() ?? "aucun";
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var store = new SenSÉ.Atelier.Webhook.WebhookConfigStore(Racine);
+        store.Charger();
+        var token = mode == "token" ? GenererSecret(32) : null;
+        var secret = mode == "hmac" ? GenererSecret(32) : null;
+        var cfg = new SenSÉ.Atelier.Webhook.WebhookConfig
+        {
+            GrapheId = gid, Chemin = chemin, Mode = store.ParseMode(mode), Token = token, SecretHmac = secret
+        };
+        store.Ajouter(cfg);
+        return new { ok = true, data = new { id = cfg.Id, chemin, mode, token, secret_hmac = secret } };
+    }
+
+    private object WebhookSupprimer(JsonObject body)
+    {
+        var id = body["webhook_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(id)) return new { ok = false, error = "webhook_id manquant" };
+        var store = new SenSÉ.Atelier.Webhook.WebhookConfigStore(Racine);
+        store.Charger();
+        var ok = store.Supprimer(id);
+        return new { ok, data = new { webhook_id = id } };
+    }
+
+    private object WebhookLister()
+    {
+        var store = new SenSÉ.Atelier.Webhook.WebhookConfigStore(Racine);
+        store.Charger();
+        var liste = store.Lister();
+        return new { ok = true, data = new { webhooks = liste.Select(c => new { id = c.Id, graphe_id = c.GrapheId, chemin = c.Chemin, mode = c.Mode.ToString().ToLower(), token = c.Token, secret_hmac = c.SecretHmac }).ToList() } };
+    }
+
+    private object WebhookRegenererSecret(JsonObject body)
+    {
+        var id = body["webhook_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(id)) return new { ok = false, error = "webhook_id manquant" };
+        var store = new SenSÉ.Atelier.Webhook.WebhookConfigStore(Racine);
+        store.Charger();
+        var cfg = store.TrouverParId(id);
+        if (cfg is null) return new { ok = false, error = "webhook introuvable" };
+        if (cfg.Mode == SenSÉ.Atelier.Webhook.WebhookAuthMode.Token) cfg.Token = GenererSecret(32);
+        if (cfg.Mode == SenSÉ.Atelier.Webhook.WebhookAuthMode.Hmac) cfg.SecretHmac = GenererSecret(32);
+        store.Sauvegarder();
+        return new { ok = true, data = new { token = cfg.Token, secret_hmac = cfg.SecretHmac } };
+    }
+
+    private static string GenererSecret(int len)
+    {
+        const string chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        var sb = new System.Text.StringBuilder(len);
+        var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        var bytes = new byte[len];
+        rng.GetBytes(bytes);
+        foreach (var b in bytes) sb.Append(chars[b % chars.Length]);
+        return sb.ToString();
+    }
+
+    // =============== TEMPLATES (4.2) ===============
+
+    private object TemplatesLister()
+    {
+        var tpls = SenSÉ.Atelier.Templates.Templates.Lister(Racine);
+        return new { ok = true, data = new { templates = tpls.Select(t => new { id = t.Id, nom = t.Nom, description = t.Description, auteur = t.Auteur, tags = t.Tags }).ToList() } };
+    }
+
+    private object TemplatesCharger(JsonObject body)
+    {
+        var tid = body["template_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(tid)) return new { ok = false, error = "template_id manquant" };
+        var g = SenSÉ.Atelier.Templates.Templates.Charger(Racine, tid);
+        if (g is null) return new { ok = false, error = "template introuvable" };
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { graphe_id = g.Id, nom = g.Nom } };
+    }
+
+    private object TemplatesPublier(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        var nom = body["nom"]?.GetValue<string>() ?? g.Nom;
+        var desc = body["description"]?.GetValue<string>() ?? "";
+        var tags = new List<string>();
+        if (body["tags"] is JsonArray ta) foreach (var t in ta) if (t is JsonValue jv) tags.Add(jv.GetValue<string>() ?? "");
+        if (!SenSÉ.Atelier.Templates.Templates.Publier(Racine, g, nom, desc, tags, out var err)) return new { ok = false, error = err };
+        return new { ok = true, data = new { nom } };
+    }
+
+    // =============== SYNC (4.3) ===============
+
+    private object SyncPush(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var modif = new SenSÉ.Atelier.Collab.Collab.Modif
+        {
+            User = body["user"]?.GetValue<string>() ?? "anonyme",
+            Type = body["modif_type"]?.GetValue<string>() ?? "inconnu",
+            Payload = body["payload"] as JsonObject,
+        };
+        SenSÉ.Atelier.Collab.Collab.Push(Racine, gid, modif);
+        return new { ok = true, data = new { ts = modif.Ts } };
+    }
+
+    private object SyncPull(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var depuis = body["depuis_timestamp"]?.GetValue<DateTime>() ?? DateTime.MinValue;
+        var mods = SenSÉ.Atelier.Collab.Collab.Pull(Racine, gid, depuis);
+        return new { ok = true, data = new { modifs = mods.Select(m => new { ts = m.Ts, user = m.User, type = m.Type, payload = m.Payload }).ToList() } };
+    }
+
+    private object SyncDiff(JsonObject body)
+    {
+        var a = body["graphe_id_a"]?.GetValue<string>();
+        var b = body["graphe_id_b"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return new { ok = false, error = "graphe_id_a et _b requis" };
+        var d = SenSÉ.Atelier.Collab.Collab.Diff(Racine, a, b);
+        return new { ok = true, data = d };
     }
 
 }
