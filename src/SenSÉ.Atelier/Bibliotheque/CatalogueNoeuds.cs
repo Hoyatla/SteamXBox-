@@ -49,6 +49,14 @@ public static class CatalogueNoeuds
         Bibliotheque.Codage.Primitives.Enregistrer();
         Bibliotheque.Codage.Llm.Enregistrer();
         Bibliotheque.Codage.Mcp.Enregistrer();
+        Bibliotheque.Codage.Math.Enregistrer();
+        Bibliotheque.Codage.TexteAlgo.Enregistrer();
+        Bibliotheque.Codage.Dates.Enregistrer();
+        Bibliotheque.Codage.Listes.Enregistrer();
+        Bibliotheque.Codage.Logique.Enregistrer();
+        Bibliotheque.Codage.Donnees.Enregistrer();
+        Bibliotheque.Codage.Reseau.Enregistrer();
+        Bibliotheque.Codage.Variables.Enregistrer();
         Bibliotheque.Multimedia.Tous.Enregistrer();
         Composite.Tous.Enregistrer();
     }

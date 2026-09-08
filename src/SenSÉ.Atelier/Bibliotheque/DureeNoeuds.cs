@@ -106,5 +106,54 @@ public static class DureeNoeuds
         // ----- Workflow multimedia -----
         // texte vers animation = texte -> image -> video, ~80s total.
         ["workflow_texte_vers_animation"] = CategorieDuree.Long,
+        // ----- Phase 1 : 28 noeuds algorithmiques -----
+        // Math
+        ["math_operation"] = CategorieDuree.Rapide,
+        ["math_fonction"] = CategorieDuree.Rapide,
+        // Statistiques : peut grimper sur des listes de plusieurs milliers d'elements.
+        ["math_statistiques"] = CategorieDuree.Moyen,
+        ["math_aleatoire"] = CategorieDuree.Rapide,
+        ["math_arrondir"] = CategorieDuree.Rapide,
+
+        // Texte avance
+        ["texte_regex"] = CategorieDuree.Rapide,
+        ["texte_split"] = CategorieDuree.Rapide,
+        ["texte_join"] = CategorieDuree.Rapide,
+        ["texte_formater"] = CategorieDuree.Rapide,
+        ["texte_casse"] = CategorieDuree.Rapide,
+
+        // Dates
+        ["date_maintenant"] = CategorieDuree.Rapide,
+        ["date_parser"] = CategorieDuree.Rapide,
+
+        // Listes
+        // Filtrer, trier, grouper dependent de la taille de la liste. Moyen par defaut prudent.
+        ["liste_filtrer"] = CategorieDuree.Moyen,
+        ["liste_trier"] = CategorieDuree.Moyen,
+        ["liste_grouper"] = CategorieDuree.Moyen,
+        ["liste_unique"] = CategorieDuree.Rapide,
+
+        // Logique
+        ["logique_si"] = CategorieDuree.Rapide,
+        ["logique_comparer"] = CategorieDuree.Rapide,
+        ["logique_et_ou"] = CategorieDuree.Rapide,
+
+        // Donnees
+        // csv_parser sur de gros fichiers peut prendre 1-2s.
+        ["json_lire"] = CategorieDuree.Rapide,
+        ["json_ecrire"] = CategorieDuree.Rapide,
+        ["csv_parser"] = CategorieDuree.Moyen,
+
+        // Reseau
+        // Endroits lents : 0.1-5s typiquement, peut-etre 30s si timeout.
+        ["http_get"] = CategorieDuree.Moyen,
+        ["http_post"] = CategorieDuree.Moyen,
+        // webhook MVP : generation d'ID instantanee.
+        ["webhook"] = CategorieDuree.Rapide,
+
+        // Variables
+        ["variable_set"] = CategorieDuree.Rapide,
+        ["variable_get"] = CategorieDuree.Rapide,
+        ["variable_compteur"] = CategorieDuree.Rapide,
     };
 }

@@ -182,6 +182,107 @@ public static class Vulgarisation
         ["redimensionner_image"] = (
             "Redimensionner une image",
             "Change la taille d'une image. Utile pour adapter a un site web ou un emailing."),
+
+        // ----- Phase 1 : 28 noeuds algorithmiques -----
+        // Math
+        ["math_operation"] = (
+            "Calculer",
+            "Fait une operation entre 2 nombres. +, -, *, /, %, exposant. La division par zero renvoie NaN."),
+        ["math_fonction"] = (
+            "Fonction math",
+            "Applique une fonction a un nombre : sinus, cosinus, racine, log, arrondi, etc."),
+        ["math_statistiques"] = (
+            "Statistiques",
+            "Sur une liste de nombres : somme, moyenne, minimum, maximum, mediane. La liste est passee en JSON."),
+        ["math_aleatoire"] = (
+            "Nombre aleatoire",
+            "Tire un nombre entier au hasard entre un minimum (inclus) et un maximum (exclus)."),
+        ["math_arrondir"] = (
+            "Arrondir",
+            "Arrondit un nombre au plus proche, en dessous, au-dessus, ou en tronquant. Tu choisis le nombre de decimales."),
+
+        // Texte avance
+        ["texte_regex"] = (
+            "Chercher par motif",
+            "Cherche (ou remplace) un motif dans un texte. La syntaxe est celle des expressions regulieres (regex)."),
+        ["texte_split"] = (
+            "Decouper un texte",
+            "Coupe un texte en morceaux autour d'un separateur. La sortie est une liste JSON, branche-la sur un noeud qui consomme des listes."),
+        ["texte_join"] = (
+            "Coller une liste",
+            "Inverse de Decouper : recolle une liste JSON en un seul texte, avec un separateur entre chaque element."),
+        ["texte_formater"] = (
+            "Formater un texte",
+            "Remplace les balises {nom}, {age}, etc. dans un modele par les valeurs d'un dictionnaire JSON."),
+        ["texte_casse"] = (
+            "Changer la casse",
+            "Met un texte en MAJUSCULES, minuscules, Title Case (Majuscule A Chaque Mot), Sentence case (Majuscule Apres Le Point)."),
+
+        // Dates
+        ["date_maintenant"] = (
+            "Date actuelle",
+            "Donne la date et l'heure du moment, dans le format que tu choisis (ISO 8601, francais, timestamp Unix, lisible)."),
+        ["date_parser"] = (
+            "Lire une date",
+            "Convertit une date ecrite en texte (plusieurs formats possibles) en ISO 8601 exploitable."),
+
+        // Listes
+        ["liste_filtrer"] = (
+            "Filtrer une liste",
+            "Garde ou retire les elements d'une liste qui repondent a un critere (egal, different, superieur a, inferieur a, contient)."),
+        ["liste_trier"] = (
+            "Trier une liste",
+            "Trie une liste de dicts par une cle, en ordre ascendant ou descendant. Detecte tout seul si la cle est numerique."),
+        ["liste_unique"] = (
+            "Dedoublonner",
+            "Enleve les doublons d'une liste, en gardant l'ordre de la premiere occurrence."),
+        ["liste_grouper"] = (
+            "Grouper par cle",
+            "Regroupe les elements d'une liste de dicts par la valeur d'une cle. Sortie : un dict de listes."),
+
+        // Logique
+        ["logique_si"] = (
+            "Si ... alors",
+            "Routeur conditionnel. Selon un booleen en entree, fait passer la donnee vers la sortie 'alors' ou 'sinon'."),
+        ["logique_comparer"] = (
+            "Comparer",
+            "Compare 2 chaines : egal, different, plus petit, plus grand, contient, commence par, finit par. Sortie booleenne."),
+        ["logique_et_ou"] = (
+            "ET / OU",
+            "Combine plusieurs booleens avec un ET logique (tous vrais) ou un OU logique (au moins un vrai)."),
+
+        // Donnees
+        ["json_lire"] = (
+            "Lire du JSON",
+            "Navigue dans un texte JSON via un chemin (data.user.name) et recupere la valeur pointee. Sans chemin, retourne le JSON complet."),
+        ["json_ecrire"] = (
+            "Creer du JSON",
+            "Wrap une valeur en JSON : string, nombre, booleen, tableau, objet. Donne le type en parametre."),
+        ["csv_parser"] = (
+            "Parser du CSV",
+            "Transforme un texte CSV (Comma Separated Values) en liste de dicts. La premiere ligne peut servir d'en-tetes."),
+
+        // Reseau
+        ["http_get"] = (
+            "Appeler une URL (GET)",
+            "Envoie une requete HTTP GET a une URL et recupere la reponse, le code de statut, et un booleen 'ok'."),
+        ["http_post"] = (
+            "Envoyer (POST)",
+            "Envoie une requete HTTP POST avec un body et un content-type, recupere la reponse et le code de statut."),
+        ["webhook"] = (
+            "Reserver un webhook",
+            "Genere une URL de webhook unique. La reception reelle (POST entrant) sera cablee ulterieurement ; pour l'instant le noeud sert a reserver l'identifiant et stocker le payload pour inspection."),
+
+        // Variables
+        ["variable_set"] = (
+            "Stocker une variable",
+            "Enregistre une valeur dans le store de variables (cle + valeur). Accessible plus tard dans le meme processus."),
+        ["variable_get"] = (
+            "Lire une variable",
+            "Recupere la valeur precedemment stockee. Renvoie une valeur par defaut si la cle n'existe pas."),
+        ["variable_compteur"] = (
+            "Compteur",
+            "Incremente (ou decremente avec un pas negatif) un compteur nomme. Premier appel = la valeur de depart."),
     };
 
     // ============== PARAMETRES ==============

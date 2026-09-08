@@ -18,11 +18,19 @@ public partial class VueNoeud : UserControl
     private double _origX, _origY;
 
     public bool EstFocused { get; private set; }
+    /// <summary>Mis a true par le Canvas quand la SearchBar surligne ce noeud.</summary>
+    public bool EstMatch { get; private set; }
     public bool EstSelectionne { get; private set; }
 
     public void DefinirSelection(bool sel)
     {
         EstSelectionne = sel;
+        MettreAJourBord();
+    }
+
+    public void DefinirMatch(bool match)
+    {
+        EstMatch = match;
         MettreAJourBord();
     }
 
@@ -81,7 +89,10 @@ public partial class VueNoeud : UserControl
     {
         if (Bord is null) return;
         // Priorite : etat d'execution > selection/focus > repos
-        if (Statut == StatutExecution.EnCours)
+        // Priorite absolue : surlignage recherche (jaune).
+        if (EstMatch)
+            Bord.Style = (Style)FindResource("BordMatch");
+        else if (Statut == StatutExecution.EnCours)
             Bord.Style = (Style)FindResource("BordEnCours");
         else if (Statut == StatutExecution.Echec)
             Bord.Style = (Style)FindResource("BordEchec");

@@ -56,11 +56,7 @@ public partial class Inspecteur : UserControl
             });
             FrameworkElement champ = p.Type switch
             {
-                "multiligne" => new TextBox
-                {
-                    Text = n.Params.TryGetValue(p.Nom, out var v) ? v?.ToString() ?? "" : p.Defaut?.ToString() ?? "",
-                    AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 60, Tag = p.Nom,
-                },
+                "multiligne" => CreerMarkdownEditor(p, n),
                 "nombre" => new TextBox
                 {
                     Text = n.Params.TryGetValue(p.Nom, out var v) ? v?.ToString() ?? "" : p.Defaut?.ToString() ?? "0",
@@ -83,6 +79,7 @@ public partial class Inspecteur : UserControl
             if (champ is TextBox tb2) tb2.PreviewKeyDown += Champ_PreviewKeyDown;
             if (champ is ComboBox cmb2) cmb2.PreviewKeyDown += Champ_PreviewKeyDown;
             if (champ is TextBox tb) tb.TextChanged += (s, e) => Notifier(n, p.Nom, tb.Text);
+            if (champ is MarkdownEditor me) me.TextChanged += (s, e) => Notifier(n, p.Nom, me.Text);
             if (champ is CheckBox cb) cb.Checked += (s, e) => Notifier(n, p.Nom, true);
             if (champ is CheckBox cb2) cb2.Unchecked += (s, e) => Notifier(n, p.Nom, false);
             if (champ is ComboBox cmb) cmb.SelectionChanged += (s, e) => Notifier(n, p.Nom, cmb.SelectedItem?.ToString() ?? "");
@@ -109,6 +106,18 @@ public partial class Inspecteur : UserControl
         Modifie?.Invoke(n, copie);
     }
 
+
+    private MarkdownEditor CreerMarkdownEditor(ParametreNoeud p, Noeud n)
+    {
+        var me = new MarkdownEditor
+        {
+            Text = n.Params.TryGetValue(p.Nom, out var v) ? v?.ToString() ?? "" : p.Defaut?.ToString() ?? "",
+            Tag = p.Nom, MinHeight = 80,
+        };
+        me.PreviewKeyDown += Champ_PreviewKeyDown;
+        return me;
+    }
+
     private void Champ_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (_noeudCourant is null) return;
@@ -131,4 +140,53 @@ public partial class Inspecteur : UserControl
             e.Handled = true;
         }
     }
+
+    /// <summary>Selectionne la premiere occurrence de <paramref name="terme"/>
+    /// dans le TextBox/MarkdownEditor actuellement focus. Renvoie true si trouve.</summary>
+    public bool SelectionnerTexteDansContenu(string terme, bool casse)
+    {
+        var cmp = casse ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var fe = Keyboard.FocusedElement as FrameworkElement;
+        if (fe is TextBox tb) return ChercherDansTextBox(tb, terme, cmp);
+        if (fe is MarkdownEditor me) return ChercherDansTextBox(me.TrouverTextBoxInterne(), terme, cmp);
+        return false;
+    }
+
+    private static bool ChercherDansTextBox(TextBox? tb, string terme, StringComparison cmp)
+    {
+        if (tb is null || string.IsNullOrEmpty(terme)) return false;
+        var idx = tb.Text.IndexOf(terme, 0, cmp);
+        if (idx < 0) return false;
+        tb.Focus();
+        tb.SelectionStart = idx;
+        tb.SelectionLength = terme.Length;
+        return true;
+    }
+
+    /// <summary>Remplace toutes les occurrences dans le contenu courant.
+    /// Renvoie le nombre d'occurrences.</summary>
+    public int RemplacerDansContenuCourant(string terme, string remplacement, bool casse)
+    {
+        var cmp = casse ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var fe = Keyboard.FocusedElement as FrameworkElement;
+        if (fe is TextBox tb) return RemplacerDansTb(tb, terme, remplacement, cmp);
+        if (fe is MarkdownEditor me) return RemplacerDansTb(me.TrouverTextBoxInterne(), terme, remplacement, cmp);
+        return 0;
+    }
+
+    private static int RemplacerDansTb(TextBox? tb, string terme, string remplacement, StringComparison cmp)
+    {
+        if (tb is null || string.IsNullOrEmpty(terme)) return 0;
+        var src = tb.Text ?? "";
+        int n = 0, i = 0;
+        while ((i = src.IndexOf(terme, i, cmp)) >= 0)
+        {
+            src = src.Substring(0, i) + (remplacement ?? "") + src.Substring(i + terme.Length);
+            n++;
+            i += (remplacement ?? "").Length;
+        }
+        if (n > 0) tb.Text = src;
+        return n;
+    }
+
 }

@@ -13,6 +13,8 @@ namespace SenSÉ.Atelier.UI;
 
 public partial class CanvasAtelier : UserControl
 {
+    /// <summary>Acces au Canvas interne (x:Name=Surface) pour RenderTargetBitmap.</summary>
+    public Canvas? SurfaceCtl => Surface;
     public const string DragFormatPort = "Atelier.PortRef";
 
     private Graphe? _graphe;
@@ -458,4 +460,92 @@ public partial class CanvasAtelier : UserControl
             kv.Value.DefinirStatutExecution(null, null);
         }
     }
+
+    /// <summary>Surligne (bordure jaune) tous les noeuds dont le type,
+    /// le label vulgarise ou les valeurs de params contiennent <paramref name="terme"/>.
+    /// Renvoie le nombre de noeuds surlignes.</summary>
+    public int SurlignerRecherche(string terme, bool casse)
+    {
+        var cmp = casse ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        int n = 0;
+        foreach (var kv in _vuesNoeuds)
+        {
+            var noeud = kv.Value.Noeud;
+            var def = CatalogueNoeuds.Trouver(noeud.Type);
+            var label = def?.NomAffichage ?? noeud.Type;
+            bool match = (label?.Contains(terme, cmp) ?? false)
+                || (noeud.Type?.Contains(terme, cmp) ?? false);
+            if (!match)
+            {
+                foreach (var p in noeud.Params)
+                {
+                    var sval = p.Value?.ToString() ?? "";
+                    if (sval.Contains(terme, cmp)) { match = true; break; }
+                }
+            }
+            kv.Value.DefinirMatch(match);
+            if (match) n++;
+        }
+        return n;
+    }
+
+    public void EffacerSurlignageRecherche()
+    {
+        foreach (var kv in _vuesNoeuds) kv.Value.DefinirMatch(false);
+    }
+
+    /// <summary>Dans tous les noeuds, remplace <paramref name="terme"/> par
+    /// <paramref name="remplacement"/> dans les valeurs de params (string).
+    /// Renvoie le nombre total d'occurrences remplacees.</summary>
+    public int RemplacerDansNoeuds(string terme, string remplacement, bool casse)
+    {
+        var cmp = casse ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        int total = 0;
+        if (_graphe is null) return 0;
+        foreach (var noeud in _graphe.Noeuds)
+        {
+            foreach (var cle in noeud.Params.Keys.ToList())
+            {
+                var v = noeud.Params[cle]?.ToString();
+                if (string.IsNullOrEmpty(v)) continue;
+                if (v.Contains(terme, cmp))
+                {
+                    var nv = v.Replace(cmp == StringComparison.Ordinal ? terme : terme, remplacement);
+                    noeud.Params[cle] = nv;
+                    total += CompteOccurrences(v, terme, casse);
+                }
+            }
+        }
+        return total;
+    }
+
+    private static int CompteOccurrences(string source, string sub, bool casse)
+    {
+        if (string.IsNullOrEmpty(sub) || string.IsNullOrEmpty(source)) return 0;
+        var cmp = casse ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        int n = 0, i = 0;
+        while ((i = source.IndexOf(sub, i, cmp)) >= 0) { n++; i += sub.Length; }
+        return n;
+    }
+
+
+    /// <summary>Calcule la bounding box (en coords du Surface interne) qui
+    /// englobe toutes les VueNoeud du graphe. Renvoie Empty si pas de noeud.</summary>
+    public Rect ObtenirBordContenu()
+    {
+        if (_vuesNoeuds.Count == 0) return Rect.Empty;
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var v in _vuesNoeuds.Values)
+        {
+            var x = Canvas.GetLeft(v); var y = Canvas.GetTop(v);
+            var w = v.ActualWidth; var h = v.ActualHeight;
+            if (double.IsNaN(w) || w <= 0) w = 140;
+            if (double.IsNaN(h) || h <= 0) h = 90;
+            if (x < minX) minX = x; if (y < minY) minY = y;
+            if (x + w > maxX) maxX = x + w; if (y + h > maxY) maxY = y + h;
+        }
+        return new Rect(minX, minY, Math.Max(1, maxX - minX), Math.Max(1, maxY - minY));
+    }
+
 }

@@ -34,6 +34,9 @@ public partial class FenetreAtelier : Window
     public ICommand FermerOngletCmd { get; }
     public ICommand OngletSuivantCmd { get; }
     public ICommand OngletPrecedentCmd { get; }
+
+    public ICommand OuvrirSearchDescCmd { get; }
+    public ICommand OuvrirSearchCanvasCmd { get; }
     public ICommand FocusPaletteCmd { get; }
     public ICommand RenommerOngletCmd { get; }
 
@@ -55,6 +58,9 @@ public partial class FenetreAtelier : Window
         FermerOngletCmd = new RelayCommand(_ => FermerOngletParId(_grapheActif?.Id), _ => _grapheActif is not null);
         OngletSuivantCmd = new RelayCommand(_ => OngletSuivant());
         OngletPrecedentCmd = new RelayCommand(_ => OngletPrecedent());
+
+        OuvrirSearchDescCmd = new RelayCommand(_ => OuvrirSearchBar(SearchBar.SearchMode.Description));
+        OuvrirSearchCanvasCmd = new RelayCommand(_ => OuvrirSearchBar(SearchBar.SearchMode.Canvas));
         FocusPaletteCmd = new RelayCommand(_ => PaletteCtl.FocusFiltre());
         RenommerOngletCmd = new RelayCommand(_ => RenommerOngletActif(), _ => _grapheActif is not null);
         AnnulerCmd = new RelayCommand(_ => AnnulerAction(), _ => PeutAnnuler());
@@ -655,6 +661,133 @@ private void OngletFermer_Click(object sender, MouseButtonEventArgs e)
             }
             return;
         }
+    }
+
+
+    private void OuvrirSearchBar(SearchBar.SearchMode mode)
+    {
+        SearchCtl.DefinirMode(mode);
+        SearchCtl.Visibility = Visibility.Visible;
+        SearchCtl.FocusTerme();
+        // S'abonne aux events de la SearchBar (idempotent : on retire avant)
+        SearchCtl.RechercheDemandee -= EffectuerRecherche;
+        SearchCtl.RechercheDemandee += EffectuerRecherche;
+        SearchCtl.RemplacerToutDemande -= EffectuerRemplacerTout;
+        SearchCtl.RemplacerToutDemande += EffectuerRemplacerTout;
+        SearchCtl.FermerDemandee -= FermerSearchBar;
+        SearchCtl.FermerDemandee += FermerSearchBar;
+    }
+
+    private void FermerSearchBar(object? sender, EventArgs e)
+    {
+        SearchCtl.Visibility = Visibility.Collapsed;
+        CanvasCtl.EffacerSurlignageRecherche();
+    }
+
+    private void EffectuerRecherche(string terme, SearchBar.SearchMode mode, bool casse)
+    {
+        if (string.IsNullOrEmpty(terme))
+        {
+            SearchCtl.AfficherStatus("Vide.");
+            CanvasCtl.EffacerSurlignageRecherche();
+            return;
+        }
+        if (mode == SearchBar.SearchMode.Canvas)
+        {
+            var n = CanvasCtl.SurlignerRecherche(terme, casse);
+            SearchCtl.AfficherStatus(n + " noeud(s) surligne(s).");
+
+        }
+        else
+        {
+            // Description : cherche dans le contenu des params du noeud selectionne
+            var trouve = InspecteurCtl.SelectionnerTexteDansContenu(terme, casse);
+            SearchCtl.AfficherStatus(trouve ? "Selectionne dans l\u2019inspecteur." : "Aucune correspondance dans l\u2019inspecteur.");
+        }
+    }
+
+    private void EffectuerRemplacerTout(string terme, string remplacement, SearchBar.SearchMode mode, bool casse)
+    {
+        if (string.IsNullOrEmpty(terme))
+        {
+            SearchCtl.AfficherStatus("Vide.");
+            return;
+        }
+        if (mode == SearchBar.SearchMode.Canvas)
+        {
+            var n = CanvasCtl.RemplacerDansNoeuds(terme, remplacement, casse);
+            MarquerModifie();
+            if (_grapheActif is not null) _persistance.SauvegarderGraphe(_grapheActif);
+            SearchCtl.AfficherStatus(n + " occurrence(s) remplacee(s) dans les params.");
+        }
+        else
+        {
+            var n = InspecteurCtl.RemplacerDansContenuCourant(terme, remplacement, casse);
+            SearchCtl.AfficherStatus(n + " occurrence(s) dans l\u2019inspecteur.");
+        }
+    }
+
+
+    private void BtnExportPng_Click(object sender, RoutedEventArgs e)
+    {
+        if (_grapheActif is null) { StatutBas.Text = "Pas de graphe actif."; return; }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Image PNG|*.png",
+            FileName = SanitizeNomFichier(_grapheActif.Nom) + ".png",
+            Title = "Exporter le graphe en PNG",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        try
+        {
+            // Bounding box + 50px de marge
+            var bord = CanvasCtl.ObtenirBordContenu();
+            double minX, minY, w, h;
+            if (bord.IsEmpty)
+            { minX = 0; minY = 0; w = 400; h = 300; }
+            else { minX = bord.X; minY = bord.Y; w = bord.Width; h = bord.Height; }
+            const double M = 50;
+            var imgW = (int)Math.Ceiling(w + 2 * M);
+            var imgH = (int)Math.Ceiling(h + 2 * M);
+            // Surface interne du canvas (le Canvas dans Canvas.xaml)
+            var surface = CanvasCtl.SurfaceCtl;
+            if (surface is null) { StatutBas.Text = "Surface canvas introuvable."; return; }
+            // Force un layout pour avoir les tailles a jour
+            surface.UpdateLayout();
+            // Dessine le canvas translate pour que le coin haut-gauche de la bbox tombe a (M, M)
+            var dv = new System.Windows.Media.DrawingVisual();
+            using (var dc = dv.RenderOpen())
+            {
+                var vb = new System.Windows.Media.VisualBrush(surface)
+                {
+                    Stretch = System.Windows.Media.Stretch.None,
+                    AlignmentX = System.Windows.Media.AlignmentX.Left,
+                    AlignmentY = System.Windows.Media.AlignmentY.Top,
+                };
+                vb.Transform = new System.Windows.Media.MatrixTransform(1, 0, 0, 1, -minX + M, -minY + M);
+                dc.DrawRectangle(vb, null, new System.Windows.Rect(0, 0, imgW, imgH));
+            }
+            var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(imgW, imgH, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            rtb.Render(dv);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+            using (var fs = System.IO.File.Create(dlg.FileName))
+                enc.Save(fs);
+            StatutBas.Text = "Export PNG : " + dlg.FileName + " (" + imgW + "x" + imgH + ")";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erreur export PNG : " + ex.Message, "Atelier",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string SanitizeNomFichier(string s)
+    {
+        var invalides = System.IO.Path.GetInvalidFileNameChars();
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (var c in s) sb.Append(System.Array.IndexOf(invalides, c) >= 0 ? '_' : c);
+        return sb.ToString();
     }
 
     private class TabGraphe : INotifyPropertyChanged

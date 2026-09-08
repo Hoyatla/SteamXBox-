@@ -19,6 +19,7 @@
     <SolidColorBrush x:Key="TexteSecondaireBrush" Color="{StaticResource TexteSecondaire}" />
     <SolidColorBrush x:Key="AccentBrush"      Color="{StaticResource Accent}" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}" />
+    <SolidColorBrush x:Key="FondSurligneBrush" Color="#2A2A3A" />
 
     <Style TargetType="Window">
         <Setter Property="Background" Value="{StaticResource FondFenetreBrush}" />
@@ -85,4 +86,11 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
+
+    <!-- Bordure jaune pour les noeuds surlignes par la SearchBar (Ctrl+Shift+F). -->
+    <Style x:Key="BordMatch" TargetType="Border">
+        <Setter Property="BorderBrush" Value="#FFD600" />
+        <Setter Property="BorderThickness" Value="3" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
 </ResourceDictionary>

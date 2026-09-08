@@ -14,7 +14,12 @@
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding FermerOngletCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding OngletSuivantCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="Tab" Modifiers="Control+Shift" Command="{Binding OngletPrecedentCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
-        <KeyBinding Key="F" Modifiers="Control" Command="{Binding FocusPaletteCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <!-- Ctrl+F : ouvre la SearchBar en mode Description (recherche dans le noeud selectionne). -->
+        <KeyBinding Key="F" Modifiers="Control" Command="{Binding OuvrirSearchDescCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <!-- Ctrl+Shift+F : ouvre la SearchBar en mode Canvas (surligne les noeuds correspondants). -->
+        <KeyBinding Key="F" Modifiers="Control+Shift" Command="{Binding OuvrirSearchCanvasCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <!-- Ctrl+P : focus palette (avant Ctrl+F, on garde l'acces). -->
+        <KeyBinding Key="P" Modifiers="Control" Command="{Binding FocusPaletteCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="F2" Command="{Binding RenommerOngletCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
     </Window.InputBindings>
     <Grid>
@@ -80,6 +85,7 @@
                 <Separator Margin="8,4" Width="1" Background="{StaticResource BordureBrush}" />
                 <Button x:Name="BtnAnnuler" Content="↶ Annuler (Ctrl+Z)" Click="BtnAnnuler_Click" />
                 <Button x:Name="BtnRefaire" Content="↷ Refaire (Ctrl+Y)" Click="BtnRefaire_Click" />
+                <Button x:Name="BtnExportPng" Content="📷 Export PNG" Click="BtnExportPng_Click" />
                 <TextBlock x:Name="Statut" Margin="12,0" VerticalAlignment="Center" Foreground="{StaticResource TexteSecondaireBrush}" />
             </StackPanel>
         </Border>
@@ -94,6 +100,10 @@
             <local:Palette x:Name="PaletteCtl" Grid.Column="0" NoeudChoisi="Palette_NoeudChoisi" />
             <Grid Grid.Column="1">
                 <local:CanvasAtelier x:Name="CanvasCtl" SelectionNoeud="CanvasCtl_SelectionNoeud" NoeudDeplace="CanvasCtl_NoeudDeplace" GrapheModifie="CanvasCtl_GrapheModifie" />
+
+                <!-- SearchBar : popup top-right, invisible par defaut. -->
+                <local:SearchBar x:Name="SearchCtl" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,8,8,0" Width="Auto" Visibility="Collapsed" />
 
                 <!-- Etat vide : pas de graphe. Propose les exemples + la creation. -->
                 <Border x:Name="PanelVide" HorizontalAlignment="Center" VerticalAlignment="Center"
