@@ -1,0 +1,14 @@
+{
+  "id": "gradle",
+  "nom": "Gradle 8.10.2 (build tool)",
+  "espace": "Codage",
+  "rang": "embarque",
+  "extensions": [],
+  "detection": "gradle-8.10.2/bin/gradle.bat --version",
+  "executable": "gradle-8.10.2/bin/gradle.bat",
+  "commande": ["cmd", "/c", "call", "{executable}", "{fichier}"],
+  "compile": false,
+  "depends_on": ["java"],
+  "latence_ms": 5000,
+  "taille_mo": 145
+}
