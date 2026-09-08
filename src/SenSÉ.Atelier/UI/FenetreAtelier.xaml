@@ -15,6 +15,7 @@
         <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding OngletSuivantCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="Tab" Modifiers="Control+Shift" Command="{Binding OngletPrecedentCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="F" Modifiers="Control" Command="{Binding FocusPaletteCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F2" Command="{Binding RenommerOngletCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
     </Window.InputBindings>
     <Grid>
         <Grid.RowDefinitions>
@@ -44,14 +45,25 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="2,4" Padding="10,4" CornerRadius="4,4,0,0"
+                            <Border Margin="2,4" Padding="0,0" CornerRadius="4,4,0,0"
                                     Background="{Binding Fond, Converter={x:Null}}"
                                     BorderBrush="{StaticResource BordureBrush}" BorderThickness="1"
-                                    MouseLeftButtonUp="OngletGraphe_Click" Tag="{Binding Id}" Cursor="Hand">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Nom}" Foreground="{StaticResource TexteBrush}" />
-                                    <TextBlock Text=" ×" Margin="6,0,0,0" Foreground="{StaticResource TexteSecondaireBrush}" />
-                                </StackPanel>
+                                    Tag="{Binding Id}" Cursor="Hand">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="10,4,4,4"
+                                                Tag="{Binding Id}"
+                                                MouseLeftButtonUp="Onglet_HandleClick">
+                                        <TextBlock Text="{Binding Nom}" Foreground="{StaticResource TexteBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding MarqueurModifie}" Foreground="#F39C12" FontWeight="Bold" FontSize="14" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text=" ×" Margin="6,0,10,0" VerticalAlignment="Center"
+                                               Foreground="{StaticResource TexteSecondaireBrush}" Cursor="Hand"
+                                               MouseLeftButtonUp="OngletFermer_Click" Tag="{Binding Id}" />
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -80,13 +92,19 @@
                 <ColumnDefinition Width="280" />
             </Grid.ColumnDefinitions>
             <local:Palette x:Name="PaletteCtl" Grid.Column="0" NoeudChoisi="Palette_NoeudChoisi" />
-            <local:CanvasAtelier x:Name="CanvasCtl" Grid.Column="1" SelectionNoeud="CanvasCtl_SelectionNoeud" NoeudDeplace="CanvasCtl_NoeudDeplace" GrapheModifie="CanvasCtl_GrapheModifie" />
+            <Grid Grid.Column="1">
+                <local:CanvasAtelier x:Name="CanvasCtl" SelectionNoeud="CanvasCtl_SelectionNoeud" NoeudDeplace="CanvasCtl_NoeudDeplace" GrapheModifie="CanvasCtl_GrapheModifie" />
+                <TextBlock x:Name="CanvasVide" Text="Aucun graphe. Cliquez sur + pour en créer un."
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource TexteSecondaireBrush}" FontSize="16"
+                           IsHitTestVisible="False" />
+            </Grid>
             <local:Inspecteur x:Name="InspecteurCtl" Grid.Column="2" />
         </Grid>
 
         <!-- Barre de statut -->
         <Border Grid.Row="4" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,0">
-            <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt.  F5=Exécuter, Ctrl+S=Sauver, Ctrl+Z=Annuler, Ctrl+F=Filtrer" />
+            <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt.  F5=Exécuter, Ctrl+S=Sauver, Ctrl+Z=Annuler, Ctrl+F=Filtrer, F2=Renommer onglet" />
         </Border>
     </Grid>
 </Window>

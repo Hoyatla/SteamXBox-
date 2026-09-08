@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.ComponentModel;
 using SenSÉ.Atelier.Bibliotheque;
 using SenSÉ.Atelier.Custom;
 using SenSÉ.Atelier.Execution;
@@ -32,6 +33,7 @@ public partial class FenetreAtelier : Window
     public ICommand OngletSuivantCmd { get; }
     public ICommand OngletPrecedentCmd { get; }
     public ICommand FocusPaletteCmd { get; }
+    public ICommand RenommerOngletCmd { get; }
 
     public FenetreAtelier(string racine, ServeurHttp serveur)
     {
@@ -44,14 +46,15 @@ public partial class FenetreAtelier : Window
         RafraichirOnglets();
         SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
         PreviewKeyDown += Fenetre_PreviewKeyDown;
-        ExecuterCmd = new RelayCommand(_ => ExecuterGraphe());
-        SauvegarderCmd = new RelayCommand(_ => SauvegarderAction());
-        SauvegarderSousCmd = new RelayCommand(_ => SauvegarderSousAction());
+        ExecuterCmd = new RelayCommand(_ => ExecuterGraphe(), _ => _grapheActif is not null);
+        SauvegarderCmd = new RelayCommand(_ => SauvegarderAction(), _ => _grapheActif is not null);
+        SauvegarderSousCmd = new RelayCommand(_ => SauvegarderSousAction(), _ => _grapheActif is not null);
         NouveauGrapheCmd = new RelayCommand(_ => BtnNouveauGraphe_Click(this, new RoutedEventArgs()));
-        FermerOngletCmd = new RelayCommand(_ => FermerOngletAction(), _ => _grapheActif is not null);
+        FermerOngletCmd = new RelayCommand(_ => FermerOngletParId(_grapheActif?.Id), _ => _grapheActif is not null);
         OngletSuivantCmd = new RelayCommand(_ => OngletSuivant());
         OngletPrecedentCmd = new RelayCommand(_ => OngletPrecedent());
         FocusPaletteCmd = new RelayCommand(_ => PaletteCtl.FocusFiltre());
+        RenommerOngletCmd = new RelayCommand(_ => RenommerOngletActif(), _ => _grapheActif is not null);
         AnnulerCmd = new RelayCommand(_ => AnnulerAction(), _ => PeutAnnuler());
         RefaireCmd = new RelayCommand(_ => RefaireAction(), _ => PeutRefaire());
         DataContext = this;
@@ -66,15 +69,7 @@ public partial class FenetreAtelier : Window
             var g = _persistance.ChargerGraphe(t.id, t.espace);
             if (g is not null) _onglets.Add(new TabGraphe { Id = g.Id, Nom = g.Nom, Graphe = g });
         }
-        if (_onglets.Count == 0)
-        {
-            foreach (var e in new[] { Espace.Codage, Espace.Multimedia })
-            {
-                var g = new Graphe { Espace = e, Nom = e == Espace.Codage ? "Mon premier code" : "Mon premier média" };
-                _persistance.SauvegarderGraphe(g);
-                _onglets.Add(new TabGraphe { Id = g.Id, Nom = g.Nom, Graphe = g });
-            }
-        }
+        OngletsGraphes.ItemsSource = null;
         OngletsGraphes.ItemsSource = _onglets;
     }
 
@@ -83,6 +78,7 @@ public partial class FenetreAtelier : Window
         _grapheActif = g;
         CanvasCtl.ChargerGraphe(g);
         InspecteurCtl.Vider();
+        CanvasVide.Visibility = g is null ? Visibility.Visible : Visibility.Collapsed;
         RafraichirBoutonsEspace();
         MajBoutonsUndo();
     }
@@ -99,36 +95,114 @@ public partial class FenetreAtelier : Window
     private void BtnMultimedia_Click(object sender, RoutedEventArgs e) => ChangerEspace(Espace.Multimedia);
     private void ChangerEspace(Espace e)
     {
+        if (Application.Current is App app) app.EspaceCourant = e;
         var g = _onglets.FirstOrDefault(o => o.Graphe.Espace == e)?.Graphe;
-        if (g is null)
-        {
-            g = new Graphe { Espace = e, Nom = e == Espace.Codage ? "Nouveau code" : "Nouveau média" };
-            _persistance.SauvegarderGraphe(g);
-            _onglets.Add(new TabGraphe { Id = g.Id, Nom = g.Nom, Graphe = g });
-            OngletsGraphes.ItemsSource = null;
-            OngletsGraphes.ItemsSource = _onglets;
-        }
         SelectionnerGraphe(g);
     }
 
-    private void OngletGraphe_Click(object sender, MouseButtonEventArgs e)
+    private DateTime _dernierClicOnglet = DateTime.MinValue;
+private string? _idDernierClicOnglet;
+
+private void Onglet_HandleClick(object sender, MouseButtonEventArgs e)
+{
+    if (sender is not FrameworkElement fe || fe.Tag is not string id) return;
+    var maintenant = DateTime.UtcNow;
+    if (_idDernierClicOnglet == id && (maintenant - _dernierClicOnglet).TotalMilliseconds < 350)
     {
+        _dernierClicOnglet = DateTime.MinValue;
+        _idDernierClicOnglet = null;
+        RenommerOnglet(id);
+        e.Handled = true;
+        return;
+    }
+    _dernierClicOnglet = maintenant;
+    _idDernierClicOnglet = id;
+    var t = _onglets.FirstOrDefault(o => o.Id == id);
+    if (t is not null) SelectionnerGraphe(t.Graphe);
+}
+
+private void OngletFermer_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
         if (sender is FrameworkElement fe && fe.Tag is string id)
         {
-            var t = _onglets.FirstOrDefault(o => o.Id == id);
-            if (t is not null) SelectionnerGraphe(t.Graphe);
+            FermerOngletParId(id);
+        }
+    }
+
+    private void FermerOngletParId(string? id)
+    {
+        if (id is null) return;
+        var t = _onglets.FirstOrDefault(o => o.Id == id);
+        if (t is null) return;
+        var r = MessageBox.Show(
+            "Fermer le graphe \"" + t.Nom + "\" ?",
+            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return;
+        // Si l'onglet actif est celui qu'on supprime, on selectionne autre chose apres
+        var etaitActif = _grapheActif?.Id == id;
+        _onglets.RemoveAll(o => o.Id == id);
+        OngletsGraphes.ItemsSource = null;
+        OngletsGraphes.ItemsSource = _onglets;
+        if (etaitActif)
+        {
+            SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
+        }
+    }
+
+    private void OngletRenommer_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is FrameworkElement fe && fe.Tag is string id)
+        {
+            RenommerOnglet(id);
+        }
+    }
+
+    private void RenommerOngletActif()
+    {
+        if (_grapheActif is null) return;
+        RenommerOnglet(_grapheActif.Id);
+    }
+
+    private void RenommerOnglet(string id)
+    {
+        var t = _onglets.FirstOrDefault(o => o.Id == id);
+        if (t is null) return;
+        var dlg = new FenetreRenommerOnglet(t.Nom) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            t.Nom = dlg.NomSaisi;
+            t.Graphe.Nom = dlg.NomSaisi;
+            t.Modifie = true;
+            _persistance.SauvegarderGraphe(t.Graphe);
+            t.Modifie = false; // sauvegarde donc propre
+            OngletsGraphes.ItemsSource = null;
+            OngletsGraphes.ItemsSource = _onglets;
+            StatutBas.Text = "Renommé en \"" + t.Nom + "\".";
         }
     }
 
     private void BtnNouveauGraphe_Click(object sender, RoutedEventArgs e)
     {
-        var esp = _grapheActif?.Espace ?? Espace.Codage;
-        var g = new Graphe { Espace = esp, Nom = "Nouveau graphe" };
+        var esp = _grapheActif?.Espace
+                  ?? (Application.Current is App app ? app.EspaceCourant : Espace.Codage);
+        var nom = DemanderNomGraphe();
+        if (nom is null) return;
+        var g = new Graphe { Espace = esp, Nom = nom };
         _persistance.SauvegarderGraphe(g);
         _onglets.Add(new TabGraphe { Id = g.Id, Nom = g.Nom, Graphe = g });
         OngletsGraphes.ItemsSource = null;
         OngletsGraphes.ItemsSource = _onglets;
         SelectionnerGraphe(g);
+        // Proposer de le renommer tout de suite
+        RenommerOnglet(g.Id);
+    }
+
+    private string? DemanderNomGraphe()
+    {
+        var dlg = new FenetreRenommerOnglet("Nouveau graphe") { Owner = this };
+        return dlg.ShowDialog() == true ? dlg.NomSaisi : null;
     }
 
     private void Palette_NoeudChoisi(DefinitionNoeud def)
@@ -157,13 +231,27 @@ public partial class FenetreAtelier : Window
 
     private void CanvasCtl_NoeudDeplace(Noeud n, double dx, double dy)
     {
-        if (_grapheActif is not null) _persistance.SauvegarderGraphe(_grapheActif);
+        if (_grapheActif is null) return;
+        MarquerModifie();
+        _persistance.SauvegarderGraphe(_grapheActif);
     }
 
     private void CanvasCtl_GrapheModifie()
     {
-        if (_grapheActif is not null) _persistance.SauvegarderGraphe(_grapheActif);
+        if (_grapheActif is null) return;
+        MarquerModifie();
+        _persistance.SauvegarderGraphe(_grapheActif);
         MajBoutonsUndo();
+    }
+
+    private void MarquerModifie()
+    {
+        var t = _onglets.FirstOrDefault(o => o.Id == _grapheActif?.Id);
+        if (t is null) return;
+        t.Modifie = true;
+        // Rafraichit l'affichage de l'onglet (le * apparait)
+        OngletsGraphes.ItemsSource = null;
+        OngletsGraphes.ItemsSource = _onglets;
     }
 
     private void BtnExecuter_Click(object sender, RoutedEventArgs e) => ExecuterGraphe();
@@ -191,11 +279,21 @@ public partial class FenetreAtelier : Window
 
     private void BtnSauvegarder_Click(object sender, RoutedEventArgs e)
     {
-        if (_grapheActif is not null)
+        SauvegarderAction();
+    }
+
+    private void SauvegarderAction()
+    {
+        if (_grapheActif is null) return;
+        _persistance.SauvegarderGraphe(_grapheActif);
+        var t = _onglets.FirstOrDefault(o => o.Id == _grapheActif.Id);
+        if (t is not null)
         {
-            _persistance.SauvegarderGraphe(_grapheActif);
-            StatutBas.Text = $"Sauvegardé à {DateTime.Now:HH:mm:ss} ({_grapheActif.Noeuds.Count} nœuds, {_grapheActif.Liens.Count} liens)";
+            t.Modifie = false;
+            OngletsGraphes.ItemsSource = null;
+            OngletsGraphes.ItemsSource = _onglets;
         }
+        StatutBas.Text = $"Sauvegardé à {DateTime.Now:HH:mm:ss} ({_grapheActif.Noeuds.Count} nœuds, {_grapheActif.Liens.Count} liens)";
     }
 
     private bool PeutAnnuler() => _grapheActif is not null && Historique.PeutAnnuler(_grapheActif.Id);
@@ -205,6 +303,9 @@ public partial class FenetreAtelier : Window
     {
         BtnAnnuler.IsEnabled = PeutAnnuler();
         BtnRefaire.IsEnabled = PeutRefaire();
+        BtnExecuter.IsEnabled = _grapheActif is not null;
+        BtnSauvegarder.IsEnabled = _grapheActif is not null;
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void AnnulerAction()
@@ -213,6 +314,7 @@ public partial class FenetreAtelier : Window
         if (!Historique.Annuler(_grapheActif)) return;
         _persistance.SauvegarderGraphe(_grapheActif);
         CanvasCtl.ChargerGraphe(_grapheActif);
+        MarquerModifie();
         StatutBas.Text = "Annulé.";
         MajBoutonsUndo();
     }
@@ -223,19 +325,13 @@ public partial class FenetreAtelier : Window
         if (!Historique.Refaire(_grapheActif)) return;
         _persistance.SauvegarderGraphe(_grapheActif);
         CanvasCtl.ChargerGraphe(_grapheActif);
+        MarquerModifie();
         StatutBas.Text = "Refait.";
         MajBoutonsUndo();
     }
 
     private void BtnAnnuler_Click(object sender, RoutedEventArgs e) => AnnulerAction();
     private void BtnRefaire_Click(object sender, RoutedEventArgs e) => RefaireAction();
-
-    private void SauvegarderAction()
-    {
-        if (_grapheActif is null) return;
-        _persistance.SauvegarderGraphe(_grapheActif);
-        StatutBas.Text = $"Sauvegardé à {DateTime.Now:HH:mm:ss} ({_grapheActif.Noeuds.Count} nœuds, {_grapheActif.Liens.Count} liens)";
-    }
 
     private void SauvegarderSousAction()
     {
@@ -251,20 +347,6 @@ public partial class FenetreAtelier : Window
             _persistance.ExporterGraphe(_grapheActif, dlg.FileName);
             StatutBas.Text = "Exporté vers " + dlg.FileName;
         }
-    }
-
-    private void FermerOngletAction()
-    {
-        if (_grapheActif is null) return;
-        var r = MessageBox.Show(
-            "Fermer le graphe \"" + _grapheActif.Nom + "\" ?",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (r != MessageBoxResult.Yes) return;
-        var id = _grapheActif.Id;
-        _onglets.RemoveAll(o => o.Id == id);
-        OngletsGraphes.ItemsSource = null;
-        OngletsGraphes.ItemsSource = _onglets;
-        SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
     }
 
     private void OngletSuivant()
@@ -285,14 +367,11 @@ public partial class FenetreAtelier : Window
 
     private void Fenetre_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        // Escape : deselection globale + fermer le focus palette
         if (e.Key == System.Windows.Input.Key.Escape)
         {
-            // Si le focus est dans la palette, le vider
             if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox
                 && System.Windows.Input.Keyboard.FocusedElement == FindName("Filtre"))
             {
-                // le filtre s'auto-vide (handler Filtre_KeyDown)
                 return;
             }
             CanvasCtl.ToutDeselectionner();
@@ -301,7 +380,6 @@ public partial class FenetreAtelier : Window
             e.Handled = true;
             return;
         }
-        // Suppr/Backspace : supprimer la selection
         if (e.Key == System.Windows.Input.Key.Delete || e.Key == System.Windows.Input.Key.Back)
         {
             if (CanvasCtl.Selection.Count > 0)
@@ -311,7 +389,6 @@ public partial class FenetreAtelier : Window
             }
             return;
         }
-        // Ctrl+D : dupliquer
         if (e.Key == System.Windows.Input.Key.D && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
         {
             if (CanvasCtl.Selection.Count > 0)
@@ -323,19 +400,29 @@ public partial class FenetreAtelier : Window
         }
     }
 
-    private void ExecuterAction_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        // Hook pour F5 si la command line ne se declenche pas
-    }
-
-    private class TabGraphe
+    private class TabGraphe : INotifyPropertyChanged
     {
         public string Id { get; set; } = "";
-        public string Nom { get; set; } = "";
+        private string _nom = "";
+        public string Nom
+        {
+            get => _nom;
+            set { _nom = value; OnPropertyChanged(nameof(Nom)); }
+        }
         public Graphe Graphe { get; set; } = null!;
+        private bool _modifie;
+        public bool Modifie
+        {
+            get => _modifie;
+            set { _modifie = value; OnPropertyChanged(nameof(Modifie)); OnPropertyChanged(nameof(MarqueurModifie)); }
+        }
+        public string MarqueurModifie => _modifie ? " *" : "";
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
-
 
 internal sealed class RelayCommand : ICommand
 {
