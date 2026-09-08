@@ -1,0 +1,14 @@
+{
+  "id": "kotlin",
+  "nom": "Kotlin (kotlinc + JVM, scripts .kts)",
+  "espace": "Codage",
+  "rang": "demande",
+  "extensions": [".kt", ".kts"],
+  "detection": "kotlinc/bin/kotlinc.bat -version",
+  "executable": "kotlinc/bin/kotlinc.bat",
+  "commande": ["cmd", "/c", "{executable}", "-script", "{fichier}.kts"],
+  "compile": false,
+  "depends_on": ["java"],
+  "latence_ms": 1200,
+  "taille_mo": 70
+}

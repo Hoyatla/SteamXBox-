@@ -1,0 +1,13 @@
+{
+  "id": "swift",
+  "nom": "Swift",
+  "espace": "Codage",
+  "rang": "detecte",
+  "extensions": [".swift"],
+  "detection": "swift --version",
+  "executable": "swift.exe",
+  "commande": ["{executable}", "{fichier}"],
+  "compile": false,
+  "latence_ms": 2000,
+  "taille_mo": 0
+}

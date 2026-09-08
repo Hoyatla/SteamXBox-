@@ -70,6 +70,31 @@ public static class Catalogue
             "https://win.rustup.rs/x86_64", 4571,
             "rustup_init",
             "rustup-init.exe -y. Produit rustc + cargo. Pas garanti présent : on regarde."),
+
+        new("cpp", "C++ (g++ via MinGW-W64)", TypeInstallation.Demande,
+            "https://github.com/niXman/mingw-builds-binaries/releases", 914,
+            "winget_brechtsanders",
+            "Mêmes binaires que c (gcc + g++). winget install BrechtSanders.WinLibs.POSIX.UCRT."),
+
+        new("go", "Go 1.24 SDK", TypeInstallation.Demande,
+            "https://go.dev/dl/go1.24.0.windows-amd64.zip", 150,
+            "extraire_zip",
+            "Zip archive. Extraire dans Outils/Langages/go/ pour obtenir go/bin/go.exe. Pas dans le PATH par défaut."),
+
+        new("kotlin", "Kotlin 2.0 (kotlinc, scripts .kts)", TypeInstallation.Demande,
+            "https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip", 70,
+            "extraire_zip",
+            "Dépend de java (JDK 17+). kotlinc/bin/kotlinc.bat est un .bat, lancement via cmd /c. .kts uniquement pour MVP."),
+
+        new("shell", "PowerShell 5.1 (intégré Windows)", TypeInstallation.Detecte,
+            "", 0,
+            "deja_present",
+            "Livré avec Windows. powershell.exe dans C:\\Windows\\System32. Toujours présent, jamais installé."),
+
+        new("swift", "Swift (rare sur Windows)", TypeInstallation.Detecte,
+            "https://www.swift.org/install/windows/", 0,
+            "swift_installer",
+            "Swift for Windows : installateur .exe. Rarement installé. On regarde, c est tout."),
     };
 
     /// <summary>Cherche une entrée par id (insensible à la casse). Null si inconnu.</summary>

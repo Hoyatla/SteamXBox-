@@ -1,0 +1,14 @@
+{
+  "id": "cpp",
+  "nom": "C++ (g++ via MinGW-W64)",
+  "espace": "Codage",
+  "rang": "demande",
+  "extensions": [".cpp", ".cc", ".cxx", ".hpp"],
+  "detection": "g++ --version",
+  "executable": "g++",
+  "commande_compilation": ["{executable}", "-O2", "{fichier}", "-o", "{sortie}"],
+  "commande": ["{sortie}"],
+  "compile": true,
+  "latence_ms": 1700,
+  "taille_mo": 0
+}

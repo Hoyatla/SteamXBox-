@@ -1,0 +1,13 @@
+{
+  "id": "shell",
+  "nom": "Shell (PowerShell 5.1)",
+  "espace": "Codage",
+  "rang": "detecte",
+  "extensions": [".ps1", ".psm1"],
+  "detection": "cmd.exe /c exit 0",
+  "executable": "powershell.exe",
+  "commande": ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{fichier}"],
+  "compile": false,
+  "latence_ms": 250,
+  "taille_mo": 0
+}
