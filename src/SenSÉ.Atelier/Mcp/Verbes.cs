@@ -64,6 +64,8 @@ public sealed class Verbes
                 "modeles"                  => ModelesLister(),
                 "langages"                => LangagesLister(),
                 "etat"                     => ExecutionEtat(query),
+                "fenetre/ouvrir"           => FenetreOuvrir(),
+                "fenetre/etat"             => FenetreEtat(),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
         }
@@ -555,5 +557,42 @@ public sealed class Verbes
             latence_ms = m.LatenceMs, taille_mo = m.TailleMo, executable = m.Executable,
         });
         return new { ok = true, data = new { langages = liste } };
+    }
+
+    // =============== FENETRE (mode headless) ===============
+
+    /// <summary>
+    /// Affiche la fenetre WPF de l'Atelier si elle ne l'est pas deja.
+    /// </summary>
+    /// <remarks>
+    /// En mode headless (<c>--no-window</c>), l'Atelier sert le HTTP sans
+    /// fenetre visible. Ce verbe permet a l'Assistant ou a un outil tiers
+    /// de demander l'affichage de la fenetre sans avoir a la creer. La
+    /// fenetre est re-utilisee si elle existe deja, et son cycle de vie
+    /// est gere par l'App WPF (cf. SenSÉ.Atelier.App.AfficherFenetre).
+    /// </remarks>
+    private object FenetreOuvrir()
+    {
+        if (System.Windows.Application.Current is not SenSÉ.Atelier.App app)
+            return new { ok = false, error = "Atelier non WPF ou App non initialisee" };
+        try
+        {
+            app.Dispatcher.Invoke(() => app.AfficherFenetre());
+            return new { ok = true, data = new { visible = app.FenetreVisible } };
+        }
+        catch (Exception ex) { return new { ok = false, error = ex.Message }; }
+    }
+
+    /// <summary>Indique si l'Atelier tourne en headless et si sa fenetre est visible.</summary>
+    private object FenetreEtat()
+    {
+        if (System.Windows.Application.Current is SenSÉ.Atelier.App app)
+        {
+            return new { ok = true, data = new {
+                headless = app.NoWindow,
+                fenetre_visible = app.FenetreVisible,
+            }};
+        }
+        return new { ok = true, data = new { headless = false, fenetre_visible = false } };
     }
 }

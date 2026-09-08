@@ -123,6 +123,13 @@ public partial class App : Application
         // where it becomes visible; closing this window takes it back down.
         SenSÉProcesses.StartCore();
 
+        // L'Atelier est un subprocess HTTP sur 8770, lancé en mode headless. Il sert
+        // l'Assistant (qui peut créer/exécuter des graphes sans que la fenêtre soit
+        // ouverte) et toute la session de l'utilisateur. Démarré avant les outils pour
+        // que l'Assistant, s'il s'ouvre tôt, le trouve déjà en écoute.
+        try { ServeurAtelier.Demarrer(); }
+        catch (Exception ex) { UiLog.Failure("démarrage de l'Atelier", ex); }
+
         try
         {
             // Before the tools, because a screen left cleared by a session that died is the first
@@ -498,6 +505,11 @@ UiLog.Info("tool services started");
         // Cet appel est le filet : l'environnement peut se fermer sans que cette fenetre ait
         // jamais ete ouverte, ou pendant qu'elle l'est encore.
         ServeursMcp.Arreter();
+
+        // L'Atelier, lui, vit avec l'environnement, pas avec la fenetre de l'Assistant.
+        // On l'arrete ici pour qu'il ne survive pas a un taskkill /F. Le filet de JobEnfants
+        // reste en dessous (KILL_ON_JOB_CLOSE).
+        ServeurAtelier.Arreter();
         base.OnExit(e);    }
 
     /// <summary>Le bus d'evenements, partage par tous les observateurs et l'Assistant.</summary>

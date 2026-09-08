@@ -16,13 +16,20 @@ public static class Program
         Console.Error.WriteLine($"[atelier] racine: {racine}");
 
         var port = 8770;
+        var noWindow = false;
         foreach (var a in args)
         {
             if (a.StartsWith("--port=", StringComparison.OrdinalIgnoreCase))
                 int.TryParse(a[7..], out port);
+            else if (string.Equals(a, "--no-window", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(a, "--headless",  StringComparison.OrdinalIgnoreCase))
+                noWindow = true;
         }
+        Console.Error.WriteLine($"[atelier] mode: {(noWindow ? "headless" : "window")}, port: {port}");
 
-        // Demarrer le serveur HTTP en arriere-plan
+        // Demarrer le serveur HTTP en arriere-plan. Catalogue et langages
+        // sont initialises ici pour qu'un client HTTP puisse deja envoyer
+        // des verbes avant l'ouverture eventuelle de la fenetre.
         var serveur = new ServeurHttp(racine, port);
         var t = Task.Run(async () =>
         {
@@ -30,7 +37,13 @@ public static class Program
             catch (Exception ex) { Console.Error.WriteLine("[atelier] serveur: " + ex.Message); }
         });
 
-        // Lancer l'application WPF avec filet de diagnostic
+        // Lancer l'application WPF avec filet de diagnostic.
+        //
+        // Mode window  : comportement historique, la fenetre s'ouvre tout de suite.
+        // Mode headless : pas de fenetre initiale. Le Dispatcher WPF tourne quand
+        // meme, pour qu'on puisse creer la fenetre a la demande via le verbe HTTP
+        // /atelier/fenetre/ouvrir. L'app reste en vie jusqu'a Shutdown explicite
+        // (cf. App.ShutdownMode) ou jusqu'a ce que le JobEnfants tue le processus.
         var app = new App();
         var logPath = Path.Combine(racine, "_startup_error.log");
         try
@@ -38,10 +51,20 @@ public static class Program
             app.InitializeComponent();
             app.Serveur = serveur;
             app.Racine = racine;
-            var window = new FenetreAtelier(racine, serveur);
-            var exit = app.Run(window);
+            app.NoWindow = noWindow;
+
+            int code;
+            if (noWindow)
+            {
+                code = app.Run();
+            }
+            else
+            {
+                var window = new FenetreAtelier(racine, serveur);
+                code = app.Run(window);
+            }
             serveur.Arreter();
-            return exit;
+            return code;
         }
         catch (Exception ex)
         {
