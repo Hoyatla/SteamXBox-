@@ -78,7 +78,7 @@ public partial class FenetreAtelier : Window
         _grapheActif = g;
         CanvasCtl.ChargerGraphe(g);
         InspecteurCtl.Vider();
-        CanvasVide.Visibility = g is null ? Visibility.Visible : Visibility.Collapsed;
+        PanelVide.Visibility = g is null ? Visibility.Visible : Visibility.Collapsed;
         RafraichirBoutonsEspace();
         MajBoutonsUndo();
     }
@@ -89,6 +89,100 @@ public partial class FenetreAtelier : Window
         BtnCodage.Style = (Style)(esp == Espace.Codage ? FindResource("BoutonAccent") : (Style)Application.Current.Resources[typeof(Button)]);
         BtnMultimedia.Style = (Style)(esp == Espace.Multimedia ? FindResource("BoutonAccent") : (Style)Application.Current.Resources[typeof(Button)]);
         PaletteCtl.AppliquerEspace(esp);
+    }
+
+    /// <summary>
+    /// Affiche un menu contextuel avec la liste des exemples charges depuis
+    /// Outils/Atelier/Exemples/index.json (via le verbe HTTP /atelier/exemples/lister).
+    /// Un clic sur un exemple appelle /atelier/exemples/charger et ouvre le
+    /// nouveau graphe comme onglet.
+    /// </summary>
+    private void BtnChargerExemple_Click(object sender, RoutedEventArgs e)
+    {
+        if (_serveur is null) return;
+        try
+        {
+            // Interroge le serveur HTTP pour la liste des exemples. Pas
+            // d'equivalent local : la verite est sur disque, dans l'index.
+            System.Text.Json.Nodes.JsonObject? obj = null;
+            var resp = _serveur.AppelerVerbeSync("exemples/lister", null, null);
+            if (resp is System.Text.Json.Nodes.JsonObject o1) obj = o1;
+            if (obj is null || obj["ok"]?.GetValue<bool>() != true)
+            {
+                var err = obj?["error"]?.GetValue<string>() ?? "inconnu";
+                MessageBox.Show("Impossible de lister les exemples : " + err,
+                    "Atelier", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var exemples = obj["data"]?["exemples"] as System.Text.Json.Nodes.JsonArray;
+            if (exemples is null || exemples.Count == 0)
+            {
+                MessageBox.Show("Aucun exemple trouve dans Outils/Atelier/Exemples/.",
+                    "Atelier", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var menu = new ContextMenu();
+            foreach (var item in exemples)
+            {
+                if (item is not System.Text.Json.Nodes.JsonObject jo) continue;
+                var id = jo["id"]?.GetValue<string>() ?? "";
+                var titre = jo["titre"]?.GetValue<string>() ?? id;
+                var desc = jo["description"]?.GetValue<string>() ?? "";
+                var mi = new MenuItem
+                {
+                    Header = titre,
+                    ToolTip = desc,
+                    Tag = id,
+                };
+                mi.Click += ChargerExempleMenuItem_Click;
+                menu.Items.Add(mi);
+            }
+            menu.PlacementTarget = sender as UIElement;
+            menu.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erreur chargement exemples : " + ex.Message,
+                "Atelier", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ChargerExempleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not string exempleId) return;
+        if (_serveur is null) return;
+        try
+        {
+            var body = new System.Text.Json.Nodes.JsonObject
+            {
+                ["exemple_id"] = exempleId,
+            };
+            System.Text.Json.Nodes.JsonObject? obj = null;
+            var resp = _serveur.AppelerVerbeSync("exemples/charger", body, null);
+            if (resp is System.Text.Json.Nodes.JsonObject o2) obj = o2;
+            if (obj is null || obj["ok"]?.GetValue<bool>() != true)
+            {
+                var err = obj?["error"]?.GetValue<string>() ?? "inconnu";
+                MessageBox.Show("Impossible de charger l'exemple : " + err,
+                    "Atelier", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            // Rafraichit la liste d'onglets et selectionne le nouveau graphe.
+            RafraichirOnglets();
+            var gid = obj["data"]?["graphe_id"]?.GetValue<string>();
+            if (gid is not null)
+            {
+                var t = _onglets.FirstOrDefault(o => o.Id == gid);
+                if (t is not null) SelectionnerGraphe(t.Graphe);
+            }
+            StatutBas.Text = "Exemple charge.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erreur : " + ex.Message,
+                "Atelier", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void BtnCodage_Click(object sender, RoutedEventArgs e) => ChangerEspace(Espace.Codage);

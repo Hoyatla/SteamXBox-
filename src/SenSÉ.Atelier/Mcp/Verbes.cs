@@ -66,6 +66,8 @@ public sealed class Verbes
                 "etat"                     => ExecutionEtat(query),
                 "fenetre/ouvrir"           => FenetreOuvrir(),
                 "fenetre/etat"             => FenetreEtat(),
+                "exemples/lister"           => ExemplesLister(),
+                "exemples/charger"          => ExemplesCharger(body!),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
         }
@@ -594,5 +596,84 @@ public sealed class Verbes
             }};
         }
         return new { ok = true, data = new { headless = false, fenetre_visible = false } };
+    }
+
+    // =============== EXEMPLES ===============
+
+    /// <summary>
+    /// Liste les exemples de graphes prets a l'emploi, charges depuis
+    /// <c>Outils/Atelier/Exemples/index.json</c>. Chaque exemple est un
+    /// fichier JSON qui suit le meme format qu'un graphe sauvegarde.
+    /// </summary>
+    private object ExemplesLister()
+    {
+        var dossier = System.IO.Path.Combine(_persistance.Racine, "Exemples");
+        var indexPath = System.IO.Path.Combine(dossier, "index.json");
+        if (!System.IO.File.Exists(indexPath))
+            return new { ok = false, error = "index.json absent dans " + dossier };
+        try
+        {
+            var json = System.IO.File.ReadAllText(indexPath);
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
+            if (node is null) return new { ok = false, error = "index.json vide ou invalide" };
+            return new { ok = true, data = node };
+        }
+        catch (Exception ex) { return new { ok = false, error = ex.Message }; }
+    }
+
+    /// <summary>
+    /// Charge un exemple par son id, cree un nouveau graphe avec un id frais,
+    /// le sauvegarde sur disque, et retourne son id. Cote UI, l'exemple
+    /// apparait comme un onglet pret a executer.
+    /// </summary>
+    private object ExemplesCharger(System.Text.Json.Nodes.JsonObject body)
+    {
+        var exempleId = body["exemple_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(exempleId))
+            return new { ok = false, error = "exemple_id manquant" };
+
+        var dossier = System.IO.Path.Combine(_persistance.Racine, "Exemples");
+        var indexPath = System.IO.Path.Combine(dossier, "index.json");
+        if (!System.IO.File.Exists(indexPath))
+            return new { ok = false, error = "index.json absent dans " + dossier };
+
+        try
+        {
+            var indexNode = System.Text.Json.Nodes.JsonNode.Parse(
+                System.IO.File.ReadAllText(indexPath))?.AsObject();
+            var exemples = indexNode?["exemples"] as System.Text.Json.Nodes.JsonArray;
+            if (exemples is null) return new { ok = false, error = "index.exemples invalide" };
+
+            string? fichier = null;
+            string? nomAffiche = null;
+            string espace = "codage";
+            foreach (var item in exemples)
+            {
+                if (item is not System.Text.Json.Nodes.JsonObject jo) continue;
+                if (jo["id"]?.GetValue<string>() == exempleId)
+                {
+                    fichier = jo["fichier"]?.GetValue<string>();
+                    nomAffiche = jo["titre"]?.GetValue<string>();
+                    if (jo["espace"]?.GetValue<string>() is { } esp) espace = esp;
+                    break;
+                }
+            }
+            if (fichier is null)
+                return new { ok = false, error = "exemple inconnu: " + exempleId };
+
+            var chemin = System.IO.Path.Combine(dossier, fichier);
+            if (!System.IO.File.Exists(chemin))
+                return new { ok = false, error = "fichier exemple introuvable: " + fichier };
+
+            // Charge, force un nouvel id, sauvegarde comme nouveau graphe.
+            var nouveau = _persistance.ImporterGraphe(chemin);
+            if (nouveau is null)
+                return new { ok = false, error = "importation du fichier exemple a echoue" };
+            // Re-applique le titre affiche (le fichier peut avoir un autre nom).
+            if (nomAffiche is not null) nouveau.Nom = nomAffiche;
+            _persistance.SauvegarderGraphe(nouveau);
+            return new { ok = true, data = new { graphe_id = nouveau.Id, nom = nouveau.Nom, espace = nouveau.Espace.Id() } };
+        }
+        catch (Exception ex) { return new { ok = false, error = ex.Message }; }
     }
 }

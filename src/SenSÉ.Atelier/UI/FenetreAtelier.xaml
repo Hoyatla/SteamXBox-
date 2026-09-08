@@ -94,10 +94,25 @@
             <local:Palette x:Name="PaletteCtl" Grid.Column="0" NoeudChoisi="Palette_NoeudChoisi" />
             <Grid Grid.Column="1">
                 <local:CanvasAtelier x:Name="CanvasCtl" SelectionNoeud="CanvasCtl_SelectionNoeud" NoeudDeplace="CanvasCtl_NoeudDeplace" GrapheModifie="CanvasCtl_GrapheModifie" />
-                <TextBlock x:Name="CanvasVide" Text="Aucun graphe. Cliquez sur + pour en créer un."
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Foreground="{StaticResource TexteSecondaireBrush}" FontSize="16"
-                           IsHitTestVisible="False" />
+
+                <!-- Etat vide : pas de graphe. Propose les exemples + la creation. -->
+                <Border x:Name="PanelVide" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{StaticResource FondPanneauBrush}" BorderBrush="{StaticResource BordureBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="32,24" IsHitTestVisible="False">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Aucun graphe" FontSize="20" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TexteBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Charge un exemple pour decouvrir l'Atelier, ou cree un graphe vide."
+                                   FontSize="12" Margin="0,8,0,20" MaxWidth="380" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TexteSecondaireBrush}" HorizontalAlignment="Center" TextAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button x:Name="BtnChargerExemple" Content="Charger un exemple" Padding="14,8"
+                                    Click="BtnChargerExemple_Click" Margin="0,0,12,0" />
+                            <Button x:Name="BtnCreerGrapheVide" Content="Nouveau graphe" Padding="14,8"
+                                    Click="BtnNouveauGraphe_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </Grid>
             <local:Inspecteur x:Name="InspecteurCtl" Grid.Column="2" />
         </Grid>

@@ -57,6 +57,35 @@ public sealed class ServeurHttp
         try { _listener.Close(); } catch { }
     }
 
+    /// <summary>
+    /// Appelle synchrone en interne : permet a l'UI WPF (meme processus) de
+    /// declencher un verbe HTTP sans passer par un socket. Utile pour les
+    /// actions qui n'ont pas de sens en dehors du processus courant
+    /// (exemples : l'UI a besoin de lister les exemples mais eviterait de
+    /// se rappeler a elle-meme via 127.0.0.1:8770, ce qui ajoute des retries,
+    /// un timeout, et un aller-retour inutile).
+    /// </summary>
+    public JsonObject? AppelerVerbeSync(string verbe, JsonObject? body, IReadOnlyDictionary<string, string>? query)
+    {
+        try
+        {
+            var data = _verbes.Appeler(verbe, body, query ?? new Dictionary<string, string>());
+            if (data is JsonObject jo) return jo;
+            if (data is null) return null;
+            // Cas rare : un verbe qui rend autre chose qu'un JsonObject (aujourd'hui
+            // tous les verbes rendent {ok, data} ou {ok:false, error}). On emballe.
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["data"] = JsonSerializer.SerializeToNode(data),
+            };
+        }
+        catch (Exception ex)
+        {
+            return new JsonObject { ["ok"] = false, ["error"] = ex.Message };
+        }
+    }
+
     private async Task TraiterAsync(HttpListenerContext ctx)
     {
         try
