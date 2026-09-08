@@ -120,6 +120,10 @@ public sealed class Verbes
         description_longue = d.DescriptionAffichage,
         espace = d.Espace.Id(),
         categorie = d.Categorie,
+        // Duree estimee : categorie + texte vulgarise pour le tooltip UI.
+        // Sert a l'indicateur visuel (point colore) et au DTO HTTP.
+        duree_estimee = d.DureeEstimeeEffective.ToString(),
+        duree_vulgarisee = SenSÉ.Atelier.Bibliotheque.Vulgarisation.DureeTexte(d.DureeEstimeeEffective),
         ports_entree = d.PortsEntree.Select(p => new { nom = p.Nom, type = p.Type.ToString() }),
         ports_sortie = d.PortsSortie.Select(p => new { nom = p.Nom, type = p.Type.ToString() }),
         params_ = d.Params.Select(p => new {

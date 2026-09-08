@@ -40,6 +40,7 @@
             Padding="0" SnapsToDevicePixels="True"
             GotFocus="Bord_GotFocus" LostFocus="Bord_LostFocus"
             KeyDown="Bord_KeyDown">
+        <Grid>
         <StackPanel>
             <!-- En-tete -->
             <Border x:Name="Entete" Background="#34344A" CornerRadius="6,6,0,0"
@@ -95,5 +96,13 @@
                 <TextBlock x:Name="TexteErreur" Foreground="#FFB4B4" FontSize="10" TextWrapping="Wrap" />
             </Border>
         </StackPanel>
+        <!-- Indicateur de duree estimee : petit cercle 10x10 en haut a droite.
+             Couleur mise a jour par le code-behind selon DefinitionNoeud.DureeEstimeeEffective.
+             Tooltip = "Duree estimee : ~X (categorie)" pour donner du contexte. -->
+        <Ellipse x:Name="IndicateurDuree" Width="10" Height="10"
+                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                 Margin="0,4,4,0" Fill="#10B981"
+                 ToolTip="Duree estimee" />
+        </Grid>
     </Border>
 </UserControl>

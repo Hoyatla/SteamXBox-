@@ -27,6 +27,9 @@ namespace SenSÉ.Atelier.Bibliotheque;
 /// et sur le noeud. Vide/null = fallback sur <c>Nom</c>.</param>
 /// <param name="DescriptionLongue">Explication longue, 1-2 phrases, affichee en tooltip
 /// au survol. Vide/null = fallback sur <c>Description</c>.</param>
+/// <param name="DureeEstimee">Categorie de duree typique du noeud (Rapide/Moyen/Long).
+/// Null = consulte <see cref="DureeNoeuds"/> qui fait le mapping centralise par id,
+/// avec fallback Rapide.</param>
 public sealed record DefinitionNoeud(
     string Id,
     string Nom,
@@ -39,7 +42,8 @@ public sealed record DefinitionNoeud(
     Func<ContexteExecution, Task<ResultatExecution>> Executeur,
     string? ModeleId = null,
     string? NomVulgarise = null,
-    string? DescriptionLongue = null
+    string? DescriptionLongue = null,
+    CategorieDuree? DureeEstimee = null
 )
 {
     /// <summary>Label principal affiche a l'utilisateur. Chaine de fallback :
@@ -67,7 +71,29 @@ public sealed record DefinitionNoeud(
             return Description;
         }
     }
+    /// <summary>Duree estimee effective : champ explicite, sinon mapping centralise
+    /// <see cref="DureeNoeuds"/>, sinon Rapide par defaut. Sert pour l'indicateur
+    /// visuel (couleur du point en haut a droite du noeud) et pour le DTO HTTP.</summary>
+    public CategorieDuree DureeEstimeeEffective => DureeEstimee ?? DureeNoeuds.Lookup(Id) ?? CategorieDuree.Rapide;
 };
+
+/// <summary>
+/// Categorie de duree typique d'un noeud. Sert a l'indicateur visuel et au DTO.
+/// </summary>
+/// <remarks>
+/// Les fourchettes (cf. mapping dans <see cref="DureeNoeuds"/>) sont des ordres
+/// de grandeur, pas des promesses : un noeud <c>Rapide</c> peut prendre 2s sur un
+/// reseau lent, un <c>Long</c> peut finir en 20s si le modele est chaud.
+/// </remarks>
+public enum CategorieDuree
+{
+    /// <summary>Moins d'une seconde : primitives, lecture/écriture fichier, eval JS.</summary>
+    Rapide,
+    /// <summary>1 a 30 secondes : modeles locaux, screenshots, descriptions d'images.</summary>
+    Moyen,
+    /// <summary>Plus de 30 secondes : generation d'image, video, audio long.</summary>
+    Long,
+}
 
 /// <summary>
 /// Description d'un champ de parametre editable dans l'inspecteur.

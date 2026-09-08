@@ -348,4 +348,18 @@ public static class Vulgarisation
             "Modele",
             "L'identifiant du modele a utiliser."),
     };
+
+    /// <summary>
+    /// Texte court affichant la categorie de duree estimee (utilise pour
+    /// le tooltip de l'indicateur visuel). Le <c>~X</c> est un ordre de
+    /// grandeur, pas une promesse -- voir les commentaires de
+    /// <see cref="DureeNoeuds"/> pour le pourquoi.
+    /// </summary>
+    public static string DureeTexte(CategorieDuree d) => d switch
+    {
+        CategorieDuree.Rapide => "Rapide (~1s)",
+        CategorieDuree.Moyen  => "Moyen (~10s)",
+        CategorieDuree.Long   => "Long (~1min)",
+        _ => "Inconnu"
+    };
 }

@@ -133,6 +133,24 @@ public partial class VueNoeud : UserControl
         Titre.Text = def?.NomAffichage ?? n.Type;
         // Label technique : l'id pour les devs qui debugent.
         SousTitre.Text = n.Type;
+        // Indicateur de duree : point colore en haut a droite du noeud.
+        // Couleur + tooltip derives de DefinitionNoeud.DureeEstimeeEffective
+        // (champ explicite ou mapping DureeNoeuds, fallback Rapide).
+        if (def is not null)
+        {
+            var d = def.DureeEstimeeEffective;
+            if (IndicateurDuree is not null)
+            {
+                IndicateurDuree.Fill = new System.Windows.Media.SolidColorBrush(d switch
+                {
+                    SenSÉ.Atelier.Bibliotheque.CategorieDuree.Rapide => System.Windows.Media.Color.FromRgb(0x10, 0xB9, 0x81),
+                    SenSÉ.Atelier.Bibliotheque.CategorieDuree.Moyen  => System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B),
+                    SenSÉ.Atelier.Bibliotheque.CategorieDuree.Long   => System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26),
+                    _ => System.Windows.Media.Color.FromRgb(0x80, 0x80, 0x80),
+                });
+                IndicateurDuree.ToolTip = "Duree estimee : " + SenSÉ.Atelier.Bibliotheque.Vulgarisation.DureeTexte(d);
+            }
+        }
         ListeEntrees.ItemsSource = n.PortsEntree;
         ListeSorties.ItemsSource = n.PortsSortie;
         Canvas.SetLeft(this, n.X);
