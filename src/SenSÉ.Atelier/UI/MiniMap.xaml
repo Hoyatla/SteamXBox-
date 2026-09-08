@@ -1,0 +1,11 @@
+<UserControl x:Class="SenSÉ.Atelier.UI.MiniMap"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="root" Width="200" Height="150">
+    <Border Background="#1A1A26" BorderBrush="{StaticResource BordureBrush}" BorderThickness="1" CornerRadius="2">
+        <Grid>
+            <Canvas x:Name="MapSurface" Background="Transparent" />
+            <Border x:Name="ViewportRect" BorderBrush="#FFD600" BorderThickness="1.5" Background="#33FFD600" IsHitTestVisible="False" />
+        </Grid>
+    </Border>
+</UserControl>

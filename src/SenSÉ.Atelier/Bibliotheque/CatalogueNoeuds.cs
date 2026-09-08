@@ -52,6 +52,8 @@ public static class CatalogueNoeuds
         Bibliotheque.Codage.Memoire.Enregistrer();
         Bibliotheque.Codage.Boucles.Enregistrer();
         Bibliotheque.Codage.Controle.Enregistrer();
+        Bibliotheque.Codage.LayoutRanger.Enregistrer();
+        Bibliotheque.Codage.Version.Enregistrer();
         Bibliotheque.Codage.SousGraphe.Enregistrer();
         Bibliotheque.Codage.Math.Enregistrer();
         Bibliotheque.Codage.TexteAlgo.Enregistrer();

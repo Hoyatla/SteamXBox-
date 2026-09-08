@@ -49,6 +49,9 @@ public partial class FenetreAtelier : Window
         CatalogueCustom.Recharger(racine);
         if (Application.Current is App app) app.EspaceCourant = Espace.Codage;
         RafraichirOnglets();
+        // Phase 3.3 : wire MiniMap
+        CanvasCtl.ZoomChanged += z => ZoomLabel.Text = "Zoom: " + (int)(z * 100) + "%";
+        MettreAJourMiniMap();
         SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
         PreviewKeyDown += Fenetre_PreviewKeyDown;
         ExecuterCmd = new RelayCommand(_ => ExecuterGraphe(), _ => _grapheActif is not null);
@@ -84,7 +87,7 @@ public partial class FenetreAtelier : Window
     private void SelectionnerGraphe(Graphe? g)
     {
         _grapheActif = g;
-        CanvasCtl.ChargerGraphe(g);
+        CanvasCtl.ChargerGraphe(g); MettreAJourMiniMap();
         InspecteurCtl.Vider();
         PanelVide.Visibility = g is null ? Visibility.Visible : Visibility.Collapsed;
         RafraichirBoutonsEspace();
@@ -788,6 +791,12 @@ private void OngletFermer_Click(object sender, MouseButtonEventArgs e)
         var sb = new System.Text.StringBuilder(s.Length);
         foreach (var c in s) sb.Append(System.Array.IndexOf(invalides, c) >= 0 ? '_' : c);
         return sb.ToString();
+    }
+
+    private void MettreAJourMiniMap()
+    {
+        if (CanvasCtl is null || MiniMapCtl is null) return;
+        MiniMapCtl.MettreAJour(_grapheActif, CanvasCtl.GetViewportRect());
     }
 
     private class TabGraphe : INotifyPropertyChanged

@@ -106,6 +106,8 @@
                                 Margin="0,8,8,0" Width="Auto" Visibility="Collapsed" />
 
                 <!-- Etat vide : pas de graphe. Propose les exemples + la creation. -->
+                <local:MiniMap x:Name="MiniMapCtl" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,8" />
+                <TextBlock x:Name="ZoomLabel" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,220,10" Foreground="{StaticResource TexteSecondaireBrush}" FontSize="10" Text="Zoom: 100%" />
                 <Border x:Name="PanelVide" HorizontalAlignment="Center" VerticalAlignment="Center"
                         Background="{StaticResource FondPanneauBrush}" BorderBrush="{StaticResource BordureBrush}"
                         BorderThickness="1" CornerRadius="8" Padding="32,24" IsHitTestVisible="False">

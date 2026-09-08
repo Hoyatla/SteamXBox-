@@ -166,5 +166,11 @@ public static class DureeNoeuds
         ["planificateur_ajouter"] = CategorieDuree.Rapide,
         ["sous_graphe_appel"] = CategorieDuree.Moyen,
     
-    };
+    
+
+        // ----- Phase 3 -----
+        ["version_creer"] = CategorieDuree.Rapide,
+        ["version_lister"] = CategorieDuree.Rapide,
+        ["version_restaurer"] = CategorieDuree.Rapide,
+        ["layout_ranger"] = CategorieDuree.Rapide,};
 }

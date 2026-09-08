@@ -6,7 +6,7 @@
              ClipToBounds="True">
     <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <Grid>
-            <Canvas x:Name="Surface" Width="4000" Height="3000" Background="Transparent"
+            <Canvas x:Name="Surface" Width="4000" Height="3000" RenderTransformOrigin="0,0" Background="Transparent"
                     AllowDrop="True" Focusable="True"
                     DragEnter="Surface_DragEnterOrOver"
                     DragOver="Surface_DragEnterOrOver"

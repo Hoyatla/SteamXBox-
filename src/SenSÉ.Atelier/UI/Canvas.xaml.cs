@@ -15,6 +15,9 @@ public partial class CanvasAtelier : UserControl
 {
     /// <summary>Acces au Canvas interne (x:Name=Surface) pour RenderTargetBitmap.</summary>
     public Canvas? SurfaceCtl => Surface;
+
+    private readonly System.Windows.Controls.Border _groupesContainer = new() { IsHitTestVisible = false };
+    private readonly System.Windows.Controls.TextBlock _commentairesContainer = new() { IsHitTestVisible = false, TextWrapping = TextWrapping.Wrap };
     public const string DragFormatPort = "Atelier.PortRef";
 
     private Graphe? _graphe;
@@ -40,10 +43,69 @@ public partial class CanvasAtelier : UserControl
         _graphe = g;
         _vuesNoeuds.Clear();
         Surface.Children.Clear();
+        _groupesContainer.Child = null;
+        _commentairesContainer.Inlines.Clear();
         _selection.Clear();
         if (g is null) return;
         foreach (var n in g.Noeuds) AjouterVueNoeud(n);
         foreach (var l in g.Liens) AjouterLien(l);
+        // Phase 3.5 : rendre les groupes
+        if (g.Groupes is not null && g.Groupes.Count > 0)
+        {
+            var panel = new System.Windows.Controls.Canvas();
+            foreach (var grp in g.Groupes)
+            {
+                if (grp.NoeudIds.Count == 0) continue;
+                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                foreach (var nid in grp.NoeudIds)
+                {
+                    var n = g.Noeuds.FirstOrDefault(x => x.Id == nid);
+                    if (n is null) continue;
+                    if (n.X < minX) minX = n.X; if (n.Y < minY) minY = n.Y;
+                    if (n.X + 140 > maxX) maxX = n.X + 140; if (n.Y + 90 > maxY) maxY = n.Y + 90;
+                }
+                if (minX > maxX) continue;
+                var brush = grp.Couleur switch
+                {
+                    "red" => System.Windows.Media.Brushes.Red,
+                    "orange" => System.Windows.Media.Brushes.Orange,
+                    "yellow" => System.Windows.Media.Brushes.Goldenrod,
+                    "green" => System.Windows.Media.Brushes.LimeGreen,
+                    _ => System.Windows.Media.Brushes.DodgerBlue,
+                };
+                var bord = new System.Windows.Controls.Border
+                {
+                    BorderBrush = brush, BorderThickness = new System.Windows.Thickness(2),
+                    CornerRadius = new System.Windows.CornerRadius(8),
+                    Width = maxX - minX + 16, Height = maxY - minY + 16,
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, brush.Color.R, brush.Color.G, brush.Color.B)),
+                };
+                System.Windows.Controls.Canvas.SetLeft(bord, minX - 8);
+                System.Windows.Controls.Canvas.SetTop(bord, minY - 8);
+                panel.Children.Add(bord);
+            }
+            System.Windows.Controls.Canvas.SetLeft(panel, 0);
+            System.Windows.Controls.Canvas.SetTop(panel, 0);
+            Surface.Children.Insert(0, panel);
+        }
+        // Phase 3.6 : rendre les commentaires
+        if (g.Commentaires is not null && g.Commentaires.Count > 0)
+        {
+            foreach (var c in g.Commentaires)
+            {
+                var tb = new System.Windows.Controls.TextBlock
+                {
+                    Text = c.Texte,
+                    FontSize = c.Taille,
+                    Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(c.Couleur) is var col ? col : System.Windows.Media.Colors.Yellow),
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0, 0, 0)),
+                    Padding = new System.Windows.Thickness(6, 3, 6, 3),
+                };
+                System.Windows.Controls.Canvas.SetLeft(tb, c.X);
+                System.Windows.Controls.Canvas.SetTop(tb, c.Y);
+                Surface.Children.Add(tb);
+            }
+        }
     }
 
     public void Selectionner(Noeud? n, bool ajouter = false)
@@ -546,6 +608,40 @@ public partial class CanvasAtelier : UserControl
             if (x + w > maxX) maxX = x + w; if (y + h > maxY) maxY = y + h;
         }
         return new Rect(minX, minY, Math.Max(1, maxX - minX), Math.Max(1, maxY - minY));
+    }
+
+
+    private double _zoom = 1.0;
+    public double Zoom
+    {
+        get => _zoom;
+        set
+        {
+            _zoom = System.Math.Clamp(value, 0.25, 4.0);
+            if (Surface is not null) Surface.RenderTransform = new System.Windows.Media.ScaleTransform(_zoom, _zoom);
+            ZoomChanged?.Invoke(_zoom);
+        }
+    }
+    public event System.Action<double>? ZoomChanged;
+    public System.Windows.Rect GetViewportRect()
+    {
+        if (Scroller is null) return new System.Windows.Rect(0, 0, ActualWidth, ActualHeight);
+        return new System.Windows.Rect(Scroller.HorizontalOffset, Scroller.VerticalOffset, ActualWidth, ActualHeight);
+    }
+    private void CanvasAtelier_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.Control) return;
+        var facteur = e.Delta > 0 ? 1.15 : 1.0 / 1.15;
+        Zoom = Zoom * facteur;
+        e.Handled = true;
+    }
+    private void CanvasAtelier_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.D0 && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            Zoom = 1.0;
+            e.Handled = true;
+        }
     }
 
 }

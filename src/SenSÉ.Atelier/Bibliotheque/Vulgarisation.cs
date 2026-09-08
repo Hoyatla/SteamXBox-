@@ -294,7 +294,13 @@ public static class Vulgarisation
         ["boucle_foreach"] = ("Pour chaque element", "Pour chaque element d'une liste JSON. element = [...], index = [0..N-1]."),
         ["controle_si"] = ("Executer si...", "Si la condition matche, propage l'entree. Sinon skip les noeuds en aval."),
         ["planificateur_ajouter"] = ("Planifier ce graphe", "Ajoute ce graphe au planificateur avec une expression cron (5 champs)."),
-        ["sous_graphe_appel"] = ("Appeler un graphe", "Execute un autre graphe comme sous-programme. Sortie : JSON des sorties terminales."),};
+        ["sous_graphe_appel"] = ("Appeler un graphe", "Execute un autre graphe comme sous-programme. Sortie : JSON des sorties terminales."),
+
+        // ----- Phase 3 -----
+        ["version_creer"] = ("Sauvegarder une version", "Cree un snapshot git-like du graphe dans Outils/Atelier/Versionning/."),
+        ["version_lister"] = ("Versions precedentes", "Liste les versions du graphe (sortie JSON array)."),
+        ["version_restaurer"] = ("Restaurer une version", "Restaure le graphe depuis un snapshot precedent. Ecrase le fichier actuel."),
+        ["layout_ranger"] = ("Ranger le graphe", "Range les noeuds en grille (BFS, 250px entre rangees, 200px entre noeuds)."),};
 
     // ============== PARAMETRES ==============
 

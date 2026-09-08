@@ -65,6 +65,17 @@ public sealed class Verbes
                 "planificateur/ajouter"     => PlanificateurAjouter(body!),
                 "planificateur/lister"      => PlanificateurLister(),
                 "planificateur/retirer"     => PlanificateurRetirer(body!),
+                "versionning/creer"         => VersionningCreer(body!),
+                "versionning/lister"        => VersionningLister(body!),
+                "versionning/restaurer"     => VersionningRestaurer(body!),
+                "versionning/comparer"      => VersionningComparer(body!),
+                "layout/auto"               => LayoutAuto(body!),
+                "groupe/creer"               => GroupeCreer(body!),
+                "groupe/lister"              => GroupeLister(body!),
+                "groupe/supprimer"           => GroupeSupprimer(body!),
+                "commentaire/creer"          => CommentaireCreer(body!),
+                "commentaire/lister"         => CommentaireLister(body!),
+                "commentaire/supprimer"      => CommentaireSupprimer(body!),
                 "langages"                => LangagesLister(),
                 "etat"                     => ExecutionEtat(query),
                 "fenetre/ouvrir"           => FenetreOuvrir(),
@@ -779,6 +790,139 @@ public sealed class Verbes
         if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
         var ok = SenSÉ.Atelier.Planificateur.Planificateur.Instance.Retirer(gid);
         return new { ok, data = new { graphe_id = gid } };
+    }
+
+    // =============== VERSIONNING ===============
+
+    private object VersionningCreer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var msg = body["message"]?.GetValue<string>() ?? "Auto-save";
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var v = new SenSÉ.Atelier.Versionning.Versionneur(Racine, _persistance);
+        var vid = v.Versionner(gid, msg);
+        return new { ok = true, data = new { version_id = vid } };
+    }
+
+    private object VersionningLister(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var v = new SenSÉ.Atelier.Versionning.Versionneur(Racine, _persistance);
+        var list = v.Lister(gid);
+        return new { ok = true, data = new { versions = list.Select(x => new { version_id = x.VersionId, message = x.Message, created_at = x.CreatedAt.ToString("o"), nb_noeuds = x.NbNoeuds, nb_liens = x.NbLiens }).ToList() } };
+    }
+
+    private object VersionningRestaurer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var vid = body["version_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid) || string.IsNullOrEmpty(vid)) return new { ok = false, error = "graphe_id et version_id requis" };
+        var v = new SenSÉ.Atelier.Versionning.Versionneur(Racine, _persistance);
+        if (!v.Restaurer(gid, vid, out var err)) return new { ok = false, error = err };
+        return new { ok = true, data = new { version_id = vid } };
+    }
+
+    private object VersionningComparer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var va = body["version_a"]?.GetValue<string>();
+        var vb = body["version_b"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid) || string.IsNullOrEmpty(va) || string.IsNullOrEmpty(vb)) return new { ok = false, error = "graphe_id, version_a, version_b requis" };
+        var v = new SenSÉ.Atelier.Versionning.Versionneur(Racine, _persistance);
+        return v.Comparer(gid, va, vb);
+    }
+
+    private object LayoutAuto(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var sens = body["sens"]?.GetValue<string>() ?? "horizontal";
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable : " + gid };
+        var s2 = sens == "vertical" ? SenSÉ.Atelier.CanvasLayout.AutoLayout.Sens.Vertical : SenSÉ.Atelier.CanvasLayout.AutoLayout.Sens.Horizontal;
+        var nb = SenSÉ.Atelier.CanvasLayout.AutoLayout.Appliquer(g, s2);
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { nb_deplaces = nb, sens } };
+    }
+
+    // =============== GROUPES ===============
+
+    private object GroupeCreer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var couleur = body["couleur"]?.GetValue<string>() ?? "blue";
+        var label = body["label"]?.GetValue<string>();
+        var ids = body["noeud_ids"] as JsonArray;
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        if (ids is null || ids.Count == 0) return new { ok = false, error = "noeud_ids manquant ou vide" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        var grp = new SenSÉ.Atelier.Modele.Groupe { Couleur = couleur, Label = label };
+        foreach (var n in ids) if (n is JsonValue jv) grp.NoeudIds.Add(jv.GetValue<string>() ?? "");
+        g.Groupes.Add(grp);
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { groupe_id = grp.Id } };
+    }
+
+    private object GroupeLister(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        return new { ok = true, data = new { groupes = g.Groupes.Select(x => new { id = x.Id, couleur = x.Couleur, label = x.Label, noeud_ids = x.NoeudIds }).ToList() } };
+    }
+
+    private object GroupeSupprimer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var gpid = body["groupe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid) || string.IsNullOrEmpty(gpid)) return new { ok = false, error = "graphe_id et groupe_id requis" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        var ok = g.Groupes.RemoveAll(x => x.Id == gpid) > 0;
+        if (ok) _persistance.SauvegarderGraphe(g);
+        return new { ok, data = new { groupe_id = gpid } };
+    }
+
+    // =============== COMMENTAIRES ===============
+
+    private object CommentaireCreer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var texte = body["texte"]?.GetValue<string>() ?? "Commentaire";
+        var x = body["x"]?.GetValue<double>() ?? 100;
+        var y = body["y"]?.GetValue<double>() ?? 100;
+        var taille = body["taille"]?.GetValue<int>() ?? 12;
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        var c = new SenSÉ.Atelier.Modele.Commentaire { Texte = texte, X = x, Y = y, Taille = taille };
+        g.Commentaires.Add(c);
+        _persistance.SauvegarderGraphe(g);
+        return new { ok = true, data = new { commentaire_id = c.Id } };
+    }
+
+    private object CommentaireLister(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid)) return new { ok = false, error = "graphe_id manquant" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        return new { ok = true, data = new { commentaires = g.Commentaires.Select(c => new { id = c.Id, texte = c.Texte, x = c.X, y = c.Y, taille = c.Taille, couleur = c.Couleur }).ToList() } };
+    }
+
+    private object CommentaireSupprimer(JsonObject body)
+    {
+        var gid = body["graphe_id"]?.GetValue<string>();
+        var cid = body["commentaire_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(gid) || string.IsNullOrEmpty(cid)) return new { ok = false, error = "graphe_id et commentaire_id requis" };
+        var g = _persistance.ChargerGraphe(gid);
+        if (g is null) return new { ok = false, error = "graphe introuvable" };
+        var ok = g.Commentaires.RemoveAll(c => c.Id == cid) > 0;
+        if (ok) _persistance.SauvegarderGraphe(g);
+        return new { ok, data = new { commentaire_id = cid } };
     }
 
 }
