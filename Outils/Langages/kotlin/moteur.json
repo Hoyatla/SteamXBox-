@@ -1,14 +1,14 @@
 {
   "id": "kotlin",
-  "nom": "Kotlin (kotlinc + JVM, scripts .kts)",
+  "nom": "Kotlin 2.0.21 (scripts .kts)",
   "espace": "Codage",
-  "rang": "demande",
-  "extensions": [".kt", ".kts"],
+  "rang": "embarque",
+  "extensions": [".kts"],
   "detection": "kotlinc/bin/kotlinc.bat -version",
   "executable": "kotlinc/bin/kotlinc.bat",
-  "commande": ["cmd", "/c", "{executable}", "-script", "{fichier}.kts"],
+  "commande": ["cmd", "/c", "call", "{executable}", "-script", "{fichier}"],
   "compile": false,
   "depends_on": ["java"],
   "latence_ms": 1200,
-  "taille_mo": 70
+  "taille_mo": 90
 }

@@ -6,25 +6,26 @@ namespace SenSÉ.Atelier.Langages;
 /// <summary>
 /// Référentiel de tous les langages connus du produit. Indépendant de la
 /// machine : <see cref="Detecteur"/> dit ce qui est installé là, le Catalogue
-/// dit ce qui pourrait être là. Sert à l'UI (liste à montrer) et à
-/// <see cref="Installateur"/> (où télécharger, combien pèse, comment poser).
+/// dit ce qui pourrait étre là. Sert à l'UI (liste à montrer).
 /// </summary>
 /// <remarks>
-/// Ce fichier n est pas un manifeste runtime : c est une table compilee dans
-/// le binaire, comme les autres tables de reference du produit. Les détails
-/// de téléchargement (URL, taille, méthode) sont decidés ici, pas dans
-/// moteur.json qui ne décrit qu'un moteur deja sur la machine.
+/// Depuis le commit "tout embarque", tous les langages (sauf rust, shell,
+/// swift) sont en TypeInstallation.Embarque : le produit les livre dans
+/// Outils/Langages/<id>/, et la détection vérifie que le binaire est là.
+/// rust reste en Detecte parce qu'il s'installe via rustup-init (hors
+/// produit). shell et swift restent en Detecte parce qu'ils sont soit
+/// livrés par Windows (powershell) soit rarement présents (swift).
 /// </remarks>
 public static class Catalogue
 {
     /// <summary>Type d'installation d'un langage.</summary>
     public enum TypeInstallation
     {
-        /// <summary>Livré avec le produit (Outils/Python/, Outils/Langages/node/...).</summary>
+        /// <summary>Livré avec le produit dans Outils/Langages/<id>/.</summary>
         Embarque,
-        /// <summary>Supposé présent sur la machine de l'utilisateur (PATH).</summary>
+        /// <summary>Plus utilisé : tous les langages courants sont embarqués. Conservé pour compatibilité.</summary>
         Demande,
-        /// <summary>Ni garanti ni livré : on regarde si ça existe.</summary>
+        /// <summary>Ni garanti ni livré : on regarde si ça existe (rust, shell, swift).</summary>
         Detecte,
     }
 
@@ -38,7 +39,7 @@ public static class Catalogue
         string CommandeInstallation,
         string Notes);
 
-    /// <summary>Table de tous les langages connus. L'ordre est indicatif (alphabétique par id).</summary>
+    /// <summary>Table de tous les langages connus.</summary>
     public static IReadOnlyList<Entree> Entrees { get; } = new Entree[]
     {
         new("python", "Python 3.11", TypeInstallation.Embarque,
@@ -51,40 +52,45 @@ public static class Catalogue
             "deja_present",
             "Copié dans Outils/Langages/node/ à l'installation. Toujours présent."),
 
-        new("java", "Java 17 LTS (single-file source)", TypeInstallation.Demande,
-            "https://download.oracle.com/java/17/latest/jdk-17_windows-x64_bin.zip", 60,
-            "extraire_zip",
-            "JDK 17 ou plus récent. single-file source-code (java fichier.java) évite l'étape javac."),
+        new("java", "Java 17 LTS (jlink image)", TypeInstallation.Embarque,
+            "", 25,
+            "deja_present",
+            "Image jlink minimale dans Outils/Langages/java/ (java.base + java.logging)."),
 
-        new("c", "C (MinGW-W64 gcc 16)", TypeInstallation.Demande,
-            "https://github.com/niXman/mingw-builds-binaries/releases", 914,
-            "winget_brechtsanders",
-            "winget install BrechtSanders.WinLibs.POSIX.UCRT. Fournit gcc + ld + les headers POSIX."),
+        new("c", "C (MinGW-W64 gcc 14)", TypeInstallation.Embarque,
+            "", 664,
+            "deja_present",
+            "Binaire MinGW partagé avec cpp dans Outils/Langages/mingw/mingw64/."),
 
-        new("csharp", "C# 10+ (.NET SDK)", TypeInstallation.Demande,
-            "https://dot.net/v1/dotnet-install.ps1", 2907,
-            "dotnet_install_ps1",
-            "SDK .NET 8 minimum (le SDK 10 tourne sans souci). dotnet run fichier.cs."),
+        new("csharp", "C# 10+ (.NET 10 SDK)", TypeInstallation.Embarque,
+            "", 770,
+            "deja_present",
+            "SDK .NET 10 installé via dotnet-install.ps1 dans Outils/Langages/dotnet/."),
 
         new("rust", "Rust 1.98 (rustc + cargo)", TypeInstallation.Detecte,
             "https://win.rustup.rs/x86_64", 4571,
             "rustup_init",
-            "rustup-init.exe -y. Produit rustc + cargo. Pas garanti présent : on regarde."),
+            "Installé via rustup-init.exe -y. Pas garanti présent : on regarde."),
 
-        new("cpp", "C++ (g++ via MinGW-W64)", TypeInstallation.Demande,
-            "https://github.com/niXman/mingw-builds-binaries/releases", 914,
-            "winget_brechtsanders",
-            "Mêmes binaires que c (gcc + g++). winget install BrechtSanders.WinLibs.POSIX.UCRT."),
+        new("cpp", "C++ (g++ via MinGW-W64)", TypeInstallation.Embarque,
+            "", 0,
+            "deja_present",
+            "Mémes binaires que c (gcc + g++). Pas de coût additionnel."),
 
-        new("go", "Go 1.24 SDK", TypeInstallation.Demande,
-            "https://go.dev/dl/go1.24.0.windows-amd64.zip", 150,
-            "extraire_zip",
-            "Zip archive. Extraire dans Outils/Langages/go/ pour obtenir go/bin/go.exe. Pas dans le PATH par défaut."),
+        new("go", "Go 1.24 SDK", TypeInstallation.Embarque,
+            "", 194,
+            "deja_present",
+            "SDK Go dans Outils/Langages/go/go/ (zip archive)."),
 
-        new("kotlin", "Kotlin 2.0 (kotlinc, scripts .kts)", TypeInstallation.Demande,
-            "https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip", 70,
-            "extraire_zip",
-            "Dépend de java (JDK 17+). kotlinc/bin/kotlinc.bat est un .bat, lancement via cmd /c. .kts uniquement pour MVP."),
+        new("kotlin", "Kotlin 2.0.21 (scripts .kts)", TypeInstallation.Embarque,
+            "", 90,
+            "deja_present",
+            "Dépend de java. kotlinc/bin/kotlinc.bat est un .bat, lancement via cmd /c. .kts uniquement pour MVP."),
+
+        new("gradle", "Gradle 8.10.2 (build tool)", TypeInstallation.Embarque,
+            "", 145,
+            "deja_present",
+            "Dépend de java. gradle-8.10.2/bin/gradle.bat est un .bat, lancement via cmd /c. Le code = la tàche à exécuter (build, test, run)."),
 
         new("shell", "PowerShell 5.1 (intégré Windows)", TypeInstallation.Detecte,
             "", 0,

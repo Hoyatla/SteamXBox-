@@ -1,13 +1,1 @@
-{
-  "id": "go",
-  "nom": "Go (SDK)",
-  "espace": "Codage",
-  "rang": "demande",
-  "extensions": [".go"],
-  "detection": "go/bin/go.exe version",
-  "executable": "go/bin/go.exe",
-  "commande": ["{executable}", "run", "{fichier}"],
-  "compile": false,
-  "latence_ms": 450,
-  "taille_mo": 150
-}
+{"id":"go","nom":"Go 1.24 (SDK)","espace":"Codage","rang":"embarque","extensions":[".go"],"detection":"go/bin/go.exe version","executable":"go/bin/go.exe","commande":["{executable}","run","{fichier}"],"compile":false,"latence_ms":450,"taille_mo":194}

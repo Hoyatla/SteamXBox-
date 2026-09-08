@@ -1,14 +1,14 @@
 {
   "id": "c",
-  "nom": "C (MinGW-W64 gcc)",
+  "nom": "C (gcc via MinGW-W64)",
   "espace": "Codage",
-  "rang": "demande",
+  "rang": "embarque",
   "extensions": [".c"],
-  "detection": "gcc --version",
-  "executable": "gcc",
-  "commande_compilation": ["{executable}", "{fichier}", "-o", "{sortie}"],
+  "detection": "../mingw/mingw64/bin/gcc.exe --version",
+  "executable": "../mingw/mingw64/bin/gcc.exe",
+  "commande_compilation": ["{executable}", "-O2", "{fichier}", "-o", "{sortie}"],
   "commande": ["{sortie}"],
   "compile": true,
   "latence_ms": 1507,
-  "taille_mo": 914
+  "taille_mo": 664
 }

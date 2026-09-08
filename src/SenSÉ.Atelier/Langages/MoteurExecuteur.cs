@@ -92,7 +92,28 @@ public static class MoteurExecuteur
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        // Cas special : cmd /c avec un .bat dont le path contient des espaces.
+        // ArgumentList produit cmd /c "C:\Program Files\..." arg, mais cmd coupe
+        // au premier espace. On construit alors la ligne de commande verbatim
+        // avec la forme cmd /c ""path" arg" (extra outer quotes que cmd strip).
+        bool isCmdC = (string.Equals(programme, "cmd.exe", System.StringComparison.OrdinalIgnoreCase) || string.Equals(programme, "cmd", System.StringComparison.OrdinalIgnoreCase))
+                      && args.Length >= 3
+                      && (args[0] == "/c" || (args.Length >= 4 && args[0] == "/s" && args[1] == "/c"));
+        if (isCmdC)
+        {
+            int decale = 1;
+            if (args[0] == "/s") decale = 2;
+            if (decale < args.Length && args[decale] == "call") decale++;
+            var bat = args[decale];
+            var restants = new System.Collections.Generic.List<string>();
+            for (int j = decale + 1; j < args.Length; j++) restants.Add(QuoteSiBesoin(args[j]));
+            // Forme safe : cmd /c ""batPath" arg1 arg2"
+            psi.Arguments = "/c call \"" + bat + "\" " + string.Join(" ", restants);
+        }
+        else
+        {
+            foreach (var a in args) psi.ArgumentList.Add(a);
+        }
         using var p = Process.Start(psi)!;
         var stdout = new System.Text.StringBuilder();
         var stderr = new System.Text.StringBuilder();
@@ -113,4 +134,18 @@ public static class MoteurExecuteur
         }
         return (p.ExitCode, stdout.ToString(), stderr.ToString());
     }
+
+    /// <summary>Wrap l'argument en double-quotes s'il contient des espaces ou caracteres speciaux.</summary>
+    private static string QuoteSiBesoin(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "\"\"";
+        bool besoin = false;
+        foreach (var c in s)
+        {
+            if (char.IsWhiteSpace(c) || "\"'`<>|&;()$".IndexOf(c) >= 0) { besoin = true; break; }
+        }
+        if (!besoin) return s;
+        return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+    }
+
 }
