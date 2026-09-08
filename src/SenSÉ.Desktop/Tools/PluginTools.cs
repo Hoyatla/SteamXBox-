@@ -1,5 +1,7 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Text;
 using System.Windows;
 using SenSÉ.Plugins;
 using SenSÉ.Tools.Documents;
@@ -1058,8 +1060,41 @@ public static class PluginTools
     /// </remarks>
     private static void Start(string target)
     {
+        // Si l'Atelier headless (port 8770) tourne deja, on appelle son verbe
+        // /atelier/fenetre/ouvrir au lieu de creer un 2e process en conflit.
+        if (AtelierHeadlessDejaActif())
+        {
+            var url = Environment.GetEnvironmentVariable("SENSE_ATELIER_URL") ?? "http://127.0.0.1:8770";
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                http.PostAsync($"{url}/atelier/fenetre/ouvrir",
+                    new StringContent("{}", Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+                return;
+            }
+            catch
+            {
+                // HTTP echoue -> fallback sur Process.Start classique.
+            }
+        }
+
         var p = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
         JobEnfants.Inscrire(p);
+    }
+
+    /// <summary>Teste si l'Atelier headless est deja en ecoute sur 127.0.0.1:8770.</summary>
+    private static bool AtelierHeadlessDejaActif()
+    {
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            var task = client.ConnectAsync("127.0.0.1", 8770);
+            return task.Wait(500) && client.Connected;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
