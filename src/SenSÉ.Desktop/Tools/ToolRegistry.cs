@@ -127,7 +127,8 @@ public static class ToolRegistry
                 return Strings.Current.Format("{0} est introuvable.", tool.Executable);
             }
 
-            Process.Start(new ProcessStartInfo(path, tool.Arguments) { UseShellExecute = false });
+            var procR = Process.Start(new ProcessStartInfo(path, tool.Arguments) { UseShellExecute = false });
+            JobEnfants.Inscrire(procR);
             return "";
         }
         catch (Exception exception)

@@ -650,7 +650,8 @@ public static class PluginTools
 
         log?.Invoke($"python: {interpreteur} {script} {(parts.Count > 1 ? parts[1] : "")}");
 
-        Process.Start(start);
+        var procL = Process.Start(start);
+        JobEnfants.Inscrire(procL);
         return $"Lancé : {Path.GetFileName(script)}";
     }
 
@@ -1048,8 +1049,18 @@ public static class PluginTools
     }
 
     /// <summary>Hands something to the shell, the way the launcher does.</summary>
+    /// <remarks>
+    /// Le processus est inscrit au job des enfants (cf. <c>JobEnfants</c>) pour qu'il ne
+    /// survive pas à une fermeture brutale de l'environnement. Les outils du produit en
+    /// dépendent : un Atelier orphelin, c'est une fenêtre qui continue de répondre à des
+    /// clics et à des frappes que plus personne n'attend. Même les outils lancés via
+    /// <c>Ouvrir(cible, env)</c> transitent par ici, donc bénéficient automatiquement du fix.
+    /// </remarks>
     private static void Start(string target)
-        => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+    {
+        var p = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        JobEnfants.Inscrire(p);
+    }
 
     /// <summary>
     /// Ouvre une application, dans son propre environnement si son manifeste en déclare un.
@@ -1084,7 +1095,8 @@ public static class PluginTools
             return refus;
         }
 
-        Process.Start(depart);
+        var p = Process.Start(depart);
+        JobEnfants.Inscrire(p);
 
         return "";
     }
