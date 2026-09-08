@@ -7,10 +7,11 @@
     <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <Grid>
             <Canvas x:Name="Surface" Width="4000" Height="3000" Background="Transparent"
-                    AllowDrop="True"
+                    AllowDrop="True" Focusable="True"
                     DragEnter="Surface_DragEnterOrOver"
                     DragOver="Surface_DragEnterOrOver"
-                    Drop="Surface_Drop" />
+                    Drop="Surface_Drop"
+                    PreviewKeyDown="Surface_PreviewKeyDown" />
         </Grid>
     </ScrollViewer>
 </UserControl>

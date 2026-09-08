@@ -4,8 +4,17 @@
         xmlns:local="clr-namespace:SenSÉ.Atelier.UI"
         Title="Atelier — SenSÉ" Height="800" Width="1280" WindowStartupLocation="CenterScreen">
     <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding ExecuterCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="Z" Modifiers="Control" Command="{Binding AnnulerCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RefaireCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Z" Modifiers="Control+Shift" Command="{Binding RefaireCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SauvegarderCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="S" Modifiers="Control+Shift" Command="{Binding SauvegarderSousCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NouveauGrapheCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding FermerOngletCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control" Command="{Binding OngletSuivantCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control+Shift" Command="{Binding OngletPrecedentCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F" Modifiers="Control" Command="{Binding FocusPaletteCmd, RelativeSource={RelativeSource AncestorType=Window}}" />
     </Window.InputBindings>
     <Grid>
         <Grid.RowDefinitions>
@@ -47,7 +56,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Button x:Name="BtnNouveauGraphe" Content="+" Click="BtnNouveauGraphe_Click" ToolTip="Nouveau graphe" Margin="4,4" />
+                <Button x:Name="BtnNouveauGraphe" Content="+" Click="BtnNouveauGraphe_Click" ToolTip="Nouveau graphe (Ctrl+N)" Margin="4,4" />
             </StackPanel>
         </Border>
 
@@ -55,7 +64,7 @@
         <Border Grid.Row="2" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="BtnExecuter" Content="▶ Exécuter (F5)" Click="BtnExecuter_Click" Style="{StaticResource BoutonAccent}" />
-                <Button x:Name="BtnSauvegarder" Content="💾 Sauvegarder" Click="BtnSauvegarder_Click" />
+                <Button x:Name="BtnSauvegarder" Content="💾 Sauvegarder (Ctrl+S)" Click="BtnSauvegarder_Click" />
                 <Separator Margin="8,4" Width="1" Background="{StaticResource BordureBrush}" />
                 <Button x:Name="BtnAnnuler" Content="↶ Annuler (Ctrl+Z)" Click="BtnAnnuler_Click" />
                 <Button x:Name="BtnRefaire" Content="↷ Refaire (Ctrl+Y)" Click="BtnRefaire_Click" />
@@ -77,7 +86,7 @@
 
         <!-- Barre de statut -->
         <Border Grid.Row="4" Background="{StaticResource FondPanneauBrush}" Padding="8,4" BorderBrush="{StaticResource BordureBrush}" BorderThickness="0,1,0,0">
-            <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt." />
+            <TextBlock x:Name="StatutBas" Foreground="{StaticResource TexteSecondaireBrush}" Text="Prêt.  F5=Exécuter, Ctrl+S=Sauver, Ctrl+Z=Annuler, Ctrl+F=Filtrer" />
         </Border>
     </Grid>
 </Window>

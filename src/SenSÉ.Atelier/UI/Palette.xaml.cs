@@ -25,6 +25,69 @@ public partial class Palette : UserControl
         AppliquerEspace(espace);
     }
 
+    public void FocusFiltre()
+    {
+        Filtre.Focus();
+        Filtre.SelectAll();
+    }
+
+    private void Filtre_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (System.Windows.Data.CollectionViewSource.GetDefaultView(Liste.ItemsSource) is System.Windows.Data.ListCollectionView view)
+        {
+            var filtre = Filtre.Text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(filtre)) view.Filter = null;
+            else
+            {
+                var f = filtre.ToLowerInvariant();
+                view.Filter = o =>
+                {
+                    if (o is not PaletteItem pi) return false;
+                    return (pi.Nom ?? "").ToLowerInvariant().Contains(f)
+                        || (pi.Description ?? "").ToLowerInvariant().Contains(f);
+                };
+            }
+        }
+    }
+
+    private void Filtre_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            Filtre.Text = "";
+            Keyboard.ClearFocus();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            AjouterItemSelectionneAuCentre();
+            e.Handled = true;
+        }
+    }
+
+    private void Liste_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            AjouterItemSelectionneAuCentre();
+            e.Handled = true;
+        }
+    }
+
+    private void Liste_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        AjouterItemSelectionneAuCentre();
+    }
+
+    private void AjouterItemSelectionneAuCentre()
+    {
+        if (Liste.SelectedItem is PaletteItem pi && pi.Def is not null)
+        {
+            NoeudChoisi?.Invoke(pi.Def);
+        }
+    }
+
     public void AppliquerEspace(Espace e)
     {
         var types = CatalogueNoeuds.ParEspace(e).ToList();

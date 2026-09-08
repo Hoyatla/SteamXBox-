@@ -17,6 +17,59 @@ public partial class VueNoeud : UserControl
     private Point _debut;
     private double _origX, _origY;
 
+    public bool EstFocused { get; private set; }
+    public bool EstSelectionne { get; private set; }
+
+    public void DefinirSelection(bool sel)
+    {
+        EstSelectionne = sel;
+        MettreAJourBord();
+    }
+
+    public void DefinirFocused(bool foc)
+    {
+        EstFocused = foc;
+        MettreAJourBord();
+    }
+
+    private void MettreAJourBord()
+    {
+        if (Bord is null) return;
+        if (EstSelectionne && EstFocused)
+            Bord.Style = (Style)FindResource("BordFocusedSelected");
+        else if (EstSelectionne)
+            Bord.Style = (Style)FindResource("BordSelected");
+        else if (EstFocused)
+            Bord.Style = (Style)FindResource("BordFocused");
+        else
+            Bord.Style = (Style)FindResource("BordNorm");
+    }
+
+    private void Bord_GotFocus(object sender, RoutedEventArgs e)
+    {
+        DefinirFocused(true);
+    }
+
+    private void Bord_LostFocus(object sender, RoutedEventArgs e)
+    {
+        DefinirFocused(false);
+    }
+
+    public event Action<Noeud, KeyEventArgs>? NoeudTouche;
+
+    private void Bord_KeyDown(object sender, KeyEventArgs e)
+    {
+        // Touche Escape : deselectionne le focus
+        if (e.Key == Key.Escape)
+        {
+            Keyboard.ClearFocus();
+            e.Handled = true;
+            return;
+        }
+        // Propager au Canvas parent (pour navigation fleches)
+        NoeudTouche?.Invoke(Noeud, e);
+    }
+
     public VueNoeud(Noeud n)
     {
         Noeud = n;
@@ -32,7 +85,7 @@ public partial class VueNoeud : UserControl
         // Attache le Noeud parent a chaque VuePort genere
         ListeEntrees.ItemContainerGenerator.StatusChanged += (s, e) => AttacherPorts(ListeEntrees);
         ListeSorties.ItemContainerGenerator.StatusChanged += (s, e) => AttacherPorts(ListeSorties);
-        Loaded += (s, e) => { AttacherPorts(ListeEntrees); AttacherPorts(ListeSorties); };
+        Loaded += (s, e) => { AttacherPorts(ListeEntrees); AttacherPorts(ListeSorties); MettreAJourBord(); };
     }
 
     private void AttacherPorts(ItemsControl liste)

@@ -6,13 +6,19 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Style="{StaticResource EnteteSection}" Text="Palette" Margin="8,8,8,4" />
             <Button Grid.Row="1" x:Name="BtnNouveauCustom" Content="+ Noeud custom" Click="BtnNouveauCustom_Click" Margin="8,0,8,4" />
-            <ListView x:Name="Liste" Grid.Row="2" Background="Transparent" BorderThickness="0"
+            <Grid Grid.Row="2" Margin="8,0,8,4">
+                <TextBox x:Name="Filtre" ToolTip="Filtrer par nom (Ctrl+F)" TextChanged="Filtre_TextChanged" KeyDown="Filtre_KeyDown" />
+            </Grid>
+            <ListView x:Name="Liste" Grid.Row="3" Background="Transparent" BorderThickness="0"
                       Foreground="{StaticResource TexteBrush}"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      MouseDoubleClick="Liste_MouseDoubleClick"
+                      KeyDown="Liste_KeyDown">
                 <ListView.GroupStyle>
                     <GroupStyle>
                         <GroupStyle.ContainerStyle>

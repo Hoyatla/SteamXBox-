@@ -24,6 +24,14 @@ public partial class FenetreAtelier : Window
 
     public ICommand AnnulerCmd { get; }
     public ICommand RefaireCmd { get; }
+    public ICommand ExecuterCmd { get; }
+    public ICommand SauvegarderCmd { get; }
+    public ICommand SauvegarderSousCmd { get; }
+    public ICommand NouveauGrapheCmd { get; }
+    public ICommand FermerOngletCmd { get; }
+    public ICommand OngletSuivantCmd { get; }
+    public ICommand OngletPrecedentCmd { get; }
+    public ICommand FocusPaletteCmd { get; }
 
     public FenetreAtelier(string racine, ServeurHttp serveur)
     {
@@ -35,7 +43,15 @@ public partial class FenetreAtelier : Window
         if (Application.Current is App app) app.EspaceCourant = Espace.Codage;
         RafraichirOnglets();
         SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
-        InputBindings.Add(new KeyBinding(new ExecuterAction(this), new KeyGesture(Key.F5)));
+        PreviewKeyDown += Fenetre_PreviewKeyDown;
+        ExecuterCmd = new RelayCommand(_ => ExecuterGraphe());
+        SauvegarderCmd = new RelayCommand(_ => SauvegarderAction());
+        SauvegarderSousCmd = new RelayCommand(_ => SauvegarderSousAction());
+        NouveauGrapheCmd = new RelayCommand(_ => BtnNouveauGraphe_Click(this, new RoutedEventArgs()));
+        FermerOngletCmd = new RelayCommand(_ => FermerOngletAction(), _ => _grapheActif is not null);
+        OngletSuivantCmd = new RelayCommand(_ => OngletSuivant());
+        OngletPrecedentCmd = new RelayCommand(_ => OngletPrecedent());
+        FocusPaletteCmd = new RelayCommand(_ => PaletteCtl.FocusFiltre());
         AnnulerCmd = new RelayCommand(_ => AnnulerAction(), _ => PeutAnnuler());
         RefaireCmd = new RelayCommand(_ => RefaireAction(), _ => PeutRefaire());
         DataContext = this;
@@ -214,23 +230,112 @@ public partial class FenetreAtelier : Window
     private void BtnAnnuler_Click(object sender, RoutedEventArgs e) => AnnulerAction();
     private void BtnRefaire_Click(object sender, RoutedEventArgs e) => RefaireAction();
 
+    private void SauvegarderAction()
+    {
+        if (_grapheActif is null) return;
+        _persistance.SauvegarderGraphe(_grapheActif);
+        StatutBas.Text = $"Sauvegardé à {DateTime.Now:HH:mm:ss} ({_grapheActif.Noeuds.Count} nœuds, {_grapheActif.Liens.Count} liens)";
+    }
+
+    private void SauvegarderSousAction()
+    {
+        if (_grapheActif is null) return;
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Sauvegarder sous",
+            Filter = "Graphe SenSÉ (*.json)|*.json|Tous les fichiers|*.*",
+            FileName = _grapheActif.Nom + ".json",
+        };
+        if (dlg.ShowDialog(this) == true)
+        {
+            _persistance.ExporterGraphe(_grapheActif, dlg.FileName);
+            StatutBas.Text = "Exporté vers " + dlg.FileName;
+        }
+    }
+
+    private void FermerOngletAction()
+    {
+        if (_grapheActif is null) return;
+        var r = MessageBox.Show(
+            "Fermer le graphe \"" + _grapheActif.Nom + "\" ?",
+            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (r != MessageBoxResult.Yes) return;
+        var id = _grapheActif.Id;
+        _onglets.RemoveAll(o => o.Id == id);
+        OngletsGraphes.ItemsSource = null;
+        OngletsGraphes.ItemsSource = _onglets;
+        SelectionnerGraphe(_onglets.FirstOrDefault()?.Graphe);
+    }
+
+    private void OngletSuivant()
+    {
+        if (_onglets.Count < 2 || _grapheActif is null) return;
+        int idx = _onglets.FindIndex(o => o.Id == _grapheActif.Id);
+        int next = (idx + 1) % _onglets.Count;
+        SelectionnerGraphe(_onglets[next].Graphe);
+    }
+
+    private void OngletPrecedent()
+    {
+        if (_onglets.Count < 2 || _grapheActif is null) return;
+        int idx = _onglets.FindIndex(o => o.Id == _grapheActif.Id);
+        int prev = (idx - 1 + _onglets.Count) % _onglets.Count;
+        SelectionnerGraphe(_onglets[prev].Graphe);
+    }
+
+    private void Fenetre_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        // Escape : deselection globale + fermer le focus palette
+        if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            // Si le focus est dans la palette, le vider
+            if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox
+                && System.Windows.Input.Keyboard.FocusedElement == FindName("Filtre"))
+            {
+                // le filtre s'auto-vide (handler Filtre_KeyDown)
+                return;
+            }
+            CanvasCtl.ToutDeselectionner();
+            InspecteurCtl.Vider();
+            StatutBas.Text = "Désélectionné.";
+            e.Handled = true;
+            return;
+        }
+        // Suppr/Backspace : supprimer la selection
+        if (e.Key == System.Windows.Input.Key.Delete || e.Key == System.Windows.Input.Key.Back)
+        {
+            if (CanvasCtl.Selection.Count > 0)
+            {
+                CanvasCtl.SupprimerSelection();
+                e.Handled = true;
+            }
+            return;
+        }
+        // Ctrl+D : dupliquer
+        if (e.Key == System.Windows.Input.Key.D && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            if (CanvasCtl.Selection.Count > 0)
+            {
+                CanvasCtl.DupliquerSelection();
+                e.Handled = true;
+            }
+            return;
+        }
+    }
+
+    private void ExecuterAction_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        // Hook pour F5 si la command line ne se declenche pas
+    }
+
     private class TabGraphe
     {
         public string Id { get; set; } = "";
         public string Nom { get; set; } = "";
         public Graphe Graphe { get; set; } = null!;
     }
-
-    private class ExecuterAction : ICommand
-    {
-        private readonly FenetreAtelier _w;
-        public ExecuterAction(FenetreAtelier w) { _w = w; }
-
-        public event EventHandler? CanExecuteChanged { add { } remove { } }
-        public bool CanExecute(object? parameter) => true;
-        public void Execute(object? parameter) => _w.ExecuterGraphe();
-    }
 }
+
 
 internal sealed class RelayCommand : ICommand
 {

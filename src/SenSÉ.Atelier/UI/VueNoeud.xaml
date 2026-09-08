@@ -2,10 +2,31 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SenSÉ.Atelier.UI"
-             MinWidth="160">
+             MinWidth="160" Focusable="True" IsTabStop="True">
+    <UserControl.Resources>
+        <Style x:Key="BordNorm" TargetType="Border">
+            <Setter Property="Background" Value="#2A2A3D" />
+            <Setter Property="BorderBrush" Value="#3B3B52" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="BordSelected" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#F39C12" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style x:Key="BordFocused" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#5DA9FF" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <Style x:Key="BordFocusedSelected" TargetType="Border" BasedOn="{StaticResource BordNorm}">
+            <Setter Property="BorderBrush" Value="#F39C12" />
+            <Setter Property="BorderThickness" Value="3" />
+        </Style>
+    </UserControl.Resources>
     <Border x:Name="Bord" CornerRadius="6"
             Background="#2A2A3D" BorderBrush="#3B3B52" BorderThickness="1"
-            Padding="0" SnapsToDevicePixels="True">
+            Padding="0" SnapsToDevicePixels="True"
+            GotFocus="Bord_GotFocus" LostFocus="Bord_LostFocus"
+            KeyDown="Bord_KeyDown">
         <StackPanel>
             <!-- En-tete -->
             <Border x:Name="Entete" Background="#34344A" CornerRadius="6,6,0,0"
