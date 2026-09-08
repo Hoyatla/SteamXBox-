@@ -14,10 +14,32 @@ namespace SenSÉ.Atelier.Langages;
 public static class Detecteur
 {
     private static List<MoteurSpec>? _moteurs;
+    private static string? _racineOverride;
     private static readonly object _lock = new();
 
-    /// <summary>Repertoire racine des langages (relatif a AppContext.BaseDirectory).</summary>
-    public static string Racine => Path.Combine(AppContext.BaseDirectory, "Outils", "Langages");
+    /// <summary>
+    /// Calcule la racine des langages à partir de la racine de persistance de
+    /// l Atelier (en général Outils/Atelier/). On remonte d un niveau pour
+    /// trouver Outils/Langages/ qui est sibling de Atelier.
+    /// </summary>
+    public static void Initialiser(string racinePersistance)
+    {
+        lock (_lock)
+        {
+            // racine/Outils/Langages/ pour la majorité des installs ;
+            // racine/../Langages/ si l exe est deja sous Outils/Atelier/.
+            var direct = Path.Combine(racinePersistance, "Outils", "Langages");
+            var frere = Path.GetFullPath(Path.Combine(racinePersistance, "..", "Langages"));
+            _racineOverride = Directory.Exists(direct) ? direct
+                            : Directory.Exists(frere) ? frere
+                            : direct;
+            _moteurs = null;
+        }
+    }
+
+    /// <summary>Repertoire racine des langages.</summary>
+    public static string Racine =>
+        _racineOverride ?? Path.Combine(AppContext.BaseDirectory, "Outils", "Langages");
 
     /// <summary>Tous les moteurs detectes (dans l ordre de latence croissante).</summary>
     public static IReadOnlyList<MoteurSpec> Moteurs
@@ -51,6 +73,7 @@ public static class Detecteur
         if (!Directory.Exists(Racine)) return liste;
         var opt = new JsonSerializerOptions
         {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true,
@@ -85,14 +108,18 @@ public static class Detecteur
 
             // La commande de detection est un programme + args (ex: "node --version").
             // On coupe au premier espace : FileName = programme, ArgumentList = args.
+            // Pour rang=embarque, le programme designe dans la commande n est
+            // generalement pas dans le PATH : on prend l executable absolu
+            // resolu (m.ExecutableAbsolu) comme FileName, et on garde les args.
             var cmd = m.Detection ?? "";
             var firstSpace = cmd.IndexOf(' ');
             var programme = firstSpace < 0 ? cmd : cmd.Substring(0, firstSpace);
             var reste = firstSpace < 0 ? "" : cmd.Substring(firstSpace + 1);
+            var fileName = m.Rang == "embarque" ? m.ExecutableAbsolu : programme;
 
             var psi = new ProcessStartInfo
             {
-                FileName = programme,
+                FileName = fileName,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

@@ -20,10 +20,24 @@ public static class MoteurExecuteur
         long DureeMs,
         string? SortieFichier = null);
 
-    /// <summary>Repertoire d execution isole : Outils/Atelier/Executions/&lt;uuid&gt;/</summary>
+    private static string? _racineExecutions;
+
+    /// <summary>
+    /// Calcule la racine des dossiers d execution a partir de la racine de
+    /// persistance (Outils/Atelier/). Meme logique que Detecteur.Initialiser.
+    /// </summary>
+    public static void Initialiser(string racinePersistance)
+    {
+        var direct = Path.Combine(racinePersistance, "Executions");
+        _racineExecutions = Directory.Exists(direct) || Directory.Exists(Path.GetDirectoryName(direct)!)
+            ? direct
+            : Path.Combine(AppContext.BaseDirectory, "Outils", "Atelier", "Executions");
+    }
+
+    /// <summary>Repertoire d execution isole : Executions/&lt;uuid&gt;/</summary>
     public static string CreerDossierExecution()
     {
-        var base_ = Path.Combine(AppContext.BaseDirectory, "Outils", "Atelier", "Executions");
+        var base_ = _racineExecutions ?? Path.Combine(AppContext.BaseDirectory, "Outils", "Atelier", "Executions");
         Directory.CreateDirectory(base_);
         var dir = Path.Combine(base_, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);

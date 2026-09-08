@@ -23,7 +23,7 @@ namespace SenSÉ.Atelier.Mcp;
 public sealed class Verbes
 {
     private readonly Persistance _persistance;
-    public Verbes(string racine) { _persistance = new Persistance(racine); }
+    public Verbes(string racine) { _persistance = new Persistance(racine); Detecteur.Initialiser(racine); MoteurExecuteur.Initialiser(racine); }
 
     public string Racine => _persistance.Racine;
 
