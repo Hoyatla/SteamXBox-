@@ -395,7 +395,7 @@ public static class PluginActions
     public static IReadOnlySet<string> Known { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         WindowsSetting, Application, Path, Search, ClearScreen, Convert, Python, Video, Image, Generation,
-        Assistant, Activite, Flux, Modeles, Atelier, Sequence,
+        Assistant, Activite, Editor, Flux, Modeles, Atelier, Sequence,
     };
 
     /// <summary>Whether the action needs something to act on.</summary>
