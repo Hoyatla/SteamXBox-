@@ -64,6 +64,7 @@ public static class CatalogueNoeuds
         Bibliotheque.Codage.Donnees.Enregistrer();
         Bibliotheque.Codage.Reseau.Enregistrer();
         Bibliotheque.Codage.Variables.Enregistrer();
+        Bibliotheque.Codage.Vision.Enregistrer();
         Bibliotheque.Multimedia.Tous.Enregistrer();
         Composite.Tous.Enregistrer();
     }
