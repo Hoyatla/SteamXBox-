@@ -19,7 +19,10 @@ public static class Chargeur
                 Format.Markdown.DepuisMarkdown(cible, contenu);
                 break;
             case ".docx":
-                Format.Docx.DepuisDocx(cible, chemin); // .md / .docx ecrits sur disque
+                Format.Docx.DepuisDocx(cible, chemin);
+                break;
+            case ".odt":
+                Format.Odt.DepuisOdt(cible, chemin);
                 break;
             default:
                 Format.TextePlain.DepuisPlainText(cible, contenu);

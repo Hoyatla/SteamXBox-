@@ -103,15 +103,14 @@ public partial class MainWindow : Window
         Sauver(dlg.FileName);
     }
 
-    // Phase B-prime : md, txt (natif TextePlain/Markdown) et docx (natif DocumentFormat.OpenXml via Format.Docx).
-    // odt arrive en Phase C-prime (ZIP+XML maison).
+    // Phase B-prime + C-prime : md, txt, docx (DocumentFormat.OpenXml) et odt (ZIP+XML maison).
     private static readonly (string Extension, string Id)[] _formatsSauvegarde =
-        new (string, string)[] { (".md", "md"), (".txt", "txt"), (".docx", "docx") };
+        new (string, string)[] { (".md", "md"), (".txt", "txt"), (".docx", "docx"), (".odt", "odt") };
 
     private static string ConstruireFilterSauvegarde()
     {
-        // Phase B-prime : md, txt, docx (writer natif). odt en Phase C-prime.
-        return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Word (*.docx)|*.docx|Tous les fichiers (*.*)|*.*";
+        // Phase B-prime + C-prime : md, txt, docx, odt. Tous ecrits en natif.
+        return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Word (*.docx)|*.docx|OpenDocument (*.odt)|*.odt|Tous les fichiers (*.*)|*.*";
     }
 
     private static int IndexExtension(string ext)
@@ -126,12 +125,12 @@ public partial class MainWindow : Window
 
     private void Sauver(string chemin)
     {
-        // Phase B-prime : md / txt / docx (natif) sont supportes. odt en Phase C-prime.
+        // Phase B-prime + C-prime : md / txt / docx / odt sont supportes nativement.
         var ext = Path.GetExtension(chemin).ToLowerInvariant();
-        if (ext != ".md" && ext != ".txt" && ext != ".docx")
+        if (ext != ".md" && ext != ".txt" && ext != ".docx" && ext != ".odt")
         {
             MessageBox.Show(this,
-                "Format " + ext + " non encore supporte en ecriture native. Formats disponibles : .md, .txt, .docx (.odt en Phase C-prime).",
+                "Format " + ext + " non encore supporte en ecriture native. Formats disponibles : .md, .txt, .docx, .odt.",
                 "Format non supporte", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -140,7 +139,12 @@ public partial class MainWindow : Window
             Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
             _cheminActuel = chemin;
             Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-            Statut.Text = ext == ".docx" ? "Enregistré en Word (.docx)." : "Enregistré.";
+            Statut.Text = ext switch
+            {
+                ".docx" => "Enregistré en Word (.docx).",
+                ".odt"  => "Enregistré en OpenDocument (.odt).",
+                _       => "Enregistré."
+            };
         }
         catch (Exception ex)
         {

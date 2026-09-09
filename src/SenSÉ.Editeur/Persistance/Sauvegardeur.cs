@@ -19,6 +19,9 @@ public static class Sauvegardeur
             case ".docx":
                 Format.Docx.VersDocx(doc, chemin);
                 break;
+            case ".odt":
+                Format.Odt.VersOdt(doc, chemin);
+                break;
             default:
                 File.WriteAllText(chemin, Format.TextePlain.VersPlainText(doc));
                 break;
