@@ -1,0 +1,13 @@
+{
+  "id": "editeur",
+  "name": "Éditeur de texte",
+  "category": "tool",
+  "version": "0.1.0",
+  "glyph": "E8A5",
+  "icon": "IconEdit",
+  "hint": "Document texte avec insertion multimodale (Atelier, vision, LLM)",
+  "surface": "tile",
+  "content": [
+    { "kind": "action", "label": "Ouvrir l'éditeur", "does": "editeur", "target": "editeur" }
+  ]
+}

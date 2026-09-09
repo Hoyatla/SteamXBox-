@@ -1,0 +1,60 @@
+<Window x:Class="SenSÉ.Editeur.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Éditeur — SenSÉ" Height="800" Width="1100"
+        AllowDrop="True" Drop="Fenetre_Drop" DragOver="Fenetre_DragOver">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_Fichier">
+                <MenuItem Header="_Nouveau"        InputGestureText="Ctrl+N" Click="MnuNouveau_Click"/>
+                <MenuItem Header="_Ouvrir..."      InputGestureText="Ctrl+O" Click="MnuOuvrir_Click"/>
+                <Separator/>
+                <MenuItem Header="_Enregistrer"    InputGestureText="Ctrl+S" Click="MnuEnregistrer_Click"/>
+                <MenuItem Header="Enregistrer _sous..." Click="MnuEnregistrerSous_Click"/>
+                <Separator/>
+                <MenuItem Header="_Quitter"        InputGestureText="Alt+F4" Click="MnuQuitter_Click"/>
+            </MenuItem>
+            <MenuItem Header="É_dition">
+                <MenuItem Header="_Annuler"        InputGestureText="Ctrl+Z" Click="MnuAnnuler_Click"/>
+                <MenuItem Header="_Rétablir"       InputGestureText="Ctrl+Y" Click="MnuRetablir_Click"/>
+            </MenuItem>
+        </Menu>
+        <ToolBarTray DockPanel.Dock="Top">
+            <ToolBar>
+                <Button x:Name="BtnGras"        Click="BtnGras_Click"        ToolTip="Gras (Ctrl+B)" FontWeight="Bold">G</Button>
+                <Button x:Name="BtnItalique"    Click="BtnItalique_Click"    ToolTip="Italique (Ctrl+I)" FontStyle="Italic">I</Button>
+                <Button x:Name="BtnSouligne"    Click="BtnSouligne_Click"    ToolTip="Souligné (Ctrl+U)">
+                    <TextBlock Text="U" TextDecorations="Underline"/>
+                </Button>
+                <Separator/>
+                <Button x:Name="BtnH1"           Click="BtnH1_Click"           ToolTip="Titre 1">H1</Button>
+                <Button x:Name="BtnH2"           Click="BtnH2_Click"           ToolTip="Titre 2">H2</Button>
+                <Button x:Name="BtnH3"           Click="BtnH3_Click"           ToolTip="Titre 3">H3</Button>
+                <Separator/>
+                <Button x:Name="BtnListePuces"   Click="BtnListePuces_Click"   ToolTip="Liste à puces">•≡</Button>
+                <Button x:Name="BtnListeNum"     Click="BtnListeNum_Click"     ToolTip="Liste numérotée">1.</Button>
+            </ToolBar>
+        </ToolBarTray>
+        <StatusBar DockPanel.Dock="Bottom">
+            <TextBlock x:Name="Statut"/>
+        </StatusBar>
+        <RichTextBox x:Name="Rtb"
+                     AcceptsTab="True"
+                     SpellCheck.IsEnabled="False"
+                     TextChanged="Rtb_TextChanged">
+            <FlowDocument PageWidth="2000">
+                <Paragraph/>
+            </FlowDocument>
+        </RichTextBox>
+    </DockPanel>
+    <Window.InputBindings>
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding MnuNouveau}"/>
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding MnuOuvrir}"/>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding MnuEnregistrer}"/>
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding MnuAnnuler}"/>
+        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding MnuRetablir}"/>
+        <KeyBinding Key="B" Modifiers="Control" Command="{Binding MnuGras}"/>
+        <KeyBinding Key="I" Modifiers="Control" Command="{Binding MnuItalique}"/>
+        <KeyBinding Key="U" Modifiers="Control" Command="{Binding MnuSouligne}"/>
+    </Window.InputBindings>
+</Window>

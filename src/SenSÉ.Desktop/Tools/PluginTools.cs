@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -223,6 +223,29 @@ public static class PluginTools
             out var point)
             ? char.ConvertFromUtf32(point)
             : "";
+    }
+
+    /// <summary>
+    /// Lance un executable externe (pattern Atelier : Process.Start + inscription au job parent).</summary>
+    private static string LancerExterne(string chemin, Action<string>? log, string label)
+    {
+        if (!File.Exists(chemin))
+        {
+            log?.Invoke($"{label} est introuvable : {chemin}");
+            return $"{label} introuvable.";
+        }
+        try
+        {
+            var procR = Process.Start(new ProcessStartInfo(chemin) { UseShellExecute = false });
+            JobEnfants.Inscrire(procR);
+            log?.Invoke($"{label} lance.");
+            return "";
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"{label} : {ex.Message}");
+            return ex.Message;
+        }
     }
 
     /// <summary>
@@ -507,6 +530,9 @@ public static class PluginTools
 
                 case PluginActions.Atelier:
                     return Atelier.AtelierWindow.Ouvrir(target, log);
+
+                case PluginActions.Editor:
+                    return LancerExterne(Resoudre("{tools}\\Editeur\\SenSÉ.Editeur.exe"), log, "SenSÉ.Editeur");
 
                 default:
                     // Unreachable through the catalogue, which refuses an unknown action at load.

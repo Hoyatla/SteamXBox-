@@ -359,6 +359,9 @@ public static class PluginActions
     /// </remarks>
     public const string Atelier = "atelier";
 
+    /// <summary>Lance l'editeur de texte SenSÉ (Process.Start sur Outils/Editeur/SenSÉ.Editeur.exe).</summary>
+    public const string Editor = "editeur";
+
     /// <summary>
     /// Anime chaque image d'un dossier et recolle les clips ; la cible est
     /// <c>dossier|ponts|mouvement|rendu|prefixe|flux</c>.
