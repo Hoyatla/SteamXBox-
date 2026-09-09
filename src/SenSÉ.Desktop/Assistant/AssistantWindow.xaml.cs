@@ -607,6 +607,20 @@ public partial class AssistantWindow : Window
                 autonome));
 
             Dire("assistant", reponse);
+
+            // LA BIBLIOGRAPHIE EST ECRITE ICI, PAS PAR LE MODELE.
+            //
+            // Il rédigeait la sienne, et elle était fausse : le 9 septembre il a terminé par
+            // « Sources : Le Monde [1], France Info [2], 20 Minutes [3-4], La Dépêche [5] » —
+            // cinq entrées dont trois jamais employées, et une attribution inversée. C'est le seul
+            // endroit du dispositif où une erreur est indétectable pour le lecteur : une
+            // bibliographie a l'autorité de l'exactitude. Elle vient donc de la récolte, c'est-à-
+            // dire de ce qui a réellement été ouvert et lu.
+            if (_aCiter && _recolte is { } citees)
+            {
+                _aCiter = false;
+                Dire("systeme", SenSÉ.Tools.Assistant.RechercheWeb.Bibliographie(citees));
+            }
         }
         catch (Exception exception)
         {
@@ -1623,10 +1637,14 @@ public partial class AssistantWindow : Window
         if (!recolte.Vide)
         {
             _recolte = recolte;
+            _aCiter = true;
         }
 
         return SenSÉ.Tools.Assistant.RechercheWeb.Rediger(recolte);
     }
+
+    /// <summary>Vrai quand une recherche de ce tour attend sa bibliographie.</summary>
+    private bool _aCiter;
 
     /// <summary>Écrit la dernière récolte et la synthèse du modèle dans un dossier daté.</summary>
     private string Consigner(string synthese, Action<string>? journal)

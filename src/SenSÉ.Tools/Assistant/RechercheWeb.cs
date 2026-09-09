@@ -5,13 +5,67 @@ using System.Text.Json.Nodes;
 
 namespace SenSÉ.Tools.Assistant;
 
-/// <summary>Une page consultée : d'où elle vient, quand, et ce qu'on en a lu.</summary>
-/// <param name="Rang">Son numéro dans la récolte. C'est par lui que la réponse la cite.</param>
-/// <param name="Titre">Le titre rendu par le moteur.</param>
+/// <summary>Une page consultée : d'où elle vient, de qui, quand, et ce qu'on en a lu.</summary>
+/// <param name="Rang">Son numéro dans la récolte. Il ordonne ; il ne cite pas.</param>
+/// <param name="Titre">Le titre de l'article.</param>
 /// <param name="Url">L'adresse exacte, telle qu'elle a été suivie.</param>
 /// <param name="Extrait">Ce qui a réellement été lu — pas un résumé, le texte pris à la page.</param>
-/// <param name="Lu">Quand. Une page change ; une réponse sans date n'est pas retraçable.</param>
-public sealed record Source(int Rang, string Titre, string Url, string Extrait, DateTimeOffset Lu);
+/// <param name="Lu">Quand on l'a lue. Une page change ; une lecture sans date n'est pas retraçable.</param>
+/// <param name="Site">Le nom de la publication : « Le Monde », « franceinfo ».</param>
+/// <param name="Auteur">Qui signe, si la page le déclare. Vide si elle ne le déclare pas.</param>
+/// <param name="Publie">Quand l'article a été publié, si la page le déclare.</param>
+public sealed record Source(
+    int Rang,
+    string Titre,
+    string Url,
+    string Extrait,
+    DateTimeOffset Lu,
+    string Site = "",
+    string Auteur = "",
+    string Publie = "")
+{
+    /// <summary>
+    /// Ce que la réponse écrit entre crochets, à la place d'un numéro.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un numéro ne survit pas au copier-coller.</b> Sorti du fil, « [2] » ne désigne plus rien :
+    /// la phrase perd sa source au moment précis où elle part vivre ailleurs — dans un document, un
+    /// courrier, un dossier. Or c'est là qu'une citation compte, et parfois juridiquement.
+    ///
+    /// <para>
+    /// L'étiquette porte donc la publication et la signature. Elle reste courte pour rester
+    /// lisible en cours de phrase ; l'adresse complète et les dates vivent dans la bibliographie,
+    /// que le code écrit et que le modèle n'a pas le droit de rédiger.
+    /// </para>
+    /// </remarks>
+    public string Etiquette
+    {
+        get
+        {
+            var qui = Site.Length > 0 ? Site : Hote;
+
+            return Auteur.Length > 0 ? $"{qui} — {Auteur}" : qui;
+        }
+    }
+
+    /// <summary>Le domaine, dernier recours quand la page ne se nomme pas.</summary>
+    public string Hote
+    {
+        get
+        {
+            try
+            {
+                return new Uri(Url).Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(Url).Host[4..]
+                    : new Uri(Url).Host;
+            }
+            catch (UriFormatException)
+            {
+                return Url;
+            }
+        }
+    }
+}
 
 /// <summary>Ce qu'une recherche a ramené.</summary>
 /// <param name="Sujet">Ce qui a été cherché, mot pour mot.</param>
@@ -140,6 +194,10 @@ public static class RechercheWeb
             // source citee sur son seul apercu reste une source — elle dit d'ou vient ce peu qu'on
             // en sait, et c'est preferable a l'ecarter en silence.
             var texte = apercu;
+            var intitule = titre;
+            var site = "";
+            var auteur = "";
+            var publie = "";
 
             if (rang <= PagesLues)
             {
@@ -151,6 +209,20 @@ public static class RechercheWeb
                     {
                         texte = corps;
                     }
+
+                    // La signature se demande a la page, dans la foulee : c'est la meme visite.
+                    // La demander plus tard couterait une seconde navigation, et la page pourrait
+                    // avoir change entre les deux.
+                    var declare = Signature(lire(LireLesMeta));
+
+                    site = declare.Site;
+                    auteur = declare.Auteur;
+                    publie = declare.Publie;
+
+                    if (declare.Titre.Length > 0)
+                    {
+                        intitule = declare.Titre;
+                    }
                 }
                 else
                 {
@@ -160,10 +232,13 @@ public static class RechercheWeb
 
             lues.Add(new Source(
                 rang,
-                titre,
+                intitule,
                 url,
                 texte.Length > Caracteres ? texte[..Caracteres] + "…" : texte,
-                DateTimeOffset.Now));
+                DateTimeOffset.Now,
+                site,
+                auteur,
+                publie));
         }
 
         journal?.Invoke(
@@ -204,16 +279,30 @@ public static class RechercheWeb
             .AppendLine(Garde)
             .AppendLine()
             .AppendLine(
-                "Réponds à partir de ces extraits UNIQUEMENT, et cite chaque affirmation par son "
-                + "numéro entre crochets — [1], [2]. Ce que les extraits ne disent pas, dis que tu "
-                + "ne l'as pas trouvé plutôt que de le compléter.")
+                "Réponds à partir de ces extraits UNIQUEMENT. Ce que les extraits ne disent pas, "
+                + "dis que tu ne l'as pas trouvé plutôt que de le compléter.")
+            .AppendLine(
+                "Cite chaque affirmation en recopiant TEL QUEL, entre crochets, le libellé donné "
+                + "sous « citer ainsi ». Jamais un numéro : un numéro ne veut plus rien dire dès "
+                + "que la phrase est copiée hors de cette conversation.")
+            .AppendLine(
+                "N'ÉCRIS AUCUNE LISTE DE SOURCES à la fin : elle est ajoutée automatiquement, "
+                + "avec les adresses et les dates exactes. Une liste que tu rédigerais toi-même "
+                + "se tromperait d'attribution.")
             .AppendLine();
 
         foreach (var source in recolte.Sources)
         {
-            texte.Append('[').Append(source.Rang).Append("] ").AppendLine(source.Titre)
-                .Append("    ").AppendLine(source.Url)
-                .Append("    lu le ").AppendLine(Horodate(source.Lu))
+            texte.Append("citer ainsi : [").Append(source.Etiquette).AppendLine("]")
+                .Append("    titre  : ").AppendLine(source.Titre)
+                .Append("    url    : ").AppendLine(source.Url);
+
+            if (source.Publie.Length > 0)
+            {
+                texte.Append("    publié : ").AppendLine(source.Publie);
+            }
+
+            texte.Append("    lu le  : ").AppendLine(Horodate(source.Lu))
                 .AppendLine()
                 .AppendLine(source.Extrait)
                 .AppendLine();
@@ -221,6 +310,50 @@ public static class RechercheWeb
 
         return texte.ToString();
     }
+
+    /// <summary>
+    /// La bibliographie, écrite par le code et jamais par le modèle.
+    /// </summary>
+    /// <remarks>
+    /// <b>Le modèle rédigeait la sienne, et elle était fausse.</b> Session du 9 septembre 2026 : il
+    /// n'avait cité que deux sources dans son texte, et a terminé par « Sources : Le Monde [1],
+    /// France Info [2], 20 Minutes [3-4], La Dépêche [5] » — cinq entrées dont trois jamais
+    /// employées, et une attribution inversée, la source [2] étant 20 Minutes et non France Info.
+    ///
+    /// <para>
+    /// C'est le seul endroit du dispositif où une erreur est indétectable pour le lecteur : une
+    /// bibliographie a l'autorité de l'exactitude. Elle ne doit donc pas être générée. Ce qui est
+    /// écrit ici vient de la récolte, c'est-à-dire de ce qui a été réellement ouvert et lu.
+    /// </para>
+    /// </remarks>
+    public static string Bibliographie(Recolte recolte)
+    {
+        if (recolte.Vide)
+        {
+            return "";
+        }
+
+        var texte = new StringBuilder("Sources consultées :").AppendLine();
+
+        foreach (var source in recolte.Sources)
+        {
+            texte.AppendLine()
+                .Append('[').Append(source.Etiquette).Append("] ").AppendLine(source.Titre)
+                .Append("    ").AppendLine(source.Url);
+
+            texte.Append("    ")
+                .Append(source.Publie.Length > 0 ? "publié le " + Datee(source.Publie) + " — " : "")
+                .Append("lu le ").AppendLine(Horodate(source.Lu));
+        }
+
+        return texte.ToString();
+    }
+
+    /// <summary>Une date de publication rendue lisible, ou telle quelle si elle ne se lit pas.</summary>
+    private static string Datee(string brut)
+        => DateTimeOffset.TryParse(brut, CultureInfo.InvariantCulture, DateTimeStyles.None, out var quand)
+            ? quand.ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("fr-FR"))
+            : brut;
 
     /// <summary>
     /// Écrit le dossier : la synthèse, les pages telles qu'elles ont été lues, et le manifeste.
@@ -300,10 +433,21 @@ public static class RechercheWeb
 
         foreach (var source in recolte.Sources)
         {
-            texte.Append("**[").Append(source.Rang).Append("] ").Append(source.Titre).AppendLine("**")
+            texte.Append("**[").Append(source.Etiquette).Append("] ").Append(source.Titre).AppendLine("**")
                 .AppendLine()
-                .Append("- <").Append(source.Url).AppendLine(">")
-                .Append("- lu le ").AppendLine(Horodate(source.Lu))
+                .Append("- <").Append(source.Url).AppendLine(">");
+
+            if (source.Auteur.Length > 0)
+            {
+                texte.Append("- auteur : ").AppendLine(source.Auteur);
+            }
+
+            if (source.Publie.Length > 0)
+            {
+                texte.Append("- publié le ").AppendLine(Datee(source.Publie));
+            }
+
+            texte.Append("- lu le ").AppendLine(Horodate(source.Lu))
                 .Append("- page conservée : `").Append(fichiers.GetValueOrDefault(source.Rang, "—")).AppendLine("`")
                 .AppendLine();
         }
@@ -330,8 +474,13 @@ public static class RechercheWeb
         foreach (var source in recolte.Sources)
         {
             texte.Append("<li><strong>").Append(Echapper(source.Titre)).Append("</strong><br>")
+                .Append("<em>").Append(Echapper(source.Etiquette)).Append("</em><br>")
                 .Append("<a href=\"").Append(Echapper(source.Url)).Append("\">").Append(Echapper(source.Url))
-                .Append("</a><br><small>lu le ").Append(Echapper(Horodate(source.Lu)))
+                .Append("</a><br><small>")
+                .Append(source.Publie.Length > 0
+                    ? "publié le " + Echapper(Datee(source.Publie)) + " — "
+                    : "")
+                .Append("lu le ").Append(Echapper(Horodate(source.Lu)))
                 .AppendLine("</small></li>");
         }
 
@@ -348,8 +497,12 @@ public static class RechercheWeb
             sources.Add(new JsonObject
             {
                 ["rang"] = source.Rang,
+                ["etiquette"] = source.Etiquette,
                 ["titre"] = source.Titre,
                 ["url"] = source.Url,
+                ["site"] = source.Site,
+                ["auteur"] = source.Auteur,
+                ["publie"] = source.Publie,
                 ["lu"] = source.Lu.ToString("o", CultureInfo.InvariantCulture),
                 ["fichier"] = fichiers.GetValueOrDefault(source.Rang, ""),
                 ["caracteres"] = source.Extrait.Length,
@@ -436,6 +589,83 @@ public static class RechercheWeb
     /// <summary>Le JavaScript qui lit le texte d'une page ordinaire.</summary>
     private const string LireLaPage =
         "(document.querySelector('article') || document.querySelector('main') || document.body).innerText";
+
+    /// <summary>Le JavaScript qui demande à la page qui l'a écrite.</summary>
+    /// <remarks>
+    /// <b>On ne devine pas l'auteur, on lit ce que la page déclare.</b> Les balises
+    /// <c>meta[name=author]</c>, <c>article:author</c> et le JSON-LD <c>schema.org</c> sont ce que
+    /// la publication affirme elle-même — c'est exactement le niveau de preuve qu'une citation
+    /// demande. Deviner à partir du texte visible produirait des signatures inventées, ce qui est
+    /// pire qu'une signature absente : une source fausse a l'air d'une source.
+    ///
+    /// <para>
+    /// Chaque champ peut manquer, et son absence est une réponse : une dépêche non signée reste
+    /// citable par sa publication et sa date. Ce qui ne doit jamais arriver est de combler le vide.
+    /// </para>
+    /// </remarks>
+    private const string LireLesMeta = """
+        (() => {
+          const m = n => {
+            const e = document.querySelector('meta[name="' + n + '"], meta[property="' + n + '"]');
+            return e ? (e.getAttribute('content') || '').trim() : '';
+          };
+          let auteur = m('author') || m('article:author') || m('og:article:author') || m('citation_author');
+          if (!auteur || auteur.startsWith('http')) {
+            for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+              try {
+                const pile = [JSON.parse(s.textContent)];
+                while (pile.length) {
+                  const d = pile.pop();
+                  if (!d || typeof d !== 'object') continue;
+                  if (Array.isArray(d)) { pile.push(...d); continue; }
+                  if (d['@graph']) pile.push(...d['@graph']);
+                  const a = d.author;
+                  if (a) {
+                    const n = Array.isArray(a) ? (a[0] || {}).name : (typeof a === 'string' ? a : a.name);
+                    if (n) { auteur = String(n).trim(); pile.length = 0; }
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+          if (auteur && auteur.startsWith('http')) auteur = '';
+          const t = document.querySelector('time[datetime]');
+          return JSON.stringify({
+            auteur: auteur || '',
+            site: m('og:site_name') || m('application-name') || '',
+            publie: m('article:published_time') || m('datePublished') || (t ? t.getAttribute('datetime') : '') || '',
+            titre: m('og:title') || document.title || ''
+          });
+        })()
+        """;
+
+    /// <summary>Ce que la page déclare d'elle-même, ou des champs vides.</summary>
+    private static (string Site, string Auteur, string Publie, string Titre) Signature(string rendu)
+    {
+        try
+        {
+            var noeud = JsonNode.Parse(rendu);
+
+            if (noeud is JsonValue valeur && valeur.TryGetValue<string>(out var dedans))
+            {
+                noeud = JsonNode.Parse(dedans);
+            }
+
+            if (noeud is JsonObject objet)
+            {
+                return (
+                    objet["site"]?.GetValue<string>() ?? "",
+                    objet["auteur"]?.GetValue<string>() ?? "",
+                    objet["publie"]?.GetValue<string>() ?? "",
+                    objet["titre"]?.GetValue<string>() ?? "");
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return ("", "", "", "");
+    }
 
     private static string Nettoyer(string brut)
     {

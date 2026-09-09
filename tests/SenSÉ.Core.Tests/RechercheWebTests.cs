@@ -64,6 +64,18 @@ public class RechercheWebTests : IDisposable
                 });
             }
 
+            // La page se declare : c'est ce que les balises meta et le JSON-LD rendent.
+            if (expression.Contains("og:site_name", StringComparison.Ordinal))
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    auteur = "Ariane Bonzon",
+                    site = "Le Monde",
+                    publie = "2026-09-09T06:30:00+02:00",
+                    titre = "L'Iran condamne les frappes",
+                });
+            }
+
             return "Texte complet de " + courante + " avec beaucoup de contenu utile.";
         }
 
@@ -179,10 +191,97 @@ public class RechercheWebTests : IDisposable
 
         var rendu = RechercheWeb.Rediger(RechercheWeb.Moissonner("iran", naviguer, lire));
 
-        Assert.Contains("[1]", rendu, StringComparison.Ordinal);
+        Assert.Contains("[Le Monde — Ariane Bonzon]", rendu, StringComparison.Ordinal);
         Assert.Contains("https://lemonde.fr/iran", rendu, StringComparison.Ordinal);
-        Assert.Contains("cite chaque affirmation", rendu, StringComparison.Ordinal);
+        Assert.Contains("Cite chaque affirmation", rendu, StringComparison.Ordinal);
         Assert.Contains("plutôt que de le compléter", rendu, StringComparison.Ordinal);
+    }
+
+    /// <summary>La citation porte la publication et la signature, jamais un numéro.</summary>
+    /// <remarks>
+    /// <b>Un numéro ne survit pas au copier-coller.</b> Sorti du fil, « [2] » ne désigne plus rien :
+    /// la phrase perd sa source au moment précis où elle part vivre ailleurs — dans un document,
+    /// un courrier, un dossier. Or c'est là qu'une citation compte, et parfois juridiquement.
+    /// </remarks>
+    [Fact]
+    public void ACitationCarriesThePublisherAndTheBylineNeverANumber()
+    {
+        var (naviguer, lire) = Faux([]);
+
+        var recolte = RechercheWeb.Moissonner("iran", naviguer, lire);
+
+        Assert.Equal("Le Monde — Ariane Bonzon", recolte.Sources[0].Etiquette);
+        Assert.Equal("Ariane Bonzon", recolte.Sources[0].Auteur);
+        Assert.Equal("Le Monde", recolte.Sources[0].Site);
+        Assert.Contains("2026-09-09", recolte.Sources[0].Publie, StringComparison.Ordinal);
+
+        // Le titre declare par la page l'emporte sur celui du moteur.
+        Assert.Equal("L'Iran condamne les frappes", recolte.Sources[0].Titre);
+    }
+
+    /// <summary>Une page non signée reste citable par sa publication.</summary>
+    /// <remarks>
+    /// <b>L'absence de signature est une réponse, pas un trou à combler.</b> Une dépêche non signée
+    /// se cite par son organe et sa date. Inventer un auteur serait pire qu'aucun : une source
+    /// fausse a l'air d'une source.
+    /// </remarks>
+    [Fact]
+    public void AnUnsignedPageIsStillCitableByItsPublisher()
+    {
+        var nue = RechercheWeb.Moissonner(
+            "iran",
+            _ => "",
+            e => e.Contains("result__a", StringComparison.Ordinal)
+                ? JsonSerializer.Serialize(new[]
+                {
+                    new { titre = "Dépêche", url = "https://www.reuters.com/depeche", apercu = "a" },
+                })
+                : e.Contains("og:site_name", StringComparison.Ordinal)
+                    ? "{\"auteur\":\"\",\"site\":\"\",\"publie\":\"\",\"titre\":\"\"}"
+                    : "Le texte de la dépêche.");
+
+        // Ni auteur ni nom de publication declares : le domaine, sans le « www. ».
+        Assert.Equal("reuters.com", nue.Sources[0].Etiquette);
+        Assert.Empty(nue.Sources[0].Auteur);
+    }
+
+    /// <summary>La bibliographie vient de la récolte, jamais du modèle.</summary>
+    /// <remarks>
+    /// <b>Le modèle rédigeait la sienne, et elle était fausse.</b> Session du 9 septembre 2026 : il
+    /// n'avait cité que deux sources et a terminé par « Sources : Le Monde [1], France Info [2],
+    /// 20 Minutes [3-4], La Dépêche [5] » — trois entrées jamais employées, et une attribution
+    /// inversée, la source [2] étant 20 Minutes et non France Info.
+    ///
+    /// <para>
+    /// C'est le seul endroit du dispositif où une erreur est indétectable pour le lecteur : une
+    /// bibliographie a l'autorité de l'exactitude. Elle ne doit donc pas être générée.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheBibliographyComesFromTheHarvestNeverFromTheModel()
+    {
+        var (naviguer, lire) = Faux([]);
+
+        var bibliographie = RechercheWeb.Bibliographie(RechercheWeb.Moissonner("iran", naviguer, lire));
+
+        Assert.Contains("[Le Monde — Ariane Bonzon]", bibliographie, StringComparison.Ordinal);
+        Assert.Contains("https://lemonde.fr/iran", bibliographie, StringComparison.Ordinal);
+        Assert.Contains("publié le 09/09/2026", bibliographie, StringComparison.Ordinal);
+        Assert.Contains("lu le ", bibliographie, StringComparison.Ordinal);
+
+        // Exactement autant d'entrees que de sources reellement recoltees, ni plus ni moins.
+        Assert.Equal(2, bibliographie.Split('[').Length - 1);
+    }
+
+    /// <summary>Le modèle reçoit l'interdiction d'écrire sa propre liste de sources.</summary>
+    [Fact]
+    public void TheModelIsForbiddenFromWritingItsOwnSourceList()
+    {
+        var (naviguer, lire) = Faux([]);
+
+        var rendu = RechercheWeb.Rediger(RechercheWeb.Moissonner("iran", naviguer, lire));
+
+        Assert.Contains("N'ÉCRIS AUCUNE LISTE DE SOURCES", rendu, StringComparison.Ordinal);
     }
 
     /// <summary>Le dossier contient la synthèse, les pages lues, et un manifeste lisible.</summary>
