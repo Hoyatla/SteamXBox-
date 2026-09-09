@@ -39,7 +39,7 @@ cette propriété.
 
 | Rôle | Modèle | Moteur | Voie | Port | Poids |
 |---|---|---|---|---|---|
-| **orchestre** | Ling 3.0 tiny | llama.cpp | processeur | 8082 | 4,58 Go |
+| **orchestre** | Qwen 2.5 Coder 3B | llama.cpp | processeur | 8082 | (mêmes poids que codage) |
 | **texte** | Qwen 3.5 9B + projecteur | llama.cpp | processeur | 8081 | 6,15 Go |
 | **codage** | Qwen 2.5 Coder 3B | llama.cpp | processeur | 8083 | 1,80 Go |
 | **audio** | Whisper large-v3-turbo | whisper.cpp | **carte** | 8084 | 0,57 Go |
@@ -75,7 +75,7 @@ diffusion.
 
 ### b. Deux moteurs sur la même voie se partagent le calcul
 
-Le parallélisme n'est gratuit qu'**entre** les voies. Ling et le 9B sont tous
+Le parallélisme n'est gratuit qu'**entre** les voies. L'aiguilleur et le 9B sont tous
 deux sur le processeur : résidents ensemble, oui ; calculant ensemble, ils se
 partagent les cœurs.
 
@@ -89,16 +89,15 @@ diviser.
 ### c. Le budget mémoire ferme la question
 
 ```
-orchestre  Ling 3.0 tiny      4,58 Go
-texte      Qwen 9B + mmproj   6,15 Go   (7,03 Gio résidents avec son cache)
-codage     Qwen Coder 3B      1,80 Go
-audio      Whisper turbo      0,57 Go
-                              ────────
-poids                        13,10 Go   sur 31,8 Gio
+orchestre + codage  Qwen Coder 3B      1,80 Go   (un fichier, deux ports)
+texte               Qwen 9B + mmproj   6,15 Go   (7,03 Gio résidents avec son cache)
+audio               Whisper turbo      0,57 Go
+                                       ────────
+poids                                  8,52 Go   sur 31,8 Gio
 ```
 
-Les quatre tiennent en RAM. Ce qui ne tient pas, c'est leur calcul simultané —
-et la règle (b) l'interdit déjà.
+Les trois tiennent en RAM. Ce qui ne tient pas, c'est leur calcul simultané — et
+la règle (b) l'interdit déjà.
 
 Côté carte, la contrainte est plus dure : **un seul modèle de diffusion à la
 fois** (9,65 Go par expert Wan sur 12,28 Gio), et Whisper doit lui laisser la
@@ -115,7 +114,7 @@ Beaucoup de dispatches se décident sans rien demander à personne : un `.wav`
 déposé va à l'audio, un `.png` à la vision, « écris-moi un script » au codage.
 **Ce qui se décide gratuitement ne doit pas coûter une génération.**
 
-### Ling décide le reste
+### Le modèle décide le reste
 
 L'orchestrateur reçoit la liste des voies disponibles avec leur coût, et une
 règle courte :
@@ -129,7 +128,7 @@ la longueur de l'invite. Une invite de 200 jetons et trois jetons de réponse
 coûtent une demi-seconde ; la même décision prise derrière les 6 500 jetons de
 consigne du modèle de dialogue en coûterait douze.
 
-**C'est pourquoi Ling a son propre serveur et son propre port.** Pas parce qu'il
+**C'est pourquoi l'aiguilleur a son propre serveur et son propre port.** Pas parce qu'il
 doit être petit — parce qu'il ne doit pas partager le cache de préfixe du modèle
 de dialogue. Réécrire le message système invalide ce cache en entier, et le tour
 suivant repaie l'ingestion complète.
@@ -198,7 +197,7 @@ ports, et que fermer la fenêtre les arrête tous les deux sans orphelin.
 plus simple des trois moteurs et il ne dispute rien au processeur. *Fini quand :*
 un fichier son déposé dans l'Assistant devient du texte.
 
-**3 — L'aiguillage.** Ling sur son port, son invite courte, les règles avant le
+**3 — L'aiguillage.** Le Coder 3B sur un second port, son invite courte, les règles avant le
 modèle, et le choix inscrit après coup. *Fini quand :* une même demande aiguille
 deux fois vers la même voie, et qu'une voie absente est dite plutôt que tentée.
 
