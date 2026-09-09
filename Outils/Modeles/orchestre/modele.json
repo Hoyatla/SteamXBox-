@@ -1,42 +1,37 @@
 {
-  "id": "ling-3.0-tiny",
-  "nom": "Ling 3.0 tiny (aiguillage)",
+  "id": "aiguilleur",
+  "nom": "Aiguilleur — Qwen 2.5 Coder 3B",
   "moteur": "llama.cpp",
   "espace": "Texte",
   "role": "orchestre",
   "racine": "orchestre",
   "port": 8082,
   "fichiers": {
-    "modele": "Ling-3.0-tiny-Q4_K_M.gguf"
+    "modele": "../codage/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf"
   },
+  "_fichiers": "Le MEME fichier que codage/. Deux roles, un poids sur le disque, et si le systeme partage les pages en lecture, un seul poids en memoire. Ce qui differe entre les deux serveurs est l'invite systeme et le contexte, pas le modele.",
 
-  "taille_mo": 4689,
+  "taille_mo": 1840,
   "materiel": "processeur",
-  "contexte": 8192,
-  "_contexte": "Petit, et c'est le point. Aiguiller demande ~200 jetons d'invite et trois de reponse. Lui donner 65 536 comme au modele de dialogue gaspillerait la memoire du cache pour une decision qui tient en une phrase.",
+  "contexte": 4096,
+  "_contexte": "Petit, et c'est le point. Aiguiller demande ~160 jetons d'invite et un mot de reponse. Un grand contexte ne servirait qu'a reserver de la memoire pour rien.",
 
-  "arguments": ["-ngl", "0", "--parallel", "1", "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--poll", "0", "--prio", "-1"],
-
-  "_serveur_propre": "Il a son port a lui, et ce n'est pas par confort. Partager le serveur du modele de dialogue ferait alterner deux invites systeme differentes ; or reecrire le message systeme invalide le cache de prefixe en entier, et le tour suivant repaierait l'ingestion complete — douze secondes pour les 6 500 jetons de consigne. Le port separe est ce qui rend l'aiguillage bon marche.",
-
-  "actif": false,
-  "_actif": "MESURE LE 9 SEPTEMBRE 2026, ET ECARTE DU ROLE D'AIGUILLEUR. Banc de huit demandes a router vers cinq voies, meme invite et memes cas pour tous les candidats :",
+  "arguments": ["-ngl", "0", "--parallel", "1", "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--reasoning", "off", "--poll", "0", "--prio", "-1"],
+  "_reasoning_off": "Explicite, et pas par principe : un aiguilleur qui reflechit coute dix secondes la decision. Mesure sur Ling 3.0 tiny, ecarte pour cette raison.",
 
   "mesures": {
-    "reflexion_coupee":  { "justes": "4/8", "latence_ms": 284 },
-    "reflexion_rendue":  { "justes": "6/8", "latence_ms": 10081 },
-    "comparaison_qwen9b":       { "justes": "7/8", "latence_ms": 848 },
-    "comparaison_coder3b":      { "justes": "7/8", "latence_ms": 232 },
-    "sur": "i7-14700KF, processeur seul, invite de ~180 jetons avec trois exemples"
+    "routage": { "justes": "7/8", "latence_ms": 232, "invite_jetons": 161 },
+    "concurrents": {
+      "ling-3.0-tiny-sans-reflexion": { "justes": "4/8", "latence_ms": 284 },
+      "ling-3.0-tiny-avec-reflexion": { "justes": "6/8", "latence_ms": 10081 },
+      "qwen35-9b":                    { "justes": "7/8", "latence_ms": 848 }
+    },
+    "sur": "i7-14700KF, processeur seul, 9 septembre 2026, huit demandes vers cinq voies"
   },
 
-  "_verdict": "Ling raisonne par defaut, et la reflexion coute DIX SECONDES par decision — redhibitoire pour un aiguilleur dont tout l'interet est d'etre bon marche. Reflexion coupee il repond en 284 ms mais ne juste qu'une fois sur deux : il repond a la demande au lieu de l'aiguiller, ou colle a sa reponse precedente. Dans les deux reglages il est battu par des modeles deja presents.",
+  "_biais_a_corriger": "Modele de code : une question technique lui ressemble a du code. « Explique-moi la difference entre RAM et VRAM » est parti vers codage. L'invite doit dire qu'une question a laquelle ON REPOND EN PROSE va vers texte, meme technique.",
 
-  "_ce_que_cela_n_etablit_pas": "Huit cas, une invite, une tache. Ceci ne dit rien de Ling sur du travail lourd en raisonnement, ou il est peut-etre excellent. Il dit seulement qu'il n'est pas l'aiguilleur de ce systeme.",
-
-  "_remplacant": "Qwen2.5-Coder-3B — voir codage/modele.json. 7/8 en 232 ms, la meilleure justesse ET la meilleure latence des quatre, pour 1,80 Go deja telecharges.",
-
-  "_famille": "Ling est une famille MoE d'inclusionAI. Un MoE annonce deux tailles : les parametres totaux, qu'il faut tous loger en RAM, et les actifs, qui seuls calculent. « tiny » decrit les actifs — d'ou 4,58 Go sur le disque pour un modele dit minuscule. Sur cette machine c'est le bon compromis : rapide comme un petit, plus juste qu'un petit.",
+  "_deuxieme_avis": "Le 9B fait 7/8 sur le meme banc, en 848 ms. Quand l'aiguilleur hesite ou quand la demande porte a consequence, il y a donc un arbitre plus lent et deja resident. Voir docs/orchestre-multimodal.md §10.",
 
   "produit": "decision"
 }

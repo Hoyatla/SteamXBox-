@@ -279,3 +279,53 @@ Il reste sur le disque, son manifeste marqué `"actif": false` avec le détail d
 mesure. Un modèle qui raisonne dix secondes n'est pas mauvais : il est mal
 employé. S'il trouve un rôle où l'on paie volontiers dix secondes pour une
 meilleure réponse, il est là.
+
+---
+
+## 10. Le généraliste comme second avis
+
+Le 9B n'est pas seulement le modèle de dialogue. C'est un généraliste : il écrit
+du code, il lit des images, il raisonne sur ce que les spécialistes produisent.
+Et le banc du §9 a montré qu'il aiguille aussi bien que l'aiguilleur, en 848 ms
+au lieu de 232.
+
+**Il y a donc un arbitre déjà résident, et cela ne coûte rien de plus.**
+
+Trois emplois qui découlent de la mesure, et non d'une intuition :
+
+**Départager un aiguillage douteux.** L'aiguilleur se trompe une fois sur huit, et
+son erreur est d'un type connu — une question technique lui paraît du code. Quand
+sa réponse est hors liste, ou qu'il hésite entre deux voies, le 9B tranche pour
+600 ms de plus. On paie l'arbitrage seulement quand il sert.
+
+**Relire ce que le spécialiste a produit.** Un modèle de 3 milliards de paramètres
+écrit du code plausible ; un de 9 milliards voit mieux ce qui cloche. La relecture
+n'a de sens que dans ce sens-là — le petit ne corrigera pas utilement le gros.
+
+**Décrire une image que le système vient de fabriquer.** Flux produit, le 9B
+regarde. C'est la seule voie qui permette au système de vérifier son propre
+travail visuel sans demander à l'utilisateur.
+
+### Ce que le 9B fait et ne fait pas — vérifié
+
+Son projecteur déclare `clip.has_vision_encoder` et une vingtaine de clés
+`clip.vision.*`. **Aucune clé audio.**
+
+| | 9B |
+|---|---|
+| discuter, raisonner, rédiger | oui |
+| écrire du code | oui, en généraliste |
+| **lire** une image | oui, par le projecteur |
+| **fabriquer** une image | non — c'est Flux |
+| entendre un son | **non** — c'est Whisper |
+
+La distinction entre lire et fabriquer n'est pas un détail : elle décide de ce que
+l'aiguilleur doit envoyer où. « Décris-moi cette photo » va au 9B ; « fais-moi une
+photo » va à l'image.
+
+### La règle qui en découle
+
+**Le généraliste est le filet, pas le premier réflexe.** L'aiguilleur décide en
+232 ms ; on ne convoque le 9B que lorsque la décision est douteuse ou l'enjeu réel.
+Le convoquer systématiquement reviendrait à n'avoir jamais eu d'aiguilleur — et à
+payer 848 ms là où 232 suffisaient.
