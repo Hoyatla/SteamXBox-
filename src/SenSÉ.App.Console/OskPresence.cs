@@ -51,7 +51,7 @@ internal static class OskPresence
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, naming.VisibleBeatFile);
+            var path = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.VisibleBeatFile);
             var info = new FileInfo(path);
 
             // Absent is a perfectly good answer, and the ordinary one: the overlay removes the file

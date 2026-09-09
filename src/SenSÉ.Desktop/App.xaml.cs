@@ -25,8 +25,8 @@ public partial class App : Application
 {
     public static SettingsService SettingsSvc { get; private set; } = null!;
 
-    /// <summary>Where an unhandled exception is written, next to the executable.</summary>
-    private static string CrashLog => System.IO.Path.Combine(AppContext.BaseDirectory, "SenSÉ-desktop-crash.log");
+    /// <summary>Where an unhandled exception is written, with the other diagnostics.</summary>
+    private static string CrashLog => CheminDebug.DebugLog("desktop-crash");
 
     /// <summary>
     /// Records an unhandled exception instead of letting the environment vanish.
@@ -67,6 +67,7 @@ public partial class App : Application
 
         // Opened before anything else can fail, so that everything below leaves a trace.
         UiLog.Start("desktop");
+
 
         // The dispatcher handler only covers the UI thread. An exception on a worker thread ends the
         // process outright, which from the screen looks exactly like SenSÉ vanishing for no

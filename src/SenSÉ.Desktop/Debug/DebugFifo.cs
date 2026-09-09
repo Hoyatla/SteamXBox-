@@ -20,61 +20,33 @@ namespace SenSÉ.Desktop.Debug;
 /// </remarks>
 public static class DebugFifo
 {
-    private const string Racine = "Debug";
-    private const string ExtensionOsk = ".osk";
-    private const string ExtensionSignal = ".signal";
-    private const string ExtensionDebug = ".debug";
-    private static readonly TimeSpan Retention = TimeSpan.FromDays(30);
-
     /// <summary>
     /// Assure que les trois sous-dossiers existent et purge ce qui est
     /// plus vieux que la retention. Idempotent et rapide.
     /// </summary>
+    /// <remarks>
+    /// <b>Deux dossiers sur trois n'etaient jamais purges.</b> Ce service filtrait par extension —
+    /// <c>Debug/osk/*.osk</c> et <c>Debug/debug/*.debug</c> — alors que les ecrivains y deposent
+    /// des <c>.log</c> : <c>SenSÉ-Xbox-790c71b1-debug.log</c>, <c>SenSÉ-desktop-debug.log</c>.
+    /// Seul <c>signal/</c>, dont l'extension coincidait, etait tenu. Les deux autres grossissaient
+    /// sans fin, et le menage annonce dans le journal portait sur du vide.
+    ///
+    /// <para>
+    /// La regle est desormais l'age seul, tenue par <see cref="CheminDebug.Purger"/> a cote de
+    /// ceux qui composent ces chemins — un filtre qui doit deviner comment un autre fichier a ete
+    /// nomme se trompe des que ce nom change.
+    /// </para>
+    /// </remarks>
     public static int Purger(Action<string>? journal = null)
     {
-        var racine = Path.Combine(AppContext.BaseDirectory, Racine);
-        Directory.CreateDirectory(racine);
+        SenSÉ.Core.Diagnostics.CheminDebug.AssurerRacine();
 
-        var effaces = PurgerSousDossier(Path.Combine(racine, "osk"), ExtensionOsk, journal);
-        effaces += PurgerSousDossier(Path.Combine(racine, "signal"), ExtensionSignal, journal);
-        effaces += PurgerSousDossier(Path.Combine(racine, "debug"), ExtensionDebug, journal);
+        var effaces = SenSÉ.Core.Diagnostics.CheminDebug.Purger(
+            SenSÉ.Core.Diagnostics.CheminDebug.Peremption);
 
         if (effaces > 0)
         {
             journal?.Invoke($"DebugFifo: {effaces} fichier(s) de debug purge(s) (> 30 jours)");
-        }
-        return effaces;
-    }
-
-    private static int PurgerSousDossier(string dossier, string extensionAttendue, Action<string>? journal)
-    {
-        Directory.CreateDirectory(dossier);
-        var limite = DateTime.Now - Retention;
-        var effaces = 0;
-
-        var fichiers = Directory.GetFiles(dossier, "*" + extensionAttendue)
-            .OrderBy(f => File.GetLastWriteTime(f))
-            .ToList();
-
-        foreach (var fichier in fichiers)
-        {
-            try
-            {
-                if (File.GetLastWriteTime(fichier) < limite)
-                {
-                    File.Delete(fichier);
-                    effaces++;
-                    journal?.Invoke(
-                        $"DebugFifo: purge {Path.GetFileName(fichier)} ({extensionAttendue})");
-                }
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-                journal?.Invoke($"DebugFifo: pas les droits sur {Path.GetFileName(fichier)}");
-            }
         }
 
         return effaces;

@@ -271,7 +271,11 @@ internal static class ServeursMcp
     /// </remarks>
     private static void BrancherJournal(Process processus, string nom)
     {
-        var chemin = System.IO.Path.Combine(AppContext.BaseDirectory, $"{nom}.log");
+        // Sous Debug/debug/, avec les autres journaux, et non a la racine du produit ou ils
+        // voisinaient avec les binaires.
+        CheminDebug.AssurerRacine();
+
+        var chemin = CheminDebug.DebugLog(nom);
         var verrou = new object();
 
         try

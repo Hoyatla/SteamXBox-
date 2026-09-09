@@ -154,7 +154,11 @@ internal static class ServeurAtelier
     /// </summary>
     private static void BrancherJournal(Process processus, string nom)
     {
-        var chemin = System.IO.Path.Combine(AppContext.BaseDirectory, $"{nom}.log");
+        // Sous Debug/debug/, comme ServeursMcp : « a cote des autres journaux » etait deja
+        // l'intention ecrite ici, la racine du produit n'etait pas cet endroit.
+        SenSÉ.Core.Diagnostics.CheminDebug.AssurerRacine();
+
+        var chemin = SenSÉ.Core.Diagnostics.CheminDebug.DebugLog(nom);
         var verrou = new object();
 
         try

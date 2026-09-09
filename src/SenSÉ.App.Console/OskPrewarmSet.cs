@@ -167,7 +167,9 @@ internal static class OskPrewarmSet
 
     private static void WriteShowSignal(OskInstanceNaming naming, Action<string> log)
     {
-        var signal = Path.Combine(AppContext.BaseDirectory, naming.ShowSignalFile);
+        SenSÉ.Core.Diagnostics.CheminDebug.AssurerRacine();
+
+        var signal = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.ShowSignalFile);
 
         File.WriteAllText(signal, "show");
         log($"OSK prewarm: show signal written for '{naming.Suffix}'.");
@@ -190,7 +192,8 @@ internal static class OskPrewarmSet
                 try
                 {
                     var naming = OskInstanceNaming.FromSuffix(suffix);
-                    File.WriteAllText(Path.Combine(AppContext.BaseDirectory, naming.ExitSignalFile), "exit");
+                    File.WriteAllText(
+                        SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.ExitSignalFile), "exit");
                 }
                 catch (Exception exception)
                 {

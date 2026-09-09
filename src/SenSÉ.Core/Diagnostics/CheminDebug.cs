@@ -24,8 +24,22 @@ public static class CheminDebug
 
     public static string Racine { get; } = Path.Combine(AppContext.BaseDirectory, "Debug");
 
+    /// <summary>
+    /// Le chemin d'un signal, que <paramref name="nom"/> porte ou non son extension.
+    /// </summary>
+    /// <remarks>
+    /// <b>Tolerant volontairement.</b> Les appelants tiennent leurs noms de deux endroits :
+    /// <c>OskInstanceNaming</c> les rend complets (<c>osk-close-b3784bec.signal</c>) et
+    /// <c>DesktopSignal</c> aussi (<c>desktop-search.signal</c>), tandis que d'autres passent le
+    /// radical seul. Exiger l'une des deux formes produirait, au premier oubli, un
+    /// <c>osk-close.signal.signal</c> que personne n'attend — c'est-a-dire un signal ecrit, jamais
+    /// lu, et une panne muette du genre qui coute une soiree.
+    /// </remarks>
     public static string Signal(string nom) =>
-        Path.Combine(Racine, SousDossierSignal, nom + ".signal");
+        Path.Combine(
+            Racine,
+            SousDossierSignal,
+            nom.EndsWith(".signal", StringComparison.OrdinalIgnoreCase) ? nom : nom + ".signal");
 
     public static string OskLog(string stem, string? suffixe = null) =>
         Path.Combine(Racine, SousDossierOsk,
@@ -40,5 +54,62 @@ public static class CheminDebug
         Directory.CreateDirectory(Path.Combine(Racine, SousDossierSignal));
         Directory.CreateDirectory(Path.Combine(Racine, SousDossierOsk));
         Directory.CreateDirectory(Path.Combine(Racine, SousDossierDebug));
+    }
+
+    /// <summary>Un mois : au-dela, une trace de diagnostic n'apprend plus rien a personne.</summary>
+    public static readonly TimeSpan Peremption = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// Retire les traces plus vieilles que <paramref name="age"/>. Rend le nombre de fichiers partis.
+    /// </summary>
+    /// <remarks>
+    /// <b>Par age, et non « tout vider a l'ouverture ».</b> Ces dossiers ne contiennent pas que des
+    /// traces : un <c>.signal</c> est un ORDRE EN VOL. Le clavier met plusieurs secondes a se lever,
+    /// et une bascule pressee pendant ce temps ecrit son signal avant que le guetteur n'existe —
+    /// c'est ecrit noir sur blanc dans <c>SenSÉ.Osk</c>, et c'est la raison pour laquelle le clavier
+    /// semblait dur a ouvrir avant qu'on ne l'y garde. Un balayage au demarrage avalerait cette
+    /// premiere pression.
+    ///
+    /// <para>
+    /// L'age s'en moque : ce qui a trente jours n'est l'ordre de personne, et le journal en cours
+    /// d'ecriture est frais par construction. Chaque effacement est protege separement — un fichier
+    /// tenu ouvert par un autre processus se saute, il ne fait pas echouer le menage.
+    /// </para>
+    /// </remarks>
+    public static int Purger(TimeSpan age)
+    {
+        var limite = DateTime.UtcNow - age;
+        var partis = 0;
+
+        foreach (var sous in new[] { SousDossierSignal, SousDossierOsk, SousDossierDebug })
+        {
+            var dossier = Path.Combine(Racine, sous);
+
+            if (!Directory.Exists(dossier))
+            {
+                continue;
+            }
+
+            foreach (var fichier in Directory.EnumerateFiles(dossier))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(fichier) >= limite)
+                    {
+                        continue;
+                    }
+
+                    File.Delete(fichier);
+                    partis++;
+                }
+                catch (Exception exception)
+                    when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // Tenu ouvert, ou protege : ce n'est pas une panne, c'est un fichier de moins.
+                }
+            }
+        }
+
+        return partis;
     }
 }

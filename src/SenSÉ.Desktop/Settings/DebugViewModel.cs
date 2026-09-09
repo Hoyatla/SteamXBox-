@@ -47,11 +47,23 @@ public partial class DebugViewModel : ObservableObject
 
     public static string AppVersion => AppVersionInfo.Display;
 
+    /// <summary>Le journal que ce processus est en train d'ecrire.</summary>
+    /// <remarks>
+    /// <b>Demande a celui qui l'ecrit, plutot que de recomposer son chemin.</b> Cet ecran a lu
+    /// « SenSÉ-debug.log » a la racine du produit pendant que <c>UiLog</c> ecrivait deja dans
+    /// <c>Debug/debug/</c> : la page affichait « aucun fichier de log trouve » alors que le journal
+    /// existait, se remplissait, et etait a deux dossiers de la. Un chemin recopie a deux endroits
+    /// finit toujours par ne plus designer le meme fichier.
+    /// </remarks>
+    private static string CheminJournal
+        => SenSÉ.Core.Diagnostics.UiLog.Path
+           ?? SenSÉ.Core.Diagnostics.CheminDebug.DebugLog("desktop");
+
     public void RefreshSystemInfo()
     {
         OsVersion = RuntimeInformation.OSDescription;
         DotNetVersion = RuntimeInformation.FrameworkDescription;
-        LogFilePath = Path.Combine(AppContext.BaseDirectory, "SenSÉ-debug.log");
+        LogFilePath = CheminJournal;
     }
 
     private DeviceDetectionService? _devices;
@@ -198,7 +210,7 @@ public partial class DebugViewModel : ObservableObject
     {
         try
         {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "SenSÉ-debug.log");
+            var logPath = CheminJournal;
             if (File.Exists(logPath))
             {
                 var lines = File.ReadLines(logPath).ToList();
@@ -280,7 +292,7 @@ public partial class DebugViewModel : ObservableObject
         sb.AppendLine("=== Last 200 log lines ===");
         try
         {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "SenSÉ-debug.log");
+            var logPath = CheminJournal;
             if (File.Exists(logPath))
             {
                 var lines = File.ReadLines(logPath).ToList();

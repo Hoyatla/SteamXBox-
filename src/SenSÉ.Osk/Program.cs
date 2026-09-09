@@ -412,10 +412,15 @@ public static class Program
         var naming = SenSÉ.Core.Osk.OskInstanceNaming.FromSuffix(ReadInstanceSuffix());
         Log($"Instance suffix '{naming.Suffix}' -> pipe {naming.PadPipeName}");
 
-        var closeSignalPath = Path.Combine(AppContext.BaseDirectory, naming.CloseSignalFile);
-        var showSignalPath = Path.Combine(AppContext.BaseDirectory, naming.ShowSignalFile);
-        var exitSignalPath = Path.Combine(AppContext.BaseDirectory, naming.ExitSignalFile);
-        var visibleBeatPath = Path.Combine(AppContext.BaseDirectory, naming.VisibleBeatFile);
+        // Sous Debug/signal/. Ceux qui ecrivent ces quatre fichiers — l'interface, le noyau, le
+        // prechauffage — y sont deja ; lire ailleurs revenait a ne jamais recevoir l'ordre de se
+        // fermer ni celui de quitter.
+        SenSÉ.Core.Diagnostics.CheminDebug.AssurerRacine();
+
+        var closeSignalPath = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.CloseSignalFile);
+        var showSignalPath = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.ShowSignalFile);
+        var exitSignalPath = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.ExitSignalFile);
+        var visibleBeatPath = SenSÉ.Core.Diagnostics.CheminDebug.Signal(naming.VisibleBeatFile);
         // Close and exit signals left by a previous run are stale and must go. A show signal is not:
         // the resident overlay takes several seconds to start, and a toggle pressed during that
         // window writes its signal before the watcher exists. Deleting it here swallowed the very

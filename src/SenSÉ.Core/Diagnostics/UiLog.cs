@@ -64,6 +64,10 @@ public static class UiLog
 
             try
             {
+                // Le dossier avant le fichier : sans lui, l'ouverture echoue, le catch ci-dessous
+                // avale l'echec, et le produit tourne sans journal sans que rien ne le dise.
+                CheminDebug.AssurerRacine();
+
                 var path = CheminDebug.DebugLog(_process);
 
                 _log = new DiagnosticLog(path, LogLevel.Debug, LogCategory.Ui);

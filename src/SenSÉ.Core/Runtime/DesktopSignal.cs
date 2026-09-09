@@ -35,8 +35,13 @@ public static class DesktopSignal
     {
         try
         {
+            // Sous Debug/signal/, et non a la racine du produit : c'est la que le guetteur ecoute.
+            // Les deux se sont deja contredits — le guetteur avait ete deplace, pas l'ecrivain, et
+            // le bouton Menu de la manette ne faisait plus rien du tout.
+            SenSÉ.Core.Diagnostics.CheminDebug.AssurerRacine();
+
             File.WriteAllText(
-                Path.Combine(AppContext.BaseDirectory, name),
+                SenSÉ.Core.Diagnostics.CheminDebug.Signal(name),
                 DateTime.UtcNow.Ticks.ToString());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
