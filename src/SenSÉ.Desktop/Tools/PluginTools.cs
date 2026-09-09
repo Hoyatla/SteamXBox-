@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -237,7 +239,42 @@ public static class PluginTools
         try
         {
             var procR = Process.Start(new ProcessStartInfo(chemin) { UseShellExecute = false });
+
+            if (procR is null)
+
+            {
+
+                log?.Invoke($"{label} : Process.Start a renvoye null (echec lancement).");
+
+                return $"{label} : echec du lancement.";
+
+            }
+
             JobEnfants.Inscrire(procR);
+
+            // Amene la fenetre principale du subprocess au premier plan : Process.Start
+            // retourne avant que la fenetre soit prete, et sans cette etape la fenetre
+            // reste derriere celle de l environnement. WaitForInputIdle ne suffit pas
+            // toujours pour les apps WPF, d ou la boucle avec timeout.
+            try
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                IntPtr hWnd = IntPtr.Zero;
+                while (DateTime.UtcNow < deadline)
+                {
+                    procR.Refresh();
+                    hWnd = procR.MainWindowHandle;
+                    if (hWnd != IntPtr.Zero) break;
+                    Thread.Sleep(100);
+                }
+                if (hWnd != IntPtr.Zero)
+                {
+                    ShowWindow(hWnd, SwRestore);
+                    SetForegroundWindow(hWnd);
+                }
+            }
+            catch { /* pas de MainWindowHandle, le subprocess n en a peut-etre pas */ }
+
             log?.Invoke($"{label} lance.");
             return "";
         }
@@ -1161,4 +1198,16 @@ public static class PluginTools
 
         return "";
     }
+
+    /// <summary>Win32 : amene une fenetre au premier plan (meme processus ou non).</summary>
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>Win32 : restaure (SW_RESTORE=9) ou affiche (SW_SHOW=5) une fenetre.</summary>
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private const int SwRestore = 9;
+    private const int SwShow = 5;
+
 }
