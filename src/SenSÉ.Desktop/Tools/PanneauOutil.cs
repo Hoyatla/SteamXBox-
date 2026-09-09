@@ -139,7 +139,19 @@ public sealed class PanneauOutil : UserControl
 
         if (panneau is null)
         {
-            return $"Le panneau de « {outil} » n'est pas ouvert.";
+            // LE MESSAGE DISAIT VRAI ET NE MENAIT NULLE PART, CE QUI A COUTE QUATRE FENETRES.
+            //
+            // Session du 9 septembre 2026 : le modele voulait ecrire un document, a lance l'outil,
+            // a recu cette phrase, a rouvert l'outil — « ouvrir_outil » repondant « ouvert »,
+            // puisqu'il ouvre bien une FENETRE, pas un PANNEAU — a retente, et a boucle jusqu'a
+            // remplir son contexte. Quatre fenetres a l'ecran, zero document sur le disque.
+            //
+            // Un refus qui ne dit pas quoi faire a la place fait recommencer. Celui-ci nomme la
+            // route sans fenetre, qui est presque toujours ce que la demande voulait vraiment.
+            return $"Le panneau de « {outil} » n'est pas ouvert — « ouvrir_outil » ouvre une "
+                + "fenetre, pas un panneau reglable, et les rouvrir ne changera rien. "
+                + "N'INSISTE PAS. Pour ECRIRE UN DOCUMENT, emploie « document_ecrire » : il "
+                + "produit un .docx, .html, .md ou .txt sans ouvrir quoi que ce soit.";
         }
 
         return panneau.Dispatcher.Invoke(() => panneau.Appliquer(reglage, valeur));

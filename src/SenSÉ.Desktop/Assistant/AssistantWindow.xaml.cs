@@ -935,6 +935,36 @@ public partial class AssistantWindow : Window
         // donnent un endroit où poser le plan et le relire.
         capacites.AddRange(Carnet(journal));
 
+        // ECRIRE UN DOCUMENT NE DEMANDE PAS DE FENETRE.
+        //
+        // Le 9 septembre 2026, a « ecris trois paragraphes et enregistre-les en Word », le modele
+        // a lance l'Editeur Texte, tente d'y poser le contenu, recu « le panneau n'est pas
+        // ouvert », rouvert l'outil, retente, note un carnet, coche une etape qu'il n'avait pas
+        // faite, rempli son contexte et rendu la main. Quatre fenetres a l'ecran, zero document
+        // sur le disque.
+        //
+        // La cause n'etait pas le modele mais le chemin : ecrire passait forcement par une
+        // interface graphique, alors que la demande voulait un fichier.
+        capacites.Add(new AssistantLocal.Capacite(
+            "document_ecrire",
+            "Ecrit un document sur le disque SANS ouvrir de fenetre : Word (.docx), .html, .md ou "
+            + ".txt. C'EST LA FAÇON D'ECRIRE UN DOCUMENT — n'ouvre pas l'editeur pour cela. Rend "
+            + "le chemin du fichier. Une ligne vide separe deux paragraphes.",
+            [
+                new AssistantLocal.Parametre(
+                    "titre", "Le titre du document. Il l'ouvre et le nomme.", []),
+                new AssistantLocal.Parametre(
+                    "texte", "Le corps entier, redige. Une ligne vide entre deux paragraphes.", []),
+                new AssistantLocal.Parametre(
+                    "format", "docx (defaut), html, md, txt — ou pdf, odt, rtf si LibreOffice est la.",
+                    ["docx", "html", "md", "txt", "pdf", "odt", "rtf"]),
+            ],
+            reglages => Rediger(
+                Valeur(reglages, "titre"),
+                Valeur(reglages, "texte"),
+                Valeur(reglages, "format"),
+                journal)));
+
         // COMPOSER UN GRAPHE EST LE TRAVAIL DE L'ATELIER, PLUS CELUI DU GENERATEUR.
         //
         // Ces capacités arrivaient ici en bloc — flux_catalogue, flux_noeud, flux_verifier,
@@ -1415,6 +1445,21 @@ public partial class AssistantWindow : Window
 
             return "Le dossier n'a pas pu être écrit : " + exception.Message;
         }
+    }
+
+    /// <summary>Écrit un document, et rend au modèle un chemin plutôt qu'une promesse.</summary>
+    /// <remarks>
+    /// Le chemin est rendu en entier, et c'est ce qui permet d'enchaîner : <c>FichierProduit</c>
+    /// le reconnaît dans la phrase, donc l'outil suivant peut le reprendre tel quel — le convertir,
+    /// l'ouvrir, le joindre.
+    /// </remarks>
+    private static string Rediger(string titre, string texte, string format, Action<string>? journal)
+    {
+        var rendu = SenSÉ.Tools.Documents.Redaction.Ecrire(titre, texte, format, journal);
+
+        return rendu.Reussi
+            ? $"Document écrit : {rendu.Chemin}"
+            : rendu.Probleme;
     }
 
     private static string Valeur(IReadOnlyDictionary<string, string> reglages, string nom)
