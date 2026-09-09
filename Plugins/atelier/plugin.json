@@ -7,6 +7,7 @@
   "licence": "MIT",
   "source": "https://github.com/Hoyatla/SenS-",
   "icon": "IconFlow",
+  "glyph": "F58D",
   "hint": "Compose des graphes de nœuds : code, image, vidéo, son. Modèles locaux et MCPs interconnectés.",
   "surface": "tile",
   "does": "application",

@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "licence": "MIT",
   "icon": "IconPenSparkle",
+  "glyph": "E70F",
   "does": "editeur",
   "hint": "Document texte avec insertion multimodale (Atelier, vision, LLM)",
   "surface": "tile",
