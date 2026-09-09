@@ -71,6 +71,15 @@ public partial class AtelierWindow : Window
             }
 
             fenetre.Show();
+
+            // L environnement MainWindow tient le fond via KeepBehindEveryOtherWindow,
+            // et Window.Activate() seul peut etre masque. Le pattern Topmost=true/false
+            // est la sequence WPF standard pour forcer la fenetre au premier plan.
+            fenetre.Activate();
+            fenetre.Topmost = true;
+            fenetre.Topmost = false;
+            fenetre.Focus();
+
             fenetre.Montrer(ouvrirSur);
 
             return "";
