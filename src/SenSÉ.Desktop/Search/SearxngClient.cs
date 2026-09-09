@@ -36,7 +36,14 @@ public static class SearxngClient
 
         // Named honestly. Some instances refuse a request with no user agent, and an institution
         // reading its own logs should be able to see what its users are running.
-        DefaultRequestHeaders = { { "User-Agent", "SenSÉ" } },
+        //
+        // EN ASCII, ET C'EST CE QUI MANQUAIT. La valeur portait l'accent de « SenSÉ ». Un en-tete
+        // HTTP n'accepte pas de caractere non-ASCII : .NET le verifie a l'ajout et leve, ici dans
+        // un champ statique — donc en TypeInitializationException au premier usage de la classe.
+        // Le defaut a dormi tant qu'aucune instance n'etait configuree, puis la premiere recherche
+        // a rendu « The type initializer for SearxngClient threw an exception », phrase dans
+        // laquelle rien ne menait a un accent. Voir AgentHttp.
+        DefaultRequestHeaders = { { "User-Agent", SenSÉ.Tools.Search.AgentHttp.Nom } },
     };
 
     /// <summary>Queries the instance.</summary>

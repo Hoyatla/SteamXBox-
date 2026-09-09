@@ -603,6 +603,10 @@ public partial class AssistantWindow : Window
 
             var capacites = Capacites(outils, journal, autonome, interactif);
 
+            // Note avant, compare apres : c'est ce qui dit si une recherche a eu lieu pendant ce
+            // tour, quel que soit le chemin — instance ou navigateur — qui l'a moissonnee.
+            _recolteAvant = SenSÉ.Tools.Assistant.RechercheWeb.Derniere;
+
             var reponse = await Task.Run(() => _agent.Repondre(
                 demande,
                 outils,
@@ -622,9 +626,9 @@ public partial class AssistantWindow : Window
             // endroit du dispositif où une erreur est indétectable pour le lecteur : une
             // bibliographie a l'autorité de l'exactitude. Elle vient donc de la récolte, c'est-à-
             // dire de ce qui a réellement été ouvert et lu.
-            if (_aCiter && _recolte is { } citees)
+            if (SenSÉ.Tools.Assistant.RechercheWeb.Derniere is { } citees
+                && !ReferenceEquals(citees, _recolteAvant))
             {
-                _aCiter = false;
                 Dire("systeme", SenSÉ.Tools.Assistant.RechercheWeb.Bibliographie(citees));
             }
         }
@@ -952,19 +956,23 @@ public partial class AssistantWindow : Window
         // insister.
         var web = SearchPolicyStore.Load(journal).Web.Effective;
 
+        // DEUX VERBES DE RECHERCHE ETAIENT DECLARES, ET LE MODELE PRENAIT LE MOINS BON.
+        //
+        // « recherche_web », de la famille AssistantRecherche, et « chercher_web », declare ici,
+        // faisaient la meme chose par deux chemins de qualite differente. Mesure du 9 septembre
+        // 2026 : a « fais-moi une recherche sur les actualites de nvidia », le modele a appele
+        // « recherche_web » — celui qui rendait une liste de liens sans auteur, sans date de
+        // publication et sans bibliographie. Toute la tracabilite passait a la trappe parce qu'un
+        // second verbe existait.
+        //
+        // « recherche_web » passe desormais par RechercheWeb comme tout le reste. Il n'y a donc
+        // plus rien a declarer ici quand une instance repond : un seul verbe, un seul rendu.
         if (web.Provider == WebSearchProvider.Instance
             && !string.IsNullOrWhiteSpace(web.InstanceUrl))
         {
-            capacites.Add(new AssistantLocal.Capacite(
-                "chercher_web",
-                "Cherche sur le web et rend les extraits trouvés. À employer pour tout ce qui "
-                + "n'est pas dans ce que tu sais déjà : une actualité, la version d'un logiciel, "
-                + "un prix, un fait daté. Une question par appel, en mots-clés plutôt qu'en phrase.",
-                [
-                    new AssistantLocal.Parametre(
-                        "sujet", "Ce qu'il faut chercher, en quelques mots-clés.", []),
-                ],
-                reglages => Chercher(web, Valeur(reglages, "sujet"), journal)));
+            journal?.Invoke("assistant: recherche web par l'instance configurée.");
+
+            capacites.Add(Consigner(journal));
         }
         else if (SenSÉ.Tools.Assistant.AssistantCdp.Pret)
         {
@@ -981,28 +989,21 @@ public partial class AssistantWindow : Window
             journal?.Invoke("assistant: recherche web par le navigateur intégré (aucune instance configurée).");
 
             capacites.Add(new AssistantLocal.Capacite(
-                "chercher_web",
-                "Cherche sur le web et rend les extraits trouvés AVEC leurs sources numérotées. "
-                + "À employer pour tout ce qui n'est pas dans ce que tu sais déjà : une actualité, "
-                + "la version d'un logiciel, un prix, un fait daté. Une question par appel, en "
-                + "mots-clés plutôt qu'en phrase. Cite ensuite chaque affirmation par son numéro.",
+                // LE MEME NOM QUE L'AUTRE CHEMIN. Un modele qui apprend deux verbes pour une seule
+                // chose en choisit un au hasard ; ici il n'y en a qu'un, et ce qui change derriere
+                // — instance ou navigateur — ne le regarde pas.
+                "recherche_web",
+                "Cherche sur le web et rend les extraits trouvés AVEC leurs sources. À employer "
+                + "pour tout ce qui n'est pas dans ce que tu sais déjà : une actualité, la version "
+                + "d'un logiciel, un prix, un fait daté. Une question par appel, en mots-clés "
+                + "plutôt qu'en phrase. Cite ensuite chaque affirmation par son libellé.",
                 [
                     new AssistantLocal.Parametre(
                         "sujet", "Ce qu'il faut chercher, en quelques mots-clés.", []),
                 ],
                 reglages => ChercherParLeNavigateur(Valeur(reglages, "sujet"), journal)));
 
-            capacites.Add(new AssistantLocal.Capacite(
-                "dossier_recherche",
-                "Écrit la DERNIÈRE recherche dans un dossier daté : ta synthèse, les pages telles "
-                + "qu'elles ont été lues, et un manifeste. À employer quand l'utilisateur veut "
-                + "garder, imprimer ou convertir le résultat plutôt que le lire dans le fil. Rend "
-                + "le chemin du dossier.",
-                [
-                    new AssistantLocal.Parametre(
-                        "synthese", "Ta réponse rédigée, avec ses renvois [1], [2].", []),
-                ],
-                reglages => Consigner(Valeur(reglages, "synthese"), journal)));
+            capacites.Add(Consigner(journal));
         }
         else
         {
@@ -1623,15 +1624,7 @@ public partial class AssistantWindow : Window
         return texte.ToString();
     }
 
-    /// <summary>La dernière récolte, pour que le dossier ne relance pas la recherche.</summary>
-    /// <remarks>
-    /// <b>Chercher deux fois rendrait la trace mensongère.</b> Le web bouge entre deux appels : la
-    /// synthèse porterait alors sur des pages que le dossier ne contient pas, et l'inverse. Ce qui
-    /// est écrit doit être exactement ce que le modèle a lu — donc la même récolte, gardée.
-    /// </remarks>
-    private SenSÉ.Tools.Assistant.Recolte? _recolte;
-
-    /// <summary>Cherche sans ouvrir de fenêtre, et garde la récolte pour le dossier.</summary>
+    /// <summary>Cherche sans ouvrir de fenêtre.</summary>
     /// <remarks>
     /// <b>Le navigateur n'est plus le chemin, il est le secours.</b> Mesuré le 9 septembre 2026 :
     /// la façade du moteur rend dix résultats en 0,65 s sur une simple requête HTTP, et trois pages
@@ -1652,17 +1645,18 @@ public partial class AssistantWindow : Window
             SenSÉ.Tools.Assistant.AssistantCdp.Pret ? ParLeNavigateur : null,
             journal);
 
-        if (!recolte.Vide)
-        {
-            _recolte = recolte;
-            _aCiter = true;
-        }
-
         return SenSÉ.Tools.Assistant.RechercheWeb.Rediger(recolte);
     }
 
-    /// <summary>Vrai quand une recherche de ce tour attend sa bibliographie.</summary>
-    private bool _aCiter;
+    /// <summary>La récolte d'avant ce tour, pour savoir si une recherche a eu lieu pendant.</summary>
+    /// <remarks>
+    /// <b>Comparée plutôt que signalée par un drapeau.</b> La recherche peut être moissonnée par
+    /// l'instance — dans <c>AssistantRecherche</c>, ailleurs — ou par le navigateur ici : un
+    /// drapeau posé à un seul de ces endroits manquerait l'autre, et la bibliographie ne
+    /// s'afficherait que pour la moitié des recherches. La récolte, elle, est la même quel que
+    /// soit le chemin.
+    /// </remarks>
+    private SenSÉ.Tools.Assistant.Recolte? _recolteAvant;
 
     /// <summary>Le secours : la page rendue par le navigateur, quand HTTP n'a pas suffi.</summary>
     /// <remarks>
@@ -1700,13 +1694,32 @@ public partial class AssistantWindow : Window
         return SenSÉ.Tools.Assistant.RechercheWeb.LireLeHtml(rendu);
     }
 
+    /// <summary>La capacité qui écrit la dernière recherche dans un dossier daté.</summary>
+    /// <remarks>
+    /// Déclarée des deux côtés — instance ou navigateur — parce qu'elle ne dépend pas du chemin
+    /// qui a moissonné, seulement de ce qui a été récolté.
+    /// </remarks>
+    private static AssistantLocal.Capacite Consigner(Action<string>? journal)
+        => new(
+            "dossier_recherche",
+            "Écrit la DERNIÈRE recherche dans un dossier daté : ta synthèse, les pages telles "
+            + "qu'elles ont été lues, et un manifeste. À employer quand l'utilisateur veut garder, "
+            + "imprimer ou convertir le résultat plutôt que le lire dans le fil. Rend le chemin "
+            + "du dossier.",
+            [
+                new AssistantLocal.Parametre(
+                    "synthese", "Ta réponse rédigée, avec ses renvois entre crochets.", []),
+            ],
+            reglages => Consigner(
+                reglages.TryGetValue("synthese", out var lu) ? lu.Trim() : "", journal));
+
     /// <summary>Écrit la dernière récolte et la synthèse du modèle dans un dossier daté.</summary>
-    private string Consigner(string synthese, Action<string>? journal)
+    private static string Consigner(string synthese, Action<string>? journal)
     {
-        if (_recolte is not { } recolte)
+        if (SenSÉ.Tools.Assistant.RechercheWeb.Derniere is not { } recolte)
         {
             return "Rien à consigner : aucune recherche n'a encore été faite. "
-                + "Appelle chercher_web d'abord.";
+                + "Appelle recherche_web d'abord.";
         }
 
         try

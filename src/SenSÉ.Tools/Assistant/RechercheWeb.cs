@@ -225,6 +225,52 @@ public static class RechercheWeb
             return new Recolte(propre, [], $"Aucun résultat pour « {propre} ».");
         }
 
+        return Lire(propre, liens, aller, secours, journal);
+    }
+
+    /// <summary>
+    /// Lit les pages d'une liste de résultats déjà obtenue — d'une instance, par exemple.
+    /// </summary>
+    /// <remarks>
+    /// <b>Trouver les liens et lire les pages sont deux gestes, et un seul des deux change.</b> Une
+    /// instance de recherche rend la liste sans qu'on ait à dépouiller une page de résultats ; tout
+    /// ce qui vient après — ouvrir, extraire la signature, dater, étiqueter — est identique. Les
+    /// séparer est ce qui permet aux deux chemins de rendre exactement la même chose.
+    ///
+    /// <para>
+    /// Sans cette séparation, la recherche par instance rendrait une simple liste de liens, sans
+    /// auteur ni bibliographie, pendant que la recherche par navigateur rendrait des sources
+    /// citables. C'est exactement ce qui se passait : deux verbes, deux qualités, et le modèle
+    /// choisissait le moins bon.
+    /// </para>
+    /// </remarks>
+    public static Recolte MoissonnerDepuis(
+        string sujet,
+        IReadOnlyList<(string Titre, string Url, string Apercu)> liens,
+        Func<string, string?> aller,
+        Func<string, Lecture?>? secours = null,
+        Action<string>? journal = null)
+    {
+        var propre = (sujet ?? "").Trim();
+
+        if (propre.Length == 0)
+        {
+            return new Recolte("", [], "Aucun sujet de recherche.");
+        }
+
+        return liens.Count == 0
+            ? new Recolte(propre, [], $"Aucun résultat pour « {propre} ».")
+            : Lire(propre, liens, aller, secours, journal);
+    }
+
+    /// <summary>Ouvre les premières pages et fabrique les sources.</summary>
+    private static Recolte Lire(
+        string propre,
+        IReadOnlyList<(string Titre, string Url, string Apercu)> liens,
+        Func<string, string?> aller,
+        Func<string, Lecture?>? secours,
+        Action<string>? journal)
+    {
         var lues = new List<Source>();
         var rang = 0;
         var replis = 0;
@@ -266,8 +312,28 @@ public static class RechercheWeb
         journal?.Invoke(
             $"recherche web : {lues.Count} source(s), {replis} repli(s) sur le navigateur.");
 
-        return new Recolte(propre, lues);
+        var recolte = new Recolte(propre, lues);
+
+        Derniere = recolte;
+
+        return recolte;
     }
+
+    /// <summary>
+    /// La dernière récolte, pour que le dossier ne relance pas la recherche.
+    /// </summary>
+    /// <remarks>
+    /// <b>Chercher deux fois rendrait la trace mensongère.</b> Le web bouge entre deux appels : la
+    /// synthèse porterait alors sur des pages que le dossier ne contient pas, et l'inverse. Ce qui
+    /// est écrit doit être exactement ce que le modèle a lu.
+    ///
+    /// <para>
+    /// Statique, et assumé : il y a une fenêtre d'assistant, donc une conversation, donc une
+    /// dernière recherche. Le jour où il y en aurait deux, ceci devient un champ d'instance — et
+    /// la seule chose à changer sera l'endroit où il vit, pas ce qu'il contient.
+    /// </para>
+    /// </remarks>
+    public static Recolte? Derniere { get; private set; }
 
     /// <summary>Une source, une fois la page lue — ou son aperçu s'il n'y a rien de mieux.</summary>
     private static Source Retenir(
@@ -306,9 +372,7 @@ public static class RechercheWeb
         // une page publique comme un lecteur la lirait. Un agent inconnu se fait servir une
         // coquille par la moitie des sites, ce qui declencherait un repli inutile a chaque fois.
         client.DefaultRequestHeaders.TryAddWithoutValidation(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-            + "Chrome/131.0.0.0 Safari/537.36");
+            "User-Agent", SenSÉ.Tools.Search.AgentHttp.Navigateur);
         client.DefaultRequestHeaders.TryAddWithoutValidation(
             "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.8");

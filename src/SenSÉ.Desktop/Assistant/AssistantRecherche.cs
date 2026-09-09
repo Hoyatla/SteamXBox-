@@ -350,26 +350,36 @@ public static class AssistantRecherche
                 return $"Aucun resultat web pour « {termes.Trim()} ».";
             }
 
-            var texte = new StringBuilder();
-            var gardes = reponse.Results.Take(MaximumResultats).ToList();
-            texte.Append(gardes.Count).Append(" resultat(s) web pour « ").Append(termes.Trim()).AppendLine(" » :");
+            // L'INSTANCE DONNE LES LIENS ; LA LECTURE EST LA MEME QUE PARTOUT AILLEURS.
+            //
+            // Ce verbe rendait une simple liste — titre, adresse, extrait du moteur — pendant que
+            // la recherche par navigateur rendait des sources citables, avec signature, date de
+            // publication et bibliographie ecrite par le code. Deux verbes, deux qualites, et le
+            // modele choisissait le moins bon : mesure du 9 septembre 2026, il a appele
+            // « recherche_web » et l'utilisateur a perdu toute la tracabilite.
+            //
+            // Trouver les liens et lire les pages sont deux gestes, et un seul des deux change
+            // selon la porte d'entree. Celui-ci fournit les liens, RechercheWeb fait le reste.
+            var liens = reponse.Results
+                .Take(SenSÉ.Tools.Assistant.RechercheWeb.Resultats)
+                .Select(r => (r.Title, r.Url, r.Snippet ?? ""))
+                .ToList();
 
-            foreach (var resultat in gardes)
-            {
-                texte.Append("[web] ").Append(resultat.Title).Append(" — ").AppendLine(resultat.Url);
+            var recolte = SenSÉ.Tools.Assistant.RechercheWeb.MoissonnerDepuis(
+                termes.Trim(),
+                liens,
+                SenSÉ.Tools.Assistant.RechercheWeb.ParHttp,
+                journal: journal);
 
-                if (resultat.Snippet.Length > 0)
-                {
-                    texte.Append("    ").AppendLine(Extrait(resultat.Snippet));
-                }
-            }
-
-            return texte.ToString().TrimEnd();
+            return SenSÉ.Tools.Assistant.RechercheWeb.Rediger(recolte);
         }
         catch (Exception exception)
+            when (exception is System.Net.Http.HttpRequestException or TaskCanceledException
+                              or InvalidOperationException)
         {
-            journal?.Invoke($"recherche_web : {exception.GetType().Name}: {exception.Message}");
-            return $"Recherche web impossible : {exception.Message}";
+            journal?.Invoke($"recherche_web: {exception.GetType().Name}: {exception.Message}");
+
+            return "Recherche web impossible : l'instance n'a pas repondu.";
         }
     }
 
