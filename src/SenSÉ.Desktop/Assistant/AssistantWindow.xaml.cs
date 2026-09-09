@@ -1625,13 +1625,25 @@ public partial class AssistantWindow : Window
     /// </remarks>
     private SenSÉ.Tools.Assistant.Recolte? _recolte;
 
-    /// <summary>Cherche par le navigateur intégré, et garde la récolte pour le dossier.</summary>
+    /// <summary>Cherche sans ouvrir de fenêtre, et garde la récolte pour le dossier.</summary>
+    /// <remarks>
+    /// <b>Le navigateur n'est plus le chemin, il est le secours.</b> Mesuré le 9 septembre 2026 :
+    /// la façade du moteur rend dix résultats en 0,65 s sur une simple requête HTTP, et trois pages
+    /// d'article sur quatre répondent de même, signature comprise. Ce que cet ordre achète n'est pas
+    /// de la vitesse mais de la discrétion — le cas courant ne fait plus apparaître de fenêtre à
+    /// l'écran. Un service rendu à l'utilisateur n'a pas à l'interrompre pour s'exécuter.
+    ///
+    /// <para>
+    /// Le secours n'est offert que si mcp-cdp écoute déjà : sans lui la recherche marche quand
+    /// même, les pages récalcitrantes gardant l'aperçu du moteur.
+    /// </para>
+    /// </remarks>
     private string ChercherParLeNavigateur(string sujet, Action<string>? journal)
     {
         var recolte = SenSÉ.Tools.Assistant.RechercheWeb.Moissonner(
             sujet,
-            SenSÉ.Tools.Assistant.AssistantCdp.Naviguer,
-            SenSÉ.Tools.Assistant.AssistantCdp.Evaluer,
+            SenSÉ.Tools.Assistant.RechercheWeb.ParHttp,
+            SenSÉ.Tools.Assistant.AssistantCdp.Pret ? ParLeNavigateur : null,
             journal);
 
         if (!recolte.Vide)
@@ -1645,6 +1657,42 @@ public partial class AssistantWindow : Window
 
     /// <summary>Vrai quand une recherche de ce tour attend sa bibliographie.</summary>
     private bool _aCiter;
+
+    /// <summary>Le secours : la page rendue par le navigateur, quand HTTP n'a pas suffi.</summary>
+    /// <remarks>
+    /// On demande à la page son HTML plutôt que son texte, pour que l'extraction soit la MÊME des
+    /// deux côtés. Deux extractions parallèles finiraient par diverger, et une source citée
+    /// différemment selon le chemin qui l'a lue est une trace qui ment sur elle-même.
+    /// </remarks>
+    private static SenSÉ.Tools.Assistant.Lecture? ParLeNavigateur(string url)
+    {
+        if (SenSÉ.Tools.Assistant.AssistantCdp.Naviguer(url).Length > 0)
+        {
+            return null;
+        }
+
+        var rendu = SenSÉ.Tools.Assistant.AssistantCdp.Evaluer("document.documentElement.outerHTML");
+
+        if (rendu.StartsWith("mcp-cdp", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // Le CDP rend une chaine JSON : on la deballe avant de l'analyser comme du HTML.
+        try
+        {
+            if (System.Text.Json.Nodes.JsonNode.Parse(rendu) is System.Text.Json.Nodes.JsonValue valeur
+                && valeur.TryGetValue<string>(out var html))
+            {
+                rendu = html;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        return SenSÉ.Tools.Assistant.RechercheWeb.LireLeHtml(rendu);
+    }
 
     /// <summary>Écrit la dernière récolte et la synthèse du modèle dans un dossier daté.</summary>
     private string Consigner(string synthese, Action<string>? journal)
