@@ -1,6 +1,6 @@
-{
+﻿{
   "id": "editeur",
-  "name": "Éditeur de texte",
+  "name": "Éditeur Texte",
   "category": "tool",
   "version": "0.1.0",
   "glyph": "E8A5",
