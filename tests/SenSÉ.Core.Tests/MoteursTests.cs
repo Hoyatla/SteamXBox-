@@ -260,6 +260,44 @@ public class MoteursTests : IDisposable
         Assert.Equal("http://127.0.0.1:8081", ServeurModele.Adresse);
     }
 
+    /// <summary>On ne confie une sous-tâche écrite qu'à un moteur de conversation.</summary>
+    /// <remarks>
+    /// <b>Trois retraits, chacun évitant un échec certain.</b> Le dialogue est la voie qui parle
+    /// déjà — se confier une tâche à soi-même est un tour perdu. L'orchestre ne sait que nommer une
+    /// voie. Et l'image comme la vidéo sont servies par <c>sd.cpp</c>, qui expose
+    /// <c>/v1/images/generations</c> et non <c>/v1/chat/completions</c> : leur écrire une phrase
+    /// échouerait sur un 404 que le modèle ne saurait pas lire.
+    /// </remarks>
+    [Fact]
+    public void OnlyConversationEnginesTakeAWrittenSubTask()
+    {
+        Poser("texte", """
+            { "id": "d", "role": "dialogue", "moteur": "llama.cpp", "port": 8081,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Poser("orchestre", """
+            { "id": "a", "role": "orchestre", "moteur": "llama.cpp", "port": 8082,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Poser("codage", """
+            { "id": "c", "role": "codage", "moteur": "llama.cpp", "port": 8083,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Poser("image", """
+            { "id": "i", "role": "image", "moteur": "sd.cpp", "port": 8085,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        // Les six voies existent...
+        Assert.Equal(["codage", "dialogue", "image", "orchestre"], Moteurs.Voies());
+
+        // ... mais une seule prend une sous-tache ecrite.
+        Assert.Equal(["codage"], AssistantLocal.Specialistes());
+    }
+
     // Aucun modele installe : la table est vide, et personne ne tombe.
     [Fact]
     public void AnEmptyInstallationYieldsAnEmptyTable()

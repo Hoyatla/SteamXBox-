@@ -129,6 +129,12 @@ public sealed class AssistantLocal
     /// <summary>Ce que le serveur a compté de jetons au dernier échange.</summary>
     private int _jetons;
 
+    /// <summary>La voie retenue pour la demande en cours.</summary>
+    private Aiguilleur.Choix _voie = new(Aiguilleur.Defaut, "pas encore aiguillé");
+
+    /// <summary>Ce que l'aiguilleur a décidé du dernier tour, pour qui veut le montrer.</summary>
+    public Aiguilleur.Choix Voie => _voie;
+
     /// <summary>Ce que le fil occupe, en jetons, d'après le dernier compte du serveur.</summary>
     /// <remarks>
     /// Rendu pour être montré. La place se remplissait sans que rien ne le dise, et l'utilisateur
@@ -780,6 +786,11 @@ public sealed class AssistantLocal
         {
             return Interrompu("");
         }
+
+        // Aiguille avant de charger quoi que ce soit : les regles tranchent sans rien reveiller, et
+        // l'aiguilleur n'est consulte que s'il ecoute deja. Ce que cela rend est journalise, donc
+        // visible, et sert au modele qui recevra la voie retenue avec sa demande.
+        _voie = Aiguiller(demande, journal, arret);
 
         if (ServeurModele.Demarrer(journal, arret) is { } echec)
         {
@@ -1661,6 +1672,217 @@ public sealed class AssistantLocal
     /// c'est la seule mesure exacte de ce qui reste, et l'estimer à la longueur des messages se
     /// tromperait d'un facteur trois sur un catalogue de nœuds.
     /// </remarks>
+    /// <summary>
+    /// Décide quelle voie doit traiter la demande, et le dit au journal.
+    /// </summary>
+    /// <remarks>
+    /// <b>L'aiguilleur a son propre serveur, sur son propre port.</b> Pas parce qu'il doit être
+    /// petit — parce qu'il ne doit pas partager le cache de préfixe du dialogue. Réécrire le
+    /// message système invalide ce cache en entier, et le tour suivant repaie l'ingestion complète :
+    /// douze secondes pour les 6 500 jetons de consigne, contre 232 millisecondes pour l'aiguillage
+    /// lui-même. Les alterner sur un seul serveur coûterait cinquante fois ce qu'ils économisent.
+    ///
+    /// <para>
+    /// <b>Aiguiller ne doit jamais coûter le démarrage d'un moteur.</b> Si l'aiguilleur ne répond
+    /// pas déjà, on n'en lance pas un pour lui : les règles tranchent ce qu'elles savent, le reste
+    /// va au dialogue — c'est-à-dire le comportement d'avant l'aiguillage, donc jamais une
+    /// régression. Charger 1,8 Go pour décider d'un mot serait exactement l'inverse du service
+    /// rendu.
+    /// </para>
+    /// </remarks>
+    public static Aiguilleur.Choix Aiguiller(
+        string demande,
+        Action<string>? journal,
+        CancellationToken arret = default)
+    {
+        var voies = ServeurModele.Voies(journal);
+
+        // Le modele n'est consulte que s'il ecoute deja.
+        var pret = ServeurModele.Ou(ServeurModele.PortPour("orchestre")) == ServeurModele.Etat.Pret;
+
+        return Aiguilleur.Decider(
+            demande,
+            voies,
+            pret ? (consigne, dit) => DemanderAiguillage(consigne, dit, arret) : null,
+            journal);
+    }
+
+    /// <summary>
+    /// Confie une sous-tâche au moteur d'une voie, et rend ce qu'il a répondu.
+    /// </summary>
+    /// <remarks>
+    /// <b>C'est ce qui fait de l'assistant un orchestrateur plutôt qu'un modèle qui parle.</b> Il
+    /// garde la conversation, la perception et le jugement ; il délègue ce qu'un spécialiste fait
+    /// mieux ou moins cher.
+    ///
+    /// <para>
+    /// <b>Une sous-tâche, pas la conversation.</b> Le spécialiste reçoit une demande formulée en
+    /// entier et rien d'autre — ni le fil, ni les carnets, ni la déclaration des outils. C'est ce
+    /// qui le rend bon marché : le codeur travaille sur 32 768 jetons quand le dialogue en a
+    /// 65 536, et lui verser le contexte du dialogue reviendrait à payer deux fois le même
+    /// raisonnement.
+    /// </para>
+    ///
+    /// <para>
+    /// Le moteur est démarré s'il dort — ici, contrairement à l'aiguillage, l'attente est justifiée :
+    /// on ne délègue pas pour économiser une milliseconde, on délègue parce que le spécialiste
+    /// répondra mieux.
+    /// </para>
+    /// </remarks>
+    public static string Confier(
+        string voie,
+        string demande,
+        Action<string>? journal,
+        CancellationToken arret = default)
+    {
+        if (string.IsNullOrWhiteSpace(demande))
+        {
+            return "Rien à confier : la demande est vide.";
+        }
+
+        // Verifie contre les specialistes, pas contre toutes les voies : l'image et la video sont
+        // servies par sd.cpp, qui n'a pas de /v1/chat/completions. Leur confier une phrase
+        // echouerait sur un 404 que le modele ne saurait pas lire.
+        var servies = Specialistes(journal);
+
+        if (!servies.Contains(voie, StringComparer.OrdinalIgnoreCase))
+        {
+            return servies.Count == 0
+                ? "Aucun spécialiste n'est disponible sur cette machine. Fais-le toi-même."
+                : $"La voie « {voie} » ne prend pas de sous-tâche écrite. "
+                  + $"Celles qui en prennent : {string.Join(", ", servies)}. "
+                  + "Fais-le toi-même plutôt que d'insister.";
+        }
+
+        if (ServeurModele.Demarrer(voie, journal, arret) is { } echec)
+        {
+            return $"La voie « {voie} » n'a pas démarré : {echec}";
+        }
+
+        var corps = new JsonObject
+        {
+            ["messages"] = new JsonArray
+            {
+                new JsonObject { ["role"] = "user", ["content"] = demande },
+            },
+            ["max_tokens"] = JetonsMaximum,
+        };
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            using var contenu = new StringContent(corps.ToJsonString(), Encoding.UTF8, "application/json");
+
+            var reponse = client
+                .PostAsync(ServeurModele.AdressePour(voie) + "/v1/chat/completions", contenu, arret)
+                .GetAwaiter().GetResult();
+
+            var lu = reponse.Content.ReadAsStringAsync(arret).GetAwaiter().GetResult();
+
+            if (JsonNode.Parse(lu) is not JsonObject rendu)
+            {
+                return $"La voie « {voie} » a répondu quelque chose d'illisible.";
+            }
+
+            var dit = Ecrit((rendu["choices"]?[0]?["message"] as JsonObject)?["content"]);
+
+            journal?.Invoke($"voie « {voie} » : {dit.Length} caractères rendus.");
+
+            return dit.Length > 0 ? dit : $"La voie « {voie} » n'a rien répondu.";
+        }
+        catch (Exception exception)
+            when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return $"La voie « {voie} » n'a pas répondu : {exception.GetType().Name}.";
+        }
+    }
+
+    /// <summary>Les voies réellement servies, pour qui construit les capacités.</summary>
+    public static IReadOnlyList<string> Voies(Action<string>? journal = null)
+        => ServeurModele.Voies(journal);
+
+    /// <summary>
+    /// Les voies à qui l'on peut réellement confier une sous-tâche écrite.
+    /// </summary>
+    /// <remarks>
+    /// Trois retraits, et chacun évite un échec certain :
+    ///
+    /// <para>
+    /// <b>Le dialogue</b>, parce que c'est la voie qui parle en ce moment — se confier une tâche à
+    /// soi-même est un tour perdu.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>L'orchestre</b>, parce qu'il décide de la voie et ne fait rien d'autre. Lui confier un
+    /// travail rendrait le nom d'une voie en guise de réponse.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Tout ce qui n'est pas un moteur de conversation.</b> L'image et la vidéo sont servies par
+    /// <c>sd.cpp</c>, qui expose <c>/v1/images/generations</c> et non
+    /// <c>/v1/chat/completions</c> : leur confier une phrase échouerait sur un 404 que le modèle ne
+    /// saurait pas lire. Elles ont leurs propres verbes, ce n'est pas ici que ça se passe.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> Specialistes(Action<string>? journal = null)
+        => [.. Moteurs.Lire(journal)
+            .Where(m => string.Equals(m.Cadre, "llama.cpp", StringComparison.OrdinalIgnoreCase))
+            .Select(m => m.Role)
+            .Where(r => !string.Equals(r, Aiguilleur.Defaut, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(r, "orchestre", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)];
+
+    /// <summary>Interroge l'aiguilleur : une consigne courte, trois exemples, un mot en retour.</summary>
+    private static string? DemanderAiguillage(string consigne, string demande, CancellationToken arret)
+    {
+        var messages = new JsonArray
+        {
+            new JsonObject { ["role"] = "system", ["content"] = consigne },
+        };
+
+        // Les trois exemples en vrais tours, et non recopies dans la consigne : un modele suit
+        // bien mieux un echange qu'une liste. Mesure — sans eux, 3/6 au lieu de 7/8.
+        foreach (var (question, voie) in Aiguilleur.Exemples)
+        {
+            messages.Add(new JsonObject { ["role"] = "user", ["content"] = question });
+            messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = voie });
+        }
+
+        messages.Add(new JsonObject { ["role"] = "user", ["content"] = demande });
+
+        var corps = new JsonObject
+        {
+            ["messages"] = messages,
+
+            // Six jetons : le nom d'une voie en tient un ou deux. Borner ici evite qu'un modele
+            // bavard ne parte en explication, ce qui est son travers connu sur cette tache.
+            ["max_tokens"] = 6,
+            ["temperature"] = 0.0,
+        };
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            using var contenu = new StringContent(corps.ToJsonString(), Encoding.UTF8, "application/json");
+
+            var reponse = client
+                .PostAsync(ServeurModele.AdressePour("orchestre") + "/v1/chat/completions", contenu, arret)
+                .GetAwaiter().GetResult();
+
+            var lu = reponse.Content.ReadAsStringAsync(arret).GetAwaiter().GetResult();
+
+            return JsonNode.Parse(lu) is JsonObject rendu
+                ? Ecrit((rendu["choices"]?[0]?["message"] as JsonObject)?["content"])
+                : null;
+        }
+        catch (Exception exception)
+            when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return null;
+        }
+    }
+
     private JsonObject? Demander(JsonArray messages, JsonArray outils, CancellationToken arret)
     {
         var corps = new JsonObject

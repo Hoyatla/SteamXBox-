@@ -3,6 +3,7 @@
   "nom": "Wan 2.2 I2V (A14B Q4_K_M)",
   "moteur": "sd.cpp",
   "espace": "Multimedia",
+  "role": "video",
   "racine": "video",
   "port": 8085,
   "fichiers": {

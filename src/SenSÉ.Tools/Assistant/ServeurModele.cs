@@ -87,6 +87,9 @@ public static class ServeurModele
     private static Moteur? Declare(string role, Action<string>? journal = null)
         => Moteurs.Pour(role, journal);
 
+    /// <summary>Le port de ce rôle, pour qui veut interroger son état sans passer par l'adresse.</summary>
+    public static int PortPour(string role) => PortDe(role);
+
     /// <summary>Le port de ce rôle : celui du manifeste, sinon l'historique.</summary>
     private static int PortDe(string role)
         => Declare(role) is { Port: > 0 } moteur ? moteur.Port : Port;

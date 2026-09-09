@@ -3,6 +3,7 @@
   "nom": "Flux schnell (Q5_K_S)",
   "moteur": "sd.cpp",
   "espace": "Multimedia",
+  "role": "image",
   "racine": "image",
   "port": 8085,
   "fichiers": {

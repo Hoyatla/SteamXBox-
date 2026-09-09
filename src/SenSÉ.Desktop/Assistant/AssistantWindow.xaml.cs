@@ -928,6 +928,38 @@ public partial class AssistantWindow : Window
         // Memoire 3 niveaux, branchee sur le disque.
         capacites.AddRange(AssistantMemoire.Creer());
 
+        // Confier a un specialiste, seulement s'il y en a un.
+        //
+        // La voie « dialogue » est retiree de la liste : c'est celle qui parle en ce moment, et se
+        // confier une tache a soi-meme est un tour perdu — le travers exact que ce produit a deja
+        // vu avec les capacites qui ne pouvaient pas repondre.
+        var specialistes = AssistantLocal.Specialistes(journal);
+
+        if (specialistes.Count > 0)
+        {
+            capacites.Add(new AssistantLocal.Capacite(
+                "confier_specialiste",
+                "Confie une sous-tâche au modèle spécialisé qui la fera mieux ou plus vite que toi. "
+                + "Donne-lui une demande FORMULÉE EN ENTIER : il ne voit ni la conversation, ni les "
+                + "carnets, ni ce que tu sais — seulement la phrase que tu lui écris. Il rend son "
+                + "texte, que tu reprends ensuite à ton compte. À employer quand la sous-tâche est "
+                + "nette et se suffit à elle-même, pas pour lui déléguer ton jugement.",
+                [
+                    new AssistantLocal.Parametre(
+                        "voie", "Le spécialiste à qui confier la sous-tâche.", specialistes),
+                    new AssistantLocal.Parametre(
+                        "demande", "La sous-tâche, écrite en entier et compréhensible seule.", []),
+                ],
+                reglages => AssistantLocal.Confier(
+                    Valeur(reglages, "voie"),
+                    Valeur(reglages, "demande"),
+                    journal)));
+        }
+        else
+        {
+            journal?.Invoke("assistant: aucun spécialiste déclaré, la délégation n'est pas proposée.");
+        }
+
         // Le pilotage d'applications reelles, seulement s'il a ete arme.
         //
         // Ces deux familles agissent sur ce que l'utilisateur est en train de faire : prendre le
