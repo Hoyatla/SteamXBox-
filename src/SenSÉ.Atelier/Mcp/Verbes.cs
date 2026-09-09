@@ -93,6 +93,8 @@ public sealed class Verbes
                 "exemples/lister"           => ExemplesLister(),
                 "catalogue/aide"           => CatalogueAide(),
                 "exemples/charger"          => ExemplesCharger(body!),
+                "llm/complete"     => LlmComplete(body!),
+                "asr/transcribe"    => AsrTranscrire(body!),
                 _ => new { ok = false, error = "verbe inconnu: " + verbe },
             };
         }
@@ -1062,6 +1064,34 @@ public sealed class Verbes
         if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return new { ok = false, error = "graphe_id_a et _b requis" };
         var d = SenSÉ.Atelier.Collab.Collab.Diff(Racine, a, b);
         return new { ok = true, data = d };
+    }
+
+    // =============== MULTIMODAL (Phase E) ===============
+
+    /// <summary>Delegue a ClientModele qui parle a pc-agent (port 8765) ou a un futur backend LLM local.</summary>
+    private object LlmComplete(JsonObject body)
+    {
+        var prompt = body["prompt"]?.GetValue<string>() ?? "";
+        var maxTokens = body["max_tokens"]?.GetValue<int>() ?? 2048;
+        if (string.IsNullOrWhiteSpace(prompt))
+            return new { ok = false, error = "prompt vide" };
+
+        try
+        {
+            var cli = new SenSÉ.Atelier.ModeleLocal.ClientModele();
+            var text = cli.CompleterAsync(prompt, maxTokens).GetAwaiter().GetResult();
+            return new { ok = true, data = new { text } };
+        }
+        catch (Exception ex)
+        {
+            return new { ok = false, error = ex.Message };
+        }
+    }
+
+    /// <summary>STUB Phase E.1 : pas de backend Whisper stable. Renvoie un message clair plutot qu un crash.</summary>
+    private object AsrTranscrire(JsonObject body)
+    {
+        return new { ok = false, error = "ASR pas encore branche (Whisper en attente de backend stable). Demarrage de l enregistrement local prevu en phase E.2." };
     }
 
 }
