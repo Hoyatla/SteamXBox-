@@ -1,0 +1,33 @@
+{
+  "id": "pc-agent",
+  "nom": "pc-agent — le regard de la flottille (capture d'ecran, arbre d'interface)",
+  "moteur": "pc-agent",
+  "espace": "Systeme",
+  "role": "regard",
+  "racine": "vision",
+  "port": 8765,
+
+  "aiguillable": false,
+  "_aiguillable": "Il appartient a la flottille sans etre une destination. On ne lui ADRESSE pas une demande : il n'a pas de conversation, il rend une image et un arbre. L'aiguilleur ne doit donc pas le voir dans sa liste de voies, sinon il y enverrait une phrase qui n'a pas de destinataire.",
+
+  "materiel": "processeur",
+  "taille_mo": 17,
+  "_taille": "Un binaire Rust autonome, 17 Mo, aucun poids de modele. C'est la quatrieme fois le meme patron apres llama-server, sd-server et whisper-server — sauf qu'ici il n'y a rien a charger.",
+
+  "_ce_qu_il_fait": "Il DONNE A VOIR. GET /v1/screenshot rend l'ecran, POST /v1/uia/screenshot-window une fenetre nommee, POST /v1/uia/dump l'arbre d'accessibilite de cette fenetre — c'est-a-dire le texte et les controles, lisibles sans aucun modele. S'y ajoutent la liste des fenetres, des processus, l'invocation d'un controle, la frappe et la lecture de fichiers sous les racines autorisees.",
+
+  "_ce_qu_il_ne_fait_pas": "IL NE VOIT RIEN. Verifie en direct le 9 septembre 2026 sur le binaire retravaille (0.1.0, 17 712 237 octets) : POST /v1/detect/frame repond 404, POST /v1/detect/video repond 404. Aucune chaine yolox, yunet, bytetrack, onnx, image_b64 ni classes_filter dans le fichier. Le binaire d'avant le correctif (pc-agent.exe.avant-correctif) ne les a pas non plus. Ce que le correctif a ajoute, ce sont deux routes d'interface — /v1/uia/focus-and-type et /v1/uia/invoke-by-name — pas un detecteur.",
+
+  "_qui_voit_alors": "Le 9B, par son projecteur. C'est la regle deja ecrite dans Moteurs.cs : la vision est une CAPACITE du modele de texte, jamais un role. pc-agent fournit le pixel, le 9B en fait du texte, et ce texte circule comme n'importe quel autre. Ni l'un ni l'autre ne suffit seul : le 9B n'a pas de main pour prendre une capture, pc-agent n'a pas d'oeil pour la lire.",
+
+  "_qui_le_lance": "ServeursMcp, avec la fenetre de l'assistant, sur 127.0.0.1:8765 avec le jeton de Outils/DebugAgent/token.txt. PAS ServeurModele, qui ne sait lancer que llama-server.exe. Le declarer ici le rend visible dans la table sans changer qui l'ouvre.",
+
+  "mesures": {
+    "systeme_ms": "< 1000",
+    "capture_ecran": "200 sur /v1/screenshot",
+    "detection": "404 — la route n'existe pas",
+    "sur": "i7-14700KF, 9 septembre 2026, binaire sonde sur un port de secours"
+  },
+
+  "produit": "image et arbre d'interface"
+}

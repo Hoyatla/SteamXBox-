@@ -380,6 +380,21 @@ public static class ServeurModele
     public static string? Demarrer(string role, Action<string>? journal, CancellationToken arret = default)
     {
         var declare = Declare(role, journal);
+
+        // Ce qui suit lance llama-server.exe, et rien d'autre. Un moteur d'un autre cadre ne se
+        // lance pas ici : whisper.cpp et sd.cpp ont leurs propres binaires, et pc-agent se leve
+        // avec la fenetre de l'assistant, pas avec un role.
+        //
+        // Le garde-fou est avant l'interrogation du port, et volontairement : pc-agent repond sur
+        // 8765, donc « le port repond » aurait ete pris pour « le modele est pret » et on aurait
+        // adopte un serveur qui n'expose pas /v1/chat/completions.
+        if (declare is not null
+            && !string.Equals(declare.Cadre, "llama.cpp", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Le moteur « {declare.Id} » tourne sous {declare.Cadre}, "
+                   + "qui ne se lance pas d'ici.";
+        }
+
         var port = declare is { Port: > 0 } ? declare.Port : Port;
         var etat = Ou(port);
 

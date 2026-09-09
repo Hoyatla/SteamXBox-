@@ -307,4 +307,74 @@ public class MoteursTests : IDisposable
         Assert.Null(Moteurs.Voyant());
         Assert.Null(Moteurs.Pour("dialogue"));
     }
+
+    /// <summary>Appartenir à la flottille et être une destination sont deux choses.</summary>
+    /// <remarks>
+    /// <b>Écrit pour pc-agent.</b> Il se lève avec la fenêtre, capture l'écran et rend l'arbre
+    /// d'interface — il fait donc partie de la table, et qui la lit doit l'y voir. Mais on ne lui
+    /// <i>adresse</i> rien : il n'a pas de conversation, il rend une image. L'aiguilleur qui le
+    /// verrait dans sa liste finirait par lui envoyer une phrase, et cette phrase n'aurait aucun
+    /// destinataire.
+    /// </remarks>
+    [Fact]
+    public void AnEngineCanBelongToTheFleetWithoutBeingADestination()
+    {
+        Poser("texte", """
+            { "id": "d", "role": "dialogue", "moteur": "llama.cpp", "port": 8081,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Poser("vision", """
+            { "id": "pc-agent", "role": "regard", "moteur": "pc-agent", "port": 8765,
+              "aiguillable": false }
+            """);
+
+        // Dans la table, avec son port : ce qui la lit le trouve.
+        var regard = Moteurs.Pour("regard")!;
+        Assert.Equal("pc-agent", regard.Id);
+        Assert.Equal("http://127.0.0.1:8765", regard.Adresse);
+        Assert.False(regard.Aiguillable);
+
+        // Hors de la liste que l'aiguilleur recoit.
+        Assert.Equal(["dialogue"], Moteurs.Voies());
+    }
+
+    // Sans le dire, un moteur est une destination : c'est le cas de tous ceux d'avant ce drapeau,
+    // et leur manifeste ne doit pas avoir a etre reecrit pour le rester.
+    [Fact]
+    public void SayingNothingMeansTheEngineIsADestination()
+    {
+        Poser("codage", """
+            { "id": "c", "role": "codage", "moteur": "llama.cpp", "port": 8083,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Assert.True(Moteurs.Pour("codage")!.Aiguillable);
+        Assert.Equal(["codage"], Moteurs.Voies());
+    }
+
+    /// <summary>Un moteur d'un autre cadre ne se lance pas comme un llama-server.</summary>
+    /// <remarks>
+    /// <b>Le port aurait menti.</b> pc-agent répond bel et bien sur 8765 : sans ce garde-fou,
+    /// <c>Demarrer</c> aurait vu un port qui répond, conclu que le modèle était prêt, et adopté un
+    /// serveur qui n'expose pas <c>/v1/chat/completions</c>. L'échec ne se serait vu qu'au premier
+    /// message, sous la forme d'un 404 illisible.
+    ///
+    /// <para>Le même garde-fou couvre whisper.cpp et sd.cpp, qui ont leurs propres binaires et
+    /// auraient reçu <c>llama-server.exe -m ggml-large-v3-turbo-q5_0.bin</c>.</para>
+    /// </remarks>
+    [Fact]
+    public void AnEngineOfAnotherFrameworkIsNotLaunchedAsALlamaServer()
+    {
+        Poser("vision", """
+            { "id": "pc-agent", "role": "regard", "moteur": "pc-agent", "port": 8765,
+              "aiguillable": false }
+            """);
+
+        var echec = ServeurModele.Demarrer("regard", journal: null);
+
+        Assert.NotNull(echec);
+        Assert.Contains("pc-agent", echec, StringComparison.Ordinal);
+        Assert.Contains("ne se lance pas d'ici", echec, StringComparison.Ordinal);
+    }
 }

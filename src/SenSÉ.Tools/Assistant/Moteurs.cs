@@ -15,6 +15,10 @@ namespace SenSÉ.Tools.Assistant;
 /// <param name="Arguments">Ce qu'il faut passer au programme, tel que le manifeste le dicte.</param>
 /// <param name="Vision">Vrai s'il lit les images.</param>
 /// <param name="Actif">Faux pour un moteur gardé sur le disque mais écarté — voir Ling.</param>
+/// <param name="Aiguillable">
+/// Vrai si une demande peut lui être <i>adressée</i>. Faux pour un moteur qui appartient à la
+/// flottille sans être une destination : pc-agent capture l'écran, il ne reçoit pas de demande.
+/// </param>
 public sealed record Moteur(
     string Id,
     string Nom,
@@ -26,7 +30,8 @@ public sealed record Moteur(
     int Contexte,
     IReadOnlyList<string> Arguments,
     bool Vision,
-    bool Actif)
+    bool Actif,
+    bool Aiguillable = true)
 {
     /// <summary>Où l'interroger.</summary>
     public string Adresse => "http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture);
@@ -179,7 +184,9 @@ public static class Moteurs
                 Entier(racine, "contexte", ServeurModele.Contexte),
                 Liste(racine, "arguments"),
                 fichiers.ContainsKey("projecteur"),
-                Actif: true);
+                Actif: true,
+                Aiguillable: !(racine.TryGetProperty("aiguillable", out var adressable)
+                               && adressable.ValueKind == JsonValueKind.False));
         }
         catch (Exception exception) when (exception is IOException or JsonException)
         {
@@ -214,9 +221,21 @@ public static class Moteurs
     /// L'aiguilleur ne doit connaître que ce qui existe : une voie proposée mais absente lui fait
     /// dépenser un tour et lui apprend à s'entêter. Même règle que pour les capacités de recherche
     /// non configurées.
+    ///
+    /// <para>
+    /// <b>Appartenir à la flottille et être une destination sont deux choses.</b> pc-agent en fait
+    /// partie — il se lève avec la fenêtre et capture l'écran — mais on ne lui <i>adresse</i> rien :
+    /// il n'a pas de conversation, il rend une image. Un manifeste qui se déclare
+    /// <c>"aiguillable": false</c> reste donc dans la table, visible de qui la lit, et hors de la
+    /// liste que l'aiguilleur reçoit.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<string> Voies(Action<string>? journal = null)
-        => [.. Lire(journal).Select(m => m.Role).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal)];
+        => [.. Lire(journal)
+            .Where(m => m.Aiguillable)
+            .Select(m => m.Role)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)];
 
     private static string Texte(JsonElement objet, string nom, string defaut = "")
         => objet.TryGetProperty(nom, out var valeur) && valeur.ValueKind == JsonValueKind.String
