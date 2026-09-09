@@ -64,9 +64,7 @@ public static class UiLog
 
             try
             {
-                var path = System.IO.Path.Combine(
-                    AppContext.BaseDirectory,
-                    $"SenSÉ-{_process}-debug.log");
+                var path = CheminDebug.DebugLog(_process);
 
                 _log = new DiagnosticLog(path, LogLevel.Debug, LogCategory.Ui);
                 Path = path;

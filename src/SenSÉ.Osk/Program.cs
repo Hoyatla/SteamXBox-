@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using SenSÉ.Core.Haptics;
 using SenSÉ.Core.Input;
 using SenSÉ.Core.Mapping;
+using SenSÉ.Core.Diagnostics;
 using SenSÉ.Core.Osk;
 
 namespace SenSÉ.Osk;
@@ -263,8 +264,7 @@ public static class Program
         // keyboard down with it.
         var stem = Path.GetFileNameWithoutExtension(Environment.ProcessPath) ?? "osk";
         var suffix = ReadInstanceSuffix();
-        var logPath = Path.Combine(AppContext.BaseDirectory,
-            $"SenSÉ-{stem}{(suffix.Length == 0 ? "" : $"-{suffix}")}-debug.log");
+        var logPath = CheminDebug.OskLog(stem, suffix);
 
         try
         {

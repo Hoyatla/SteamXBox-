@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SenSÉ.Gui.Services;
 
+using SenSÉ.Core.Diagnostics;
 using SenSÉ.Shell.Localization;
 
 namespace SenSÉ.Gui.ViewModels;
@@ -224,7 +225,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             System.IO.File.WriteAllText(
-                System.IO.Path.Combine(AppContext.BaseDirectory, "osk-exit.signal"),
+                CheminDebug.Signal("osk-exit"),
                 DateTime.UtcNow.Ticks.ToString());
 
             foreach (var process in System.Diagnostics.Process.GetProcessesByName("SenSÉ.Osk"))

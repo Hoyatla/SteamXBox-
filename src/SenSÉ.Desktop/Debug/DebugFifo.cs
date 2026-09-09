@@ -5,7 +5,7 @@ namespace SenSÉ.Desktop.Debug;
 /// <summary>
 /// Purge les fichiers de diagnostic (.osk, .signal, .debug) vieux de plus
 /// d'un mois, en FIFO. Les fichiers sont ranges par extension dans
-/// <c>Outils\Debug\osk\</c>, <c>Outils\Debug\signal\</c>, <c>Outils\Debug\debug\</c>.
+/// <c>Debug\osk\</c>, <c>Debug\signal\</c>, <c>Debug\debug\</c> (sous-dossiers de la racine produit).
 /// </summary>
 /// <remarks>
 /// <b>Le FIFO, c'est l'ordre alphabetique.</b> Le suffixe date
@@ -13,11 +13,10 @@ namespace SenSÉ.Desktop.Debug;
 /// premier. Sans cette convention, deux fichiers de la meme seconde
 /// pourraient partir dans n'importe quel ordre.
 ///
-/// <para><b>Pas de deplacement des fichiers existants.</b> Le bridge qui
-/// cree ces fichiers les pose dans son propre dossier, et c'est une
-/// autre conversation. Ce service ne fait que purger les sous-dossiers
-/// cibles. Pour que les nouveaux fichiers soient ranges au bon endroit,
-/// il faut que le bridge les y depose directement.</para>
+/// <para><b>Les ecrivains deposent maintenant dans le bon sous-dossier.</b>
+/// Le helper <see cref="CheminDebug"/> fait respecter la convention
+/// <c>Debug/{osk,signal,debug}/</c> des l'ecriture. Ce service ne fait
+/// que purger ce que les ecrivains ont pose.</para>
 /// </remarks>
 public static class DebugFifo
 {

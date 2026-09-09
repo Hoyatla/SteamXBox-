@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using SenSÉ.Core.Diagnostics;
 using SenSÉ.Core.Runtime;
 
 namespace SenSÉ.Desktop.Input;
@@ -34,7 +35,10 @@ public sealed class DesktopSignalWatcher : IDisposable
 
         // Narrowed to the signal names. The folder also holds the debug log, which is written
         // constantly — an unfiltered watcher would wake for every line of it.
-        _watcher = new FileSystemWatcher(AppContext.BaseDirectory, "desktop-*.signal")
+        CheminDebug.AssurerRacine();
+        _watcher = new FileSystemWatcher(
+            Path.Combine(CheminDebug.Racine, CheminDebug.SousDossierSignal),
+            "desktop-*.signal")
         {
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
         };
@@ -94,7 +98,7 @@ public sealed class DesktopSignalWatcher : IDisposable
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, name);
+            var path = Path.Combine(CheminDebug.Racine, CheminDebug.SousDossierSignal, name);
 
             if (!File.Exists(path))
             {

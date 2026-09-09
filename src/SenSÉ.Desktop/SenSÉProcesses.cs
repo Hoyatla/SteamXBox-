@@ -178,7 +178,7 @@ internal static class SenSÉProcesses
         try
         {
             File.WriteAllText(
-                Path.Combine(AppContext.BaseDirectory, "osk-exit.signal"),
+                CheminDebug.Signal("osk-exit"),
                 DateTime.UtcNow.Ticks.ToString());
         }
         catch (Exception ex)

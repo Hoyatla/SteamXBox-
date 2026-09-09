@@ -19,7 +19,7 @@ if (args.Length > 0)
 {
     if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase))
     {
-        var logPath = Path.Combine(AppContext.BaseDirectory, "SenSÉ-debug.log");
+        var logPath = CheminDebug.DebugLog("console");
         var logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
         DebugLog = (string msg) =>
         {
@@ -796,7 +796,7 @@ static void StopOskOverlay(SenSÉ.App.Console.OskInstanceSet oskInstances, Actio
 
         foreach (var signalName in signalNames)
         {
-            var closeSignalPath = Path.Combine(AppContext.BaseDirectory, signalName);
+            var closeSignalPath = CheminDebug.Signal(Path.GetFileNameWithoutExtension(signalName));
             File.WriteAllText(closeSignalPath, DateTime.UtcNow.Ticks.ToString());
         }
 
@@ -833,7 +833,7 @@ static void KillOskProcesses()
 
 static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = null)
 {
-    var logPath = Path.Combine(AppContext.BaseDirectory, "SenSÉ-debug.log");
+    var logPath = CheminDebug.DebugLog("console");
 
     using var log = new DiagnosticLog(
         logPath,
@@ -2272,7 +2272,7 @@ static async Task RunXbox360LiveAsync(string[] args, Action<string>? debugLog = 
                                     // generic file is also written for an overlay without an instance.
                                     var instance = oskInstances.InstanceFor(frameSource);
                                     var signalName = instance?.Naming.CloseSignalFile ?? "osk-close.signal";
-                                    var closeSignalPath = Path.Combine(AppContext.BaseDirectory, signalName);
+                                    var closeSignalPath = CheminDebug.Signal(Path.GetFileNameWithoutExtension(signalName));
                                     File.WriteAllText(closeSignalPath, DateTime.UtcNow.Ticks.ToString());
                                     signaled = true;
                                     DLog($"OSK close signal file written: {closeSignalPath}");
@@ -3130,20 +3130,21 @@ static void RunDiagnosticReport(string[] args)
     }
 
     Section("log files");
+    var oskDir = Path.Combine(CheminDebug.Racine, CheminDebug.SousDossierOsk);
+    var dbgDir = Path.Combine(CheminDebug.Racine, CheminDebug.SousDossierDebug);
     var logNames = new[]
         {
-            "SenSÉ-debug.log",
-            "SenSÉ-debug.log.1",
-            "SenSÉ-osk-debug.log",
+            Path.Combine(dbgDir, "SenSÉ-debug.log"),
+            Path.Combine(dbgDir, "SenSÉ-debug.log.1"),
+            Path.Combine(oskDir, "SenSÉ-osk-debug.log"),
         }
-            .Concat(Directory.Exists(AppContext.BaseDirectory)
-                ? Directory.EnumerateFiles(AppContext.BaseDirectory, "SenSÉ-*Osk*-debug.log")
-                    .Select(path => Path.GetFileName(path) ?? path)
+            .Concat(Directory.Exists(oskDir)
+                ? Directory.EnumerateFiles(oskDir, "*.log")
                 : []);
 
-    foreach (var name in logNames.Distinct(StringComparer.OrdinalIgnoreCase))
+    foreach (var path in logNames.Distinct(StringComparer.OrdinalIgnoreCase))
     {
-        var path = Path.Combine(AppContext.BaseDirectory, name);
+        var name = Path.GetFileName(path) ?? path;
         lines.Add(File.Exists(path)
             ? $"{name,-28} {new FileInfo(path).Length,12:N0} bytes  {new FileInfo(path).LastWriteTime:yyyy-MM-dd HH:mm:ss}"
             : $"{name,-28} absent");

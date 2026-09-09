@@ -138,7 +138,7 @@ public partial class App : Application
             Input.DesktopWindows.RepairOnStart(message => UiLog.Info(message));
 
             // FIFO 1 mois sur les fichiers de diagnostic (.osk/.signal/.debug)
-            // dans Outils\Debug\{osk,signal,debug}\. Tourne au boot.
+            // dans Debug\{osk,signal,debug}\. Tourne au boot.
             try
             {
                 var purges = DebugFifo.Purger(message => UiLog.Info(message));
