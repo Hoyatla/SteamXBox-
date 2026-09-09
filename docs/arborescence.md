@@ -61,6 +61,18 @@ Un « je vide `Outils/`, ça se retélécharge » est un geste raisonnable qui d
 
 ---
 
+## 2 bis. Décision — le dehors se télécharge à l'installation
+
+*Arrêté le 10 septembre 2026.*
+
+Les 80 Go de la famille « le dehors » ne sont pas livrés : ils sont **téléchargés à l'installation**, par paliers. C'est ce qui rend l'arborescence tenable — un dossier qu'on peut reconstituer d'un catalogue n'a pas le même statut qu'un dossier qu'on ne peut que perdre.
+
+Cela renforce la frontière du §3 au lieu de la brouiller : **`Moteurs/` et `Programmes/` se reconstruisent, `Mes créations/` non.** La sauvegarde n'a plus qu'un seul dossier à connaître.
+
+SenSÉ étant destiné à devenir un système d'exploitation autonome, il doit être **connectable dès la première installation** — et rester installable sans réseau, par une archive compagnon. Le détail est dans [installation.md](installation.md).
+
+---
+
 ## 3. Le principe
 
 > **Un dossier par *nature de chose*, jamais par *outil qui l'a produite*.**
