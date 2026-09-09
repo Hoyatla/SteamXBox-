@@ -237,11 +237,18 @@ public partial class AssistantWindow : Window
 
             var jeton = _arret.Token;
 
+            // Lue ICI, sur le fil d'affichage, et non dans le Task.Run : une case a cocher ne se
+            // consulte pas depuis un autre fil. C'est la meme regle que pour « Interactif » dans
+            // Repondre, et elle a ete enfreinte ici — chaque compactage levait « le thread appelant
+            // ne peut pas acceder a cet objet », la place n'etait jamais rendue, et le message
+            // s'affichait sans dire quel geste avait echoue.
+            var seul = Seul.IsChecked == true;
+
             // Le modele est interroge : hors du fil d'affichage, comme un echange ordinaire.
             var garde = await Task.Run(() => _agent.Compacter(
                 message => Dispatcher.Invoke(() => Dire("systeme", message)),
                 jeton,
-                Seul.IsChecked == true));
+                seul));
 
             Dire("systeme", garde
                 ? "Contexte compacté : l'état du travail est passé au carnet, le fil repart neuf."

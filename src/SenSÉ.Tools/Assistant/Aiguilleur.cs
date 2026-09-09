@@ -136,15 +136,62 @@ public static class Aiguilleur
         texte.AppendLine(
             "Tu es un aiguilleur. Tu ne réponds JAMAIS à la demande : tu nommes seulement la voie "
             + "qui doit la traiter.");
-        texte.Append("Voies : ").Append(string.Join(", ", voies)).AppendLine(".");
-        texte.AppendLine("Ta réponse est UN SEUL MOT choisi dans cette liste. Rien d'autre.");
 
-        // Le biais mesure, corrige ici et nulle part ailleurs.
-        texte.AppendLine(
-            "Une question à laquelle on répond en prose va au dialogue, même si elle est technique.");
+        texte.AppendLine("Voies :");
+
+        foreach (var voie in voies)
+        {
+            texte.Append("- ").Append(voie);
+
+            if (Glose.TryGetValue(voie, out var quoi))
+            {
+                texte.Append(" : ").Append(quoi);
+            }
+
+            texte.AppendLine();
+        }
+
+        texte.AppendLine("Ta réponse est UN SEUL MOT choisi dans cette liste. Rien d'autre.");
 
         return texte.ToString();
     }
+
+    /// <summary>Ce que chaque voie fait, en une ligne.</summary>
+    /// <remarks>
+    /// <b>Un nom de voie sans définition se devine, et il se devine mal.</b> La liste était nue —
+    /// « dialogue, codage, image, transcription, video » — et le 9 septembre 2026 une demande
+    /// d'actualités est partie deux fois de suite à <c>transcription</c>. Le mot, seul, peut se lire
+    /// comme « retranscrire une information » ; il ne désigne en réalité que le passage d'un fichier
+    /// AUDIO au texte, ce que rien dans la consigne ne disait.
+    ///
+    /// <para>
+    /// Le coût est d'une trentaine de jetons sur une invite qui en faisait 161. Ce qu'il achète est
+    /// la disparition d'une classe entière d'erreurs : celles où le modèle ne se trompe pas de
+    /// jugement mais de vocabulaire.
+    /// </para>
+    ///
+    /// <para>
+    /// Par rôle et non par identifiant : remplacer Whisper par un autre transcripteur ne change pas
+    /// ce que « transcription » veut dire. Une voie absente d'ici garde son nom nu — c'est le cas
+    /// d'un rôle ajouté après coup, et il vaut mieux une ligne sans glose qu'une glose inventée.
+    /// </para>
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, string> Glose =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["codage"] =
+                "écrire ou corriger du CODE SOURCE. Pas les questions sur l'informatique, "
+                + "qui vont au dialogue.",
+            ["dialogue"] =
+                "converser, expliquer, résumer un texte ou un document, chercher une information "
+                + "ou une actualité. Tout ce qui se répond en prose. C'est la voie par défaut : "
+                + "dans le doute, c'est elle.",
+            ["image"] = "FABRIQUER une image à partir d'une description.",
+            ["transcription"] =
+                "convertir un fichier SON (wav, mp3, enregistrement, dictée) en texte. JAMAIS un "
+                + "document, jamais un PDF, jamais une page web.",
+            ["video"] = "FABRIQUER une vidéo à partir d'une description.",
+        };
 
     /// <summary>Les exemples que la consigne accompagne, pour l'appelant qui construit le dialogue.</summary>
     /// <remarks>

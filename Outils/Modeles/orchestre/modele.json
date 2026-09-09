@@ -4,6 +4,10 @@
   "moteur": "llama.cpp",
   "espace": "Texte",
   "role": "orchestre",
+
+  "aiguillable": false,
+  "_aiguillable": "IL EST L'AIGUILLEUR, PAS UNE DESTINATION. Sa voie figurait dans la liste qu'il recoit, donc il pouvait s'aiguiller vers lui-meme — et Confier l'ecarte deja pour cette raison exacte : lui confier un travail rendrait le nom d'une voie en guise de reponse. Un choix de plus dans la liste est aussi une chance de plus de se tromper, sur une decision qui n'en compte que cinq.",
+
   "racine": "orchestre",
   "port": 8082,
   "fichiers": {

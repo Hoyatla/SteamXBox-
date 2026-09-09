@@ -102,21 +102,40 @@ public class AiguilleurTests
         Assert.Equal("dialogue", parLeModele.Voie);
     }
 
-    /// <summary>La consigne porte le correctif du biais mesuré.</summary>
+    /// <summary>Chaque voie est définie, et pas seulement nommée.</summary>
     /// <remarks>
-    /// L'unique erreur du banc était « Explique-moi la différence entre RAM et VRAM » envoyée au
-    /// codage : pour un modèle de code, une question technique ressemble à du code. Perdre cette
-    /// ligne rendrait l'erreur sans que rien ne le signale.
+    /// <b>Une liste de mots nus s'est effondrée en service.</b> Le 9 septembre 2026, deux demandes
+    /// d'actualités de suite sont parties à <c>transcription</c> ; remis au banc, le même aiguilleur
+    /// ne faisait plus que <b>4 sur 10</b> et répondait « transcription » à presque tout — y compris
+    /// « Quelle heure est-il à Tokyo ? ». Le modèle ne se trompait pas de jugement, il se trompait
+    /// de vocabulaire : rien ne lui disait que <i>transcription</i> ne désigne que du son.
+    ///
+    /// <para>
+    /// Une ligne de définition par voie a rendu <b>12 sur 12 en 359 ms</b>, contre 346 ms pour la
+    /// liste nue — la justesse double pour treize millisecondes. Ce que chaque phrase achète est
+    /// mesuré, d'où leur présence ici : la borne de <c>transcription</c> vaut à elle seule cinq des
+    /// huit erreurs.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void TheInstructionCarriesTheFixForTheMeasuredBias()
+    public void EveryLaneIsDefinedAndNotMerelyNamed()
     {
         var consigne = "";
 
         Aiguilleur.Decider("Explique-moi une notion.", Voies, (c, _) => { consigne = c; return "dialogue"; });
 
+        // Le biais mesure : une question technique n'est pas du code, et la prose va au dialogue.
         Assert.Contains("en prose", consigne, StringComparison.Ordinal);
-        Assert.Contains("technique", consigne, StringComparison.Ordinal);
+        Assert.Contains("Pas les questions sur l'informatique", consigne, StringComparison.Ordinal);
+
+        // La borne qui a corrige cinq erreurs sur huit.
+        Assert.Contains("JAMAIS un document", consigne, StringComparison.Ordinal);
+
+        // Chaque voie servie porte sa definition, pas seulement son nom.
+        foreach (var voie in Voies)
+        {
+            Assert.Contains("- " + voie + " :", consigne, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>La consigne n'annonce que les voies servies.</summary>
@@ -128,8 +147,13 @@ public class AiguilleurTests
 
         Aiguilleur.Decider("Une demande quelconque.", restreintes, (c, _) => { consigne = c; return "dialogue"; });
 
-        Assert.Contains("codage, dialogue", consigne, StringComparison.Ordinal);
+        Assert.Contains("- codage :", consigne, StringComparison.Ordinal);
+        Assert.Contains("- dialogue :", consigne, StringComparison.Ordinal);
+
+        // Ni la voie, ni sa definition : une voie absente ne doit laisser aucune trace, sans quoi
+        // le modele apprend un mot qu'il ne peut pas rendre.
         Assert.DoesNotContain("video", consigne, StringComparison.Ordinal);
+        Assert.DoesNotContain("transcription", consigne, StringComparison.Ordinal);
     }
 
     /// <summary>Un aiguilleur qui tombe ne fait pas tomber la demande.</summary>
