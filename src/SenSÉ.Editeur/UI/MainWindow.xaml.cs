@@ -93,21 +93,105 @@ public partial class MainWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Filter = "Markdown (*.md)|*.md|Texte (*.txt)|*.txt",
+            Filter = ConstruireFilterSauvegarde(),
+            FilterIndex = _cheminActuel is null ? 1 : IndexExtension(Path.GetExtension(_cheminActuel)),
             FileName = _cheminActuel is null ? "sans-titre.md" : Path.GetFileName(_cheminActuel),
         };
         if (dlg.ShowDialog(this) != true) return;
-        Sauver(dlg.FileName);
+        // FilterIndex est 1-based et le Filter commence par "(tous)|*.*"
+        var idx = dlg.FilterIndex - 2; // 0 = md, 1 = txt, 2.. = autres
+        string formatCible = idx switch
+        {
+            <= 0 => Path.GetExtension(dlg.FileName).ToLowerInvariant() == ".txt" ? "txt" : "txt", // md/txt -> direct
+            _ => _formatsSauvegarde[idx].Id,
+        };
+        Sauver(dlg.FileName, formatCible);
     }
 
-    private void Sauver(string chemin)
+    private static readonly (string Extension, string Id)[] _formatsSauvegarde =
+        Convertisseur.FormatsCibles.ToArray();
+
+    private static string ConstruireFilterSauvegarde()
     {
+        // Index 1 = "tous" (Windows SaveFileDialog ajoute toujours ca en tete).
+        // Index 2..N = un format par ligne, dans le meme ordre que _formatsSauvegarde.
+        var lignes = new List<string> { "Tous les formats documents (*.*)|*.*" };
+        foreach (var (ext, id) in _formatsSauvegarde)
+        {
+            var label = id switch
+            {
+                "docx-image" => "Word docx-image",
+                "ocr"        => "OCR (PDF -> texte)",
+                _ => id.ToUpperInvariant() switch
+                {
+                    "MD"   => "Markdown",
+                    "TXT"  => "Texte brut",
+                    "DOCX" => "Word",
+                    "ODT"  => "OpenDocument Text",
+                    "RTF"  => "Rich Text Format",
+                    "HTML" => "Page web",
+                    "PPTX" => "PowerPoint",
+                    "ODP"  => "OpenDocument Presentation",
+                    "XLSX" => "Excel",
+                    "ODS"  => "OpenDocument Sheet",
+                    "CSV"  => "CSV",
+                    "PDF"  => "PDF",
+                    _      => id,
+                },
+            };
+            lignes.Add(label + " (*" + ext + ")|*" + ext);
+        }
+        return string.Join("|", lignes);
+    }
+
+    private static int IndexExtension(string ext)
+    {
+        var low = ext.ToLowerInvariant();
+        for (int i = 0; i < _formatsSauvegarde.Length; i++)
+        {
+            if (_formatsSauvegarde[i].Extension == low) return i + 2; // +1 (Tous) +1 (1-based)
+        }
+        return 1; // defaut : "Tous"
+    }
+
+    private void Sauver(string chemin, string? formatCible = null)
+    {
+        // Detection automatique du format si pas precise : .md / .txt -> direct,
+        // tout autre extension -> conversion via LibreOffice.
+        formatCible ??= Path.GetExtension(chemin).ToLowerInvariant() switch
+        {
+            ".md"  or ".txt" => "txt",
+            _                => Path.GetExtension(chemin).TrimStart('.').ToLowerInvariant(),
+        };
+
         try
         {
-            Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
-            _cheminActuel = chemin;
-            Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-            Statut.Text = "Enregistré.";
+            if (formatCible == "txt")
+            {
+                Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
+                _cheminActuel = chemin;
+                Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
+                Statut.Text = "Enregistré.";
+            }
+            else
+            {
+                // Conversion : on serialize en .md dans %TEMP%, on convertit, on deplace, on nettoie.
+                var tempMd = Path.Combine(Path.GetTempPath(), "editeur_" + Guid.NewGuid().ToString("N") + ".md");
+                Sauvegardeur.Sauvegarder(Rtb.Document, tempMd);
+                try
+                {
+                    var produit = Convertisseur.Convertir(tempMd, formatCible,
+                        msg => Statut.Text = msg);
+                    File.Move(produit, chemin, overwrite: true);
+                    _cheminActuel = chemin;
+                    Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
+                    Statut.Text = "Converti en " + formatCible.ToUpperInvariant() + " : " + Path.GetFileName(chemin);
+                }
+                finally
+                {
+                    try { if (File.Exists(tempMd)) File.Delete(tempMd); } catch { /* best effort */ }
+                }
+            }
         }
         catch (Exception ex)
         {
