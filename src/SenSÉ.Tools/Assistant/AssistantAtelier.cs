@@ -228,6 +228,46 @@ public static class AssistantAtelier
                 Array.Empty<AssistantLocal.Parametre>(),
                 args => AppelerAtelier("catalogue/espaces", null)),
 
+            // Le catalogue entier, tel que l'Atelier le redige lui-meme.
+            //
+            // C'est la seule connaissance de l'Atelier qui ne vieillit pas : elle est generee a
+            // partir du catalogue reel au moment ou on la demande. Recopier cette description dans
+            // la consigne aurait coute des jetons a chaque tour ET menti des le premier noeud
+            // ajoute — ce qui est arrive a d'autres descriptions figees de ce produit.
+            //
+            // A n'appeler que pour decouvrir : c'est un texte long, et atelier_catalogue_types
+            // suffit quand on sait deja quel espace on vise.
+            new(
+                "atelier_aide",
+                "Rend le catalogue complet de l'Atelier, redige par l'Atelier lui-meme : tous les "
+                + "espaces, tous les types de noeuds, leurs ports et leurs parametres. A appeler "
+                + "quand tu ne sais pas ce que l'Atelier sait faire, ou pour composer un graphe que "
+                + "tu n'as jamais fait. C'est long : une fois suffit, ensuite sers-toi de "
+                + "atelier_catalogue_types qui est plus court.",
+                Array.Empty<AssistantLocal.Parametre>(),
+                args => AppelerAtelier("catalogue/aide", null)),
+
+            new(
+                "atelier_type",
+                "Decrit UN type de noeud : ce qu'il fait, ses ports d'entree et de sortie, ses "
+                + "parametres et leurs valeurs possibles. A preferer a atelier_catalogue_types "
+                + "quand tu sais deja quel noeud tu veux et qu'il te manque seulement comment le "
+                + "parametrer.",
+                new[]
+                {
+                    new AssistantLocal.Parametre(
+                        "type_id",
+                        "L'id du type (ex: 'executer_code', 'llm_generer_code', 'texte_vers_image').",
+                        Array.Empty<string>()),
+                },
+                args => AppelerAtelier(
+                    "catalogue/type",
+                    null,
+                    new Dictionary<string, string>
+                    {
+                        ["type_id"] = args.GetValueOrDefault("type_id") ?? "",
+                    })),
+
             new(
                 "atelier_catalogue_types",
                 "Liste les types de noeuds disponibles dans un espace, avec leurs ports d'entree/sortie et leurs parametres. Utilise pour decouvrir comment parametrer un noeud avant de l'ajouter au graphe. Chaque type a un id, un nom affiche, une description, une categorie, et la liste de ses params (nom, libelle, type, defaut, valeurs possibles).",

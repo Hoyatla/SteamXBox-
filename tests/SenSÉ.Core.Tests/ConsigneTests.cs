@@ -182,6 +182,38 @@ public class ConsigneTests : IDisposable
         Assert.InRange(AssistantLocal.Seuil, 0.01, 0.99);
     }
 
+    /// <summary>L'établi de création est cadré, et le modèle sait qu'il ne doit pas le retenir.</summary>
+    /// <remarks>
+    /// <b>Onze verbes <c>atelier_*</c> étaient déclarés sans que rien ne dise ce qu'est
+    /// l'Atelier.</b> Un modèle à qui l'on donne des outils sans leur objet les emploie au hasard
+    /// ou pas du tout — c'est le même défaut que les recherches distantes déclarées mais
+    /// inutilisables, en plus discret.
+    ///
+    /// <para>
+    /// Ce que la consigne doit tenir : l'Atelier est <i>partagé</i> avec l'utilisateur, il a deux
+    /// espaces, et il se décrit lui-même. Ce dernier point est le plus important — recopier son
+    /// catalogue ici coûterait des jetons à chaque tour et mentirait dès le premier nœud ajouté.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheWorkbenchIsFramedAndTheModelIsToldNotToMemoriseIt()
+    {
+        Assert.Contains("L'ATELIER", AssistantLocal.Regles, StringComparison.Ordinal);
+        Assert.Contains("CODAGE", AssistantLocal.Regles, StringComparison.Ordinal);
+        Assert.Contains("MULTIMEDIA", AssistantLocal.Regles, StringComparison.Ordinal);
+
+        // Il se decrit lui-meme : le modele demande plutot que de supposer.
+        Assert.Contains("atelier_aide", AssistantLocal.Regles, StringComparison.Ordinal);
+        Assert.Contains("DEMANDE-LUI", AssistantLocal.Regles, StringComparison.Ordinal);
+    }
+
+    // Un geste unique ne merite pas un graphe, exactement comme deux ou trois gestes ne meritent
+    // pas un carnet. Sans cette borne, le modele composerait un graphe pour une seule image.
+    [Fact]
+    public void ASingleGestureDoesNotDeserveAGraph()
+        => Assert.Contains(
+            "Pour un geste unique", AssistantLocal.Regles, StringComparison.Ordinal);
+
     /// <summary>Plusieurs travaux ouverts apparaissent tous.</summary>
     /// <remarks>
     /// C'est la situation où le choix se pose vraiment : deux carnets, une demande ambiguë, et la

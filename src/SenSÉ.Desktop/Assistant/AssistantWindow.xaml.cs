@@ -125,6 +125,26 @@ public partial class AssistantWindow : Window
             // ecoute sur un port de debogage, longtemps apres la derniere conversation.
             ServeursMcp.Demarrer();
 
+            // L'aiguilleur se leve avec la fenetre, en arriere-plan.
+            //
+            // Il pese 1,8 Go et repond en 232 ms une fois charge, mais son chargement dure
+            // plusieurs secondes : le faire au premier message ferait payer cette attente a la
+            // premiere demande, c'est-a-dire au pire moment. Ici, il a le temps de s'installer
+            // pendant que l'utilisateur ecrit.
+            //
+            // Hors du fil d'affichage, evidemment — c'est ce fil qui doit rester libre pour que la
+            // fenetre reponde. Et sans bruit si le moteur n'est pas la : une machine sans manifeste
+            // d'orchestre marche exactement comme avant, les regles tranchent ce qu'elles savent.
+            Task.Run(() =>
+            {
+                if (SenSÉ.Tools.Assistant.ServeurModele.Voies()
+                    .Contains("orchestre", StringComparer.OrdinalIgnoreCase))
+                {
+                    SenSÉ.Tools.Assistant.ServeurModele.Demarrer(
+                        "orchestre", message => Dispatcher.Invoke(() => _journal?.Invoke(message)));
+                }
+            });
+
             Saisie.Focus();
             Rafraichir();
         };
