@@ -279,6 +279,69 @@ public static class AssistantAtelier
                 {
                     ["espace"] = args.GetValueOrDefault("espace") ?? "codage",
                 })),
+
+            // CE QUI ALLAIT AU GENERATEUR MULTIMEDIA VIENT ICI.
+            //
+            // Le generateur offrait cinq verbes a l'assistant — flux_modeles, flux_prets,
+            // flux_catalogue, flux_noeud, flux_lancer — et il n'existe plus. Les trois derniers
+            // avaient deja leur equivalent (atelier_catalogue_types, atelier_type,
+            // atelier_executer_graphe) ; les deux premiers non, alors que les routes qui les
+            // servent existaient deja cote Atelier. Elles etaient ecrites et injoignables.
+            //
+            // Ce n'est donc pas un ajout de fonction : c'est le raccordement de ce qui etait deja
+            // la. Un verbe qui n'est pas declare n'existe pas pour le modele.
+
+            new(
+                "atelier_modeles",
+                "Liste les modeles installes que l'Atelier peut employer : images, video, texte, "
+                + "audio. A appeler AVANT de composer un graphe multimedia — un graphe bati sur un "
+                + "modele absent echoue a l'execution, plusieurs minutes plus tard.",
+                Array.Empty<AssistantLocal.Parametre>(),
+                _ => AppelerAtelier("modeles", null)),
+
+            new(
+                "atelier_gabarits",
+                "Liste les graphes tout prets, publies comme gabarits. A preferer a la composition "
+                + "quand la demande ressemble a quelque chose de deja fait : reprendre un gabarit "
+                + "coute un appel, le recomposer en coute dix et se trompe davantage.",
+                Array.Empty<AssistantLocal.Parametre>(),
+                _ => AppelerAtelier("templates/lister", null)),
+
+            new(
+                "atelier_gabarit_charger",
+                "Charge un gabarit dans un nouveau graphe, pret a etre ajuste puis execute.",
+                new[]
+                {
+                    new AssistantLocal.Parametre(
+                        "template_id", "L'id du gabarit, rendu par atelier_gabarits.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier(
+                    "templates/charger",
+                    new Dictionary<string, object?>
+                    {
+                        ["template_id"] = args.GetValueOrDefault("template_id") ?? "",
+                    })),
+
+            new(
+                "atelier_essayer_noeud",
+                "Execute UN SEUL noeud, sans le reste du graphe. C'est la façon d'eprouver un "
+                + "reglage avant de lancer une generation qui prendra des minutes : le generateur "
+                + "avait « flux_verifier » pour cela, et c'est mieux qu'une verification puisque "
+                + "le noeud tourne vraiment.",
+                new[]
+                {
+                    new AssistantLocal.Parametre(
+                        "graphe_id", "Le graphe qui contient le noeud.", Array.Empty<string>()),
+                    new AssistantLocal.Parametre(
+                        "noeud_id", "Le noeud a executer seul.", Array.Empty<string>()),
+                },
+                args => AppelerAtelier(
+                    "executer_noeud",
+                    new Dictionary<string, object?>
+                    {
+                        ["graphe_id"] = args.GetValueOrDefault("graphe_id") ?? "",
+                        ["noeud_id"] = args.GetValueOrDefault("noeud_id") ?? "",
+                    })),
         };
     }
 
