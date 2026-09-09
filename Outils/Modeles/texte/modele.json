@@ -1,0 +1,29 @@
+{
+  "id": "qwen35-9b",
+  "nom": "Qwen 3.5 9B (dialogue)",
+  "moteur": "llama.cpp",
+  "espace": "Texte",
+  "role": "dialogue",
+  "racine": "texte",
+  "port": 8081,
+  "fichiers": {
+    "modele": "../Qwen3.5-9B-Q4_K_M.gguf",
+    "projecteur": "../mmproj-Qwen3.5-9B-F16.gguf"
+  },
+  "_fichiers": "Les poids restent a la RACINE de Outils/Modeles, pas dans ce dossier. ServeurModele cherche « *.gguf » au premier niveau seulement (ServeurModele.cs:121) : les deplacer ici casserait l'Assistant tant que la table de moteurs n'existe pas. Le manifeste pointe donc vers « ../ », exactement comme ceux de video/.",
+
+  "contexte": 65536,
+  "ram_mo": 7030,
+  "arguments": ["-ngl", "0", "--parallel", "1", "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--poll", "0", "--prio", "-1"],
+
+  "mesures": {
+    "lecture_invite_jetons_s": 533,
+    "generation_jetons_s": 8.25,
+    "resident_mo": 7030,
+    "sur": "i7-14700KF, processeur seul (-ngl 0), 8 septembre 2026"
+  },
+  "_mesures": "5 775 jetons d'invite lus en 10,83 s. Une consigne de 6 500 jetons coute donc ~12 s avant le premier mot, contre 8 s pour le 4B qu'il remplace. La generation perd 32 % (8,25 contre 12,09) : c'est le prix d'un modele deux fois plus gros, et il se paie en justesse.",
+
+  "vision": true,
+  "_vision": "Le projecteur mmproj donne la lecture d'images. C'est ce qui permet a ce modele de tenir le role multimodal ; sans lui il ne serait qu'un modele de texte."
+}

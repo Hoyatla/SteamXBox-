@@ -1,0 +1,28 @@
+{
+  "id": "ling-3.0-tiny",
+  "nom": "Ling 3.0 tiny (aiguillage)",
+  "moteur": "llama.cpp",
+  "espace": "Texte",
+  "role": "orchestre",
+  "racine": "orchestre",
+  "port": 8082,
+  "fichiers": {
+    "modele": "Ling-3.0-tiny-Q4_K_M.gguf"
+  },
+
+  "taille_mo": 4689,
+  "materiel": "processeur",
+  "contexte": 8192,
+  "_contexte": "Petit, et c'est le point. Aiguiller demande ~200 jetons d'invite et trois de reponse. Lui donner 65 536 comme au modele de dialogue gaspillerait la memoire du cache pour une decision qui tient en une phrase.",
+
+  "arguments": ["-ngl", "0", "--parallel", "1", "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--poll", "0", "--prio", "-1"],
+
+  "_serveur_propre": "Il a son port a lui, et ce n'est pas par confort. Partager le serveur du modele de dialogue ferait alterner deux invites systeme differentes ; or reecrire le message systeme invalide le cache de prefixe en entier, et le tour suivant repaierait l'ingestion complete — douze secondes pour les 6 500 jetons de consigne. Le port separe est ce qui rend l'aiguillage bon marche.",
+
+  "mesures": null,
+  "_mesures": "NON MESURE au 9 septembre 2026. Ni sa vitesse, ni sa fidelite au format de sortie, ni sa tenue a l'appel d'outils. Les 4,58 Go ci-dessus sont sa taille sur le disque, pas sa performance. C'EST LA PREMIERE CHOSE A MESURER avant de batir l'aiguillage sur lui — la comparaison utile est le Qwen 9B : 533 jetons/s en lecture, 8,25 en generation.",
+
+  "_famille": "Ling est une famille MoE d'inclusionAI. Un MoE annonce deux tailles : les parametres totaux, qu'il faut tous loger en RAM, et les actifs, qui seuls calculent. « tiny » decrit les actifs — d'ou 4,58 Go sur le disque pour un modele dit minuscule. Sur cette machine c'est le bon compromis : rapide comme un petit, plus juste qu'un petit.",
+
+  "produit": "decision"
+}

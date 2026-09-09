@@ -4,6 +4,7 @@
   "moteur": "sd.cpp",
   "espace": "Multimedia",
   "racine": "image",
+  "port": 8085,
   "fichiers": {
     "diffusion": "../unet-flux1-schnell-Q5_K_S.gguf",
     "vae":       "../ae.safetensors",

@@ -4,6 +4,7 @@
   "moteur": "sd.cpp",
   "espace": "Multimedia",
   "racine": "video",
+  "port": 8085,
   "fichiers": {
     "diffusion":            "../Wan2.2-T2V-LowNoise-Q4_K_M.gguf",
     "diffusion_haut_bruit": "../Wan2.2-T2V-HighNoise-Q4_K_M.gguf",

@@ -1,0 +1,33 @@
+{
+  "id": "whisper-turbo",
+  "nom": "Whisper large-v3-turbo (parole vers texte)",
+  "moteur": "whisper.cpp",
+  "espace": "Audio",
+  "role": "transcription",
+  "racine": "audio",
+  "port": 8084,
+  "fichiers": {
+    "modele": "ggml-large-v3-turbo-q5_0.bin"
+  },
+
+  "materiel": "carte",
+  "_materiel": "Il tourne sur la carte, pas sur le processeur — et c'est ce qui rend la simultaneite gratuite. Mesure du 8 septembre : whisper transcrivant vingt-cinq fois pendant que le 9B redigeait ne lui a rien coute (7,87 jetons/s dans les deux cas). Les modeles de langage sont sur le processeur, l'audio et l'image sur la carte : ils ne se disputent rien.",
+
+  "vram_mo": 3300,
+  "taille_mo": 574,
+
+  "mesures": {
+    "chargement_ms": 1468,
+    "transcription_ms": 210,
+    "audio_traite_s": 10.3,
+    "par_le_serveur_ms": 230,
+    "sur": "RTX 4070 SUPER, 8 septembre 2026"
+  },
+  "_mesures": "210 ms de calcul pour 10,3 s d'audio, soit ~50x le temps reel. Le chargement (1 468 ms) coute sept fois le calcul : d'ou le serveur plutot que la CLI, qui ramene un appel a 230 ms.",
+
+  "produit": "texte",
+  "_produit": "Parole vers texte uniquement. Ni synthese vocale — ce serait un modele TTS — ni comprehension de l'audio au-dela de la transcription. Multilingue, horodatage disponible.",
+
+  "outil": "whisper-server.exe",
+  "_outil": "Troisieme fois le meme patron apres llama-server et sd-server : un binaire natif autonome, format ggml, pas de Python. Le lot fournit aussi whisper-stream (temps reel) et whisper-vad-speech-segments (detection de parole), non essayes."
+}
