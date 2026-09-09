@@ -1,0 +1,45 @@
+# Instance de recherche locale de SenSÉ.
+#
+# Elle existe parce que la recherche par navigateur ne tient pas dans la duree : mesure du
+# 9 septembre 2026, la facade publique rend un HTTP 202 « complete the following challenge to
+# confirm this search was made by a human » apres une dizaine de requetes. Un moteur qui consent
+# a etre interroge est la seule fondation possible pour un service rendu a l'utilisateur.
+#
+# Elle n'ecoute que la boucle locale. Rien de ce qui suit n'est joignable depuis le reseau.
+
+use_default_settings: true
+
+general:
+  instance_name: "Recherche SenSÉ"
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+server:
+  bind_address: "127.0.0.1"
+  port: 8888
+  secret_key: "REMPLACER-PAR-UN-SECRET-ALEATOIRE"
+  public_instance: false
+  image_proxy: false
+  # Le limiteur protege une instance publique des abus. Celle-ci n'a qu'un seul client, sur la
+  # boucle locale : il ne ferait que refuser les recherches de l'utilisateur.
+  limiter: false
+  method: "GET"
+
+search:
+  safe_search: 1
+  autocomplete: ""
+  # LE FORMAT JSON EST LA RAISON D'ETRE DE CE FICHIER. SearXNG ne sert que du HTML par defaut, et
+  # le produit interroge en JSON — SearxngQuery ajoute « &format=json ». Sans cette ligne
+  # l'instance repond 403, ce que SearxngClient sait nommer mais ne peut pas corriger.
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true
+
+outgoing:
+  request_timeout: 6.0
+  max_request_timeout: 12.0
+  pool_connections: 20

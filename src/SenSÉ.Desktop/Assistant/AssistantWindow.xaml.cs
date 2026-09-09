@@ -135,6 +135,11 @@ public partial class AssistantWindow : Window
             // Hors du fil d'affichage, evidemment — c'est ce fil qui doit rester libre pour que la
             // fenetre reponde. Et sans bruit si le moteur n'est pas la : une machine sans manifeste
             // d'orchestre marche exactement comme avant, les regles tranchent ce qu'elles savent.
+            // L'instance de recherche se leve avec la fenetre, comme les serveurs MCP : elle pese
+            // deux cents megaoctets et personne d'autre ne s'en sert. Absente, elle ne manque a
+            // personne — la recherche retombe sur le navigateur.
+            Task.Run(ServeurRecherche.Demarrer);
+
             Task.Run(() =>
             {
                 if (SenSÉ.Tools.Assistant.ServeurModele.Voies()
@@ -161,6 +166,7 @@ public partial class AssistantWindow : Window
         {
             SenSÉ.Tools.Assistant.ServeurModele.Arreter(_journal);
             ServeursMcp.Arreter();
+            ServeurRecherche.Arreter();
         };
     }
 
