@@ -13,8 +13,4 @@
     <LangVersion>latest</LangVersion>
     <StartupObject>SenSÉ.Editeur.Program</StartupObject>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\SenSÉ.Tools\SenSÉ.Tools.csproj" />
-    <ProjectReference Include="..\SenSÉ.Plugins\SenSÉ.Plugins.csproj" />
-  </ItemGroup>
 </Project>

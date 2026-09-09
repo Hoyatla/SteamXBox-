@@ -100,50 +100,17 @@ public partial class MainWindow : Window
             FileName = _cheminActuel is null ? "sans-titre.md" : Path.GetFileName(_cheminActuel),
         };
         if (dlg.ShowDialog(this) != true) return;
-        // FilterIndex est 1-based et le Filter commence par "(tous)|*.*"
-        var idx = dlg.FilterIndex - 2; // 0 = md, 1 = txt, 2.. = autres
-        string formatCible = idx switch
-        {
-            <= 0 => Path.GetExtension(dlg.FileName).ToLowerInvariant() == ".txt" ? "txt" : "txt", // md/txt -> direct
-            _ => _formatsSauvegarde[idx].Id,
-        };
-        Sauver(dlg.FileName, formatCible);
+        Sauver(dlg.FileName);
     }
 
+    // Phase B annulee : filter limite a md et txt. Docx/Odt viendront en Phase B-prime/C-prime natives.
     private static readonly (string Extension, string Id)[] _formatsSauvegarde =
-        Convertisseur.FormatsCibles.ToArray();
+        new (string, string)[] { (".md", "md"), (".txt", "txt") };
 
     private static string ConstruireFilterSauvegarde()
     {
-        // Index 1 = "tous" (Windows SaveFileDialog ajoute toujours ca en tete).
-        // Index 2..N = un format par ligne, dans le meme ordre que _formatsSauvegarde.
-        var lignes = new List<string> { "Tous les formats documents (*.*)|*.*" };
-        foreach (var (ext, id) in _formatsSauvegarde)
-        {
-            var label = id switch
-            {
-                "docx-image" => "Word docx-image",
-                "ocr"        => "OCR (PDF -> texte)",
-                _ => id.ToUpperInvariant() switch
-                {
-                    "MD"   => "Markdown",
-                    "TXT"  => "Texte brut",
-                    "DOCX" => "Word",
-                    "ODT"  => "OpenDocument Text",
-                    "RTF"  => "Rich Text Format",
-                    "HTML" => "Page web",
-                    "PPTX" => "PowerPoint",
-                    "ODP"  => "OpenDocument Presentation",
-                    "XLSX" => "Excel",
-                    "ODS"  => "OpenDocument Sheet",
-                    "CSV"  => "CSV",
-                    "PDF"  => "PDF",
-                    _      => id,
-                },
-            };
-            lignes.Add(label + " (*" + ext + ")|*" + ext);
-        }
-        return string.Join("|", lignes);
+        // Phase B annulee : md et txt seulement. Docx/Odt arrivent en Phase B-prime/C-prime.
+        return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Tous les fichiers (*.*)|*.*";
     }
 
     private static int IndexExtension(string ext)
@@ -156,44 +123,24 @@ public partial class MainWindow : Window
         return 1; // defaut : "Tous"
     }
 
-    private void Sauver(string chemin, string? formatCible = null)
+    private void Sauver(string chemin)
     {
-        // Detection automatique du format si pas precise : .md / .txt -> direct,
-        // tout autre extension -> conversion via LibreOffice.
-        formatCible ??= Path.GetExtension(chemin).ToLowerInvariant() switch
+        // Phase B annulee : sauvegarde directe en .md ou .txt selon l'extension.
+        // .docx/.odt/etc arrivent en Phase B-prime (DocumentFormat.OpenXml) et C-prime (ZIP+XML maison).
+        var ext = Path.GetExtension(chemin).ToLowerInvariant();
+        if (ext != ".md" && ext != ".txt")
         {
-            ".md"  or ".txt" => "txt",
-            _                => Path.GetExtension(chemin).TrimStart('.').ToLowerInvariant(),
-        };
-
+            MessageBox.Show(this,
+                "Format " + ext + " non encore supporte en ecriture native. Utilisez .md ou .txt pour l'instant (les writers .docx/.odt arrivent en Phase B-prime et C-prime).",
+                "Format non supporte", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         try
         {
-            if (formatCible == "txt")
-            {
-                Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
-                _cheminActuel = chemin;
-                Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-                Statut.Text = "Enregistré.";
-            }
-            else
-            {
-                // Conversion : on serialize en .md dans %TEMP%, on convertit, on deplace, on nettoie.
-                var tempMd = Path.Combine(Path.GetTempPath(), "editeur_" + Guid.NewGuid().ToString("N") + ".md");
-                Sauvegardeur.Sauvegarder(Rtb.Document, tempMd);
-                try
-                {
-                    var produit = Convertisseur.Convertir(tempMd, formatCible,
-                        msg => Statut.Text = msg);
-                    File.Move(produit, chemin, overwrite: true);
-                    _cheminActuel = chemin;
-                    Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-                    Statut.Text = "Converti en " + formatCible.ToUpperInvariant() + " : " + Path.GetFileName(chemin);
-                }
-                finally
-                {
-                    try { if (File.Exists(tempMd)) File.Delete(tempMd); } catch { /* best effort */ }
-                }
-            }
+            Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
+            _cheminActuel = chemin;
+            Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
+            Statut.Text = "Enregistré.";
         }
         catch (Exception ex)
         {
