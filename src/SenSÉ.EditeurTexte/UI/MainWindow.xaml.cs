@@ -306,7 +306,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DemanderIa_Click(object sender, RoutedEventArgs e)
+    private async void DemanderIa_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new FenetrePromptIA(Rtb.Selection.IsEmpty
             ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
@@ -314,25 +314,49 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() != true) return;
 
         var prompt = dlg.PromptSaisi;
-        var contexte = new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text;
-        var nbCaracteres = contexte.Length;
+        var contexteComplet = 
+            (Rtb.Selection.IsEmpty
+                ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
+                : Rtb.Selection.Text);
 
-        // [TODO Phase D2] Remplacer par appel Atelier.EnvoyerPromptAsync(prompt, contexte)
-        // quand l'endpoint LLM stable de l'Atelier sera expose.
-        MessageBox.Show(this,
-            $"Stub : envoyerais a l'Atelier le prompt « {prompt} » avec contexte de {nbCaracteres} caracteres.",
-            "Demander a l'IA (stub)",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        // Phase E : envoi a Atelier /atelier/llm/complete, qui delegue a pc-agent (8765).
+        Statut.Text = "IA : envoi a l'Atelier...";
+        try
+        {
+            using var cli = new Integration.ClientAtelier();
+            var reponse = await cli.CompleterAsync(prompt + "\n\nContexte :\n" + contexteComplet, 2048);
+            Rtb.CaretPosition.InsertTextInRun(reponse + "\n");
+            Statut.Text = "IA : reponse inseree.";
+        }
+        catch (Exception ex)
+        {
+            Statut.Text = "IA : erreur.";
+            MessageBox.Show(this, ex.Message, "Demander a l'IA", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
-    private void Dicter_Click(object sender, RoutedEventArgs e)
+    private async void Dicter_Click(object sender, RoutedEventArgs e)
     {
-        // [TODO Phase D2] Remplacer par enregistrement micro + envoi Whisper + insertion
-        // de la transcription dans le FlowDocument au CaretPosition.
-        MessageBox.Show(this,
-            "Stub : demarrerait l'enregistrement micro, enverrait a Whisper, insererait la transcription.",
-            "Dicter (stub)",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        // Phase E.1 : pas de backend Whisper stable, ClientAtelier.TranscrireAsync
+        // leve NotImplementedException avec un message clair. En E.2 on remplacera
+        // par l'enregistrement micro (NAudio) + transcription reelle.
+        Statut.Text = "Dicter : envoi a l'Atelier...";
+        try
+        {
+            using var cli = new Integration.ClientAtelier();
+            await cli.TranscrireAsync(System.Array.Empty<byte>(), "fr");
+            Statut.Text = "Dicter : transcription inseree.";
+        }
+        catch (NotImplementedException ex)
+        {
+            Statut.Text = "Dicter : pas encore branche.";
+            MessageBox.Show(this, ex.Message, "Dicter", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            Statut.Text = "Dicter : erreur.";
+            MessageBox.Show(this, ex.Message, "Dicter", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }
 
