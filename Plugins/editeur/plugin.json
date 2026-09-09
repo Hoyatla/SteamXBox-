@@ -3,6 +3,7 @@
   "name": "Éditeur Texte",
   "category": "tool",
   "version": "0.1.0",
+  "licence": "MIT",
   "glyph": "E8A5",
   "icon": "IconEdit",
   "does": "editeur",
