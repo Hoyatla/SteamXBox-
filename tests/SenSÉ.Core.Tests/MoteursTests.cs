@@ -221,6 +221,45 @@ public class MoteursTests : IDisposable
             Moteurs.Pour("orchestre")!.Arguments);
     }
 
+    /// <summary>Le serveur prend son port et sa place de travail dans le manifeste.</summary>
+    /// <remarks>
+    /// C'est tout le branchement : l'appelant demande une voie, jamais un modèle. Remplacer
+    /// Qwen Coder par un autre ne change alors rien au code qui l'interroge.
+    /// </remarks>
+    [Fact]
+    public void TheServerTakesItsPortAndContextFromTheManifest()
+    {
+        Poser("codage", """
+            { "id": "coder", "role": "codage", "port": 8083, "contexte": 32768,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Poser("orchestre", """
+            { "id": "aiguilleur", "role": "orchestre", "port": 8082, "contexte": 4096,
+              "fichiers": { "modele": "p.gguf" } }
+            """, "p.gguf");
+
+        Assert.Equal("http://127.0.0.1:8083", ServeurModele.AdressePour("codage"));
+        Assert.Equal("http://127.0.0.1:8082", ServeurModele.AdressePour("orchestre"));
+        Assert.Equal(32768, ServeurModele.ContextePour("codage"));
+        Assert.Equal(4096, ServeurModele.ContextePour("orchestre"));
+    }
+
+    /// <summary>Une voie que la table ignore retombe sur l'ancien chemin.</summary>
+    /// <remarks>
+    /// <b>C'est ce qui rend le branchement sûr.</b> Une installation sans manifeste — ou plus
+    /// ancienne que la table — continue de fonctionner exactement comme avant : port 8081, place
+    /// de travail de la constante. Brancher la table ne devait exiger de personne que tout soit
+    /// décrit le même jour.
+    /// </remarks>
+    [Fact]
+    public void ALaneTheTableIgnoresFallsBackToTheOldPath()
+    {
+        Assert.Equal("http://127.0.0.1:8081", ServeurModele.AdressePour("dialogue"));
+        Assert.Equal(ServeurModele.Contexte, ServeurModele.ContextePour("dialogue"));
+        Assert.Equal("http://127.0.0.1:8081", ServeurModele.Adresse);
+    }
+
     // Aucun modele installe : la table est vide, et personne ne tombe.
     [Fact]
     public void AnEmptyInstallationYieldsAnEmptyTable()

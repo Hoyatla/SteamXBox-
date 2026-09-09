@@ -67,7 +67,61 @@ public static class ServeurModele
     private static string DossierModeles => Path.Combine(Racine, "Modeles");
 
     /// <summary>L'adresse du serveur, compatible avec le dialecte OpenAI.</summary>
-    public static string Adresse => "http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture);
+    public static string Adresse => AdresseDe(Port);
+
+    private static string AdresseDe(int port)
+        => "http://127.0.0.1:" + port.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Le rôle que tient le modèle avec lequel l'utilisateur converse.</summary>
+    public const string Dialogue = "dialogue";
+
+    /// <summary>
+    /// Ce que la table déclare pour ce rôle, ou null si elle n'en dit rien.
+    /// </summary>
+    /// <remarks>
+    /// <b>La table décide, l'ancien chemin rattrape.</b> Une installation sans manifeste — ou dont
+    /// le manifeste écarte son moteur — continue de fonctionner exactement comme avant : un
+    /// <c>.gguf</c> au premier niveau, le port 8081, les arguments écrits ici. C'est ce qui permet
+    /// de brancher la table sans exiger que tout soit décrit le même jour.
+    /// </remarks>
+    private static Moteur? Declare(string role, Action<string>? journal = null)
+        => Moteurs.Pour(role, journal);
+
+    /// <summary>Le port de ce rôle : celui du manifeste, sinon l'historique.</summary>
+    private static int PortDe(string role)
+        => Declare(role) is { Port: > 0 } moteur ? moteur.Port : Port;
+
+    /// <summary>
+    /// La clé au registre des ressources, une par rôle.
+    /// </summary>
+    /// <remarks>
+    /// Distincte par rôle, sans quoi démarrer le second moteur écraserait l'inscription du premier
+    /// et la fermeture n'en arrêterait qu'un. Le rôle de dialogue garde la clé historique pour que
+    /// les serveurs déjà inscrits d'une session précédente restent reconnus.
+    /// </remarks>
+    private static string RessourceDe(string role)
+        => string.Equals(role, Dialogue, StringComparison.OrdinalIgnoreCase)
+            ? Ressource
+            : Ressource + "-" + role.ToLowerInvariant();
+
+    /// <summary>L'adresse où interroger le moteur d'un rôle.</summary>
+    /// <remarks>
+    /// C'est par ici que passe l'aiguillage : il demande « où est le codage ? » et reçoit un port,
+    /// sans jamais nommer un modèle. Remplacer Qwen Coder par un autre ne change donc rien au code
+    /// qui l'appelle.
+    /// </remarks>
+    public static string AdressePour(string role) => AdresseDe(PortDe(role));
+
+    /// <summary>La place de travail de ce rôle, en jetons.</summary>
+    /// <remarks>
+    /// Le manifeste l'emporte sur la constante : l'aiguilleur travaille sur 4 096 jetons là où le
+    /// dialogue en a 65 536, et lui en donner autant réserverait de la mémoire pour rien.
+    /// </remarks>
+    public static int ContextePour(string role)
+        => Declare(role) is { Contexte: > 0 } moteur ? moteur.Contexte : Contexte;
+
+    /// <summary>Les rôles réellement servis sur cette machine.</summary>
+    public static IReadOnlyList<string> Voies(Action<string>? journal = null) => Moteurs.Voies(journal);
 
     /// <summary>
     /// La place de travail du modèle, en jetons.
@@ -250,12 +304,15 @@ public static class ServeurModele
     /// Confondre cette réponse avec l'absence de serveur menait à en lancer un second par-dessus le
     /// premier — deux processus se disputant la même mémoire vidéo pour charger le même modèle.
     /// </remarks>
-    public static Etat Ou()
+    public static Etat Ou() => Ou(Port);
+
+    /// <summary>Le même, pour le port d'un rôle donné.</summary>
+    public static Etat Ou(int port)
     {
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            var reponse = client.GetAsync(Adresse + "/health").GetAwaiter().GetResult();
+            var reponse = client.GetAsync(AdresseDe(port) + "/health").GetAwaiter().GetResult();
             var lu = reponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
             if (reponse.IsSuccessStatusCode && lu.Contains("\"ok\"", StringComparison.Ordinal))
@@ -297,11 +354,31 @@ public static class ServeurModele
         }
     }
 
-    /// <summary>Démarre le serveur s'il dort, et attend qu'il soit réellement prêt.</summary>
+    /// <summary>Démarre le serveur du dialogue s'il dort, et attend qu'il soit réellement prêt.</summary>
     /// <returns>Une phrase à montrer en cas d'échec, ou null si tout va bien.</returns>
     public static string? Demarrer(Action<string>? journal, CancellationToken arret = default)
+        => Demarrer(Dialogue, journal, arret);
+
+    /// <summary>
+    /// Démarre le moteur d'un rôle, d'après ce que la table en déclare.
+    /// </summary>
+    /// <remarks>
+    /// <b>Un rôle, un port, un processus — au lieu d'un seul modèle pour tout le produit.</b>
+    /// Le port, les poids, le contexte et les arguments viennent du manifeste ; ce qui reste écrit
+    /// ici est ce qui ne dépend d'aucun modèle : le nombre de fils, la patience au chargement, et
+    /// la façon d'attendre.
+    ///
+    /// <para>
+    /// Un rôle que la table ignore retombe sur l'ancien chemin — le premier <c>.gguf</c> de
+    /// <c>Outils/Modeles</c> sur le port 8081. Une installation sans manifeste continue donc de
+    /// fonctionner comme avant.
+    /// </para>
+    /// </remarks>
+    public static string? Demarrer(string role, Action<string>? journal, CancellationToken arret = default)
     {
-        var etat = Ou();
+        var declare = Declare(role, journal);
+        var port = declare is { Port: > 0 } ? declare.Port : Port;
+        var etat = Ou(port);
 
         if (etat == Etat.Pret)
         {
@@ -310,7 +387,15 @@ public static class ServeurModele
             return null;
         }
 
-        var journalier = Path.Combine(Racine, "llama.cpp", "serveur.log");
+        // Un journal par rôle : deux moteurs qui écriraient dans le même fichier rendraient leurs
+        // deux chargements illisibles, et c'est précisément ce fichier qu'on relit quand l'un des
+        // deux ne démarre pas.
+        var journalier = Path.Combine(
+            Racine,
+            "llama.cpp",
+            string.Equals(role, Dialogue, StringComparison.OrdinalIgnoreCase)
+                ? "serveur.log"
+                : $"serveur-{role.ToLowerInvariant()}.log");
 
         // Un serveur est là et charge encore : on l'attend au lieu d'en lancer un deuxième. Deux
         // processus chargeant le même modèle se disputeraient la mémoire vidéo, et aucun des deux
@@ -327,13 +412,18 @@ public static class ServeurModele
             return $"Le serveur du modèle est absent : {Programme}";
         }
 
-        if (Modele() is not { } modele)
+        // Les poids du manifeste s'il en declare, sinon le premier .gguf de la racine.
+        var modele = declare?.Poids ?? Modele();
+
+        if (modele is null)
         {
-            return $"Aucun modèle dans {DossierModeles}. Un fichier .gguf est attendu.";
+            return declare is null
+                ? $"Aucun modèle dans {DossierModeles}. Un fichier .gguf est attendu."
+                : $"Le moteur « {declare.Id} » ne déclare aucun fichier de poids.";
         }
 
         journal?.Invoke(
-            $"Démarrage de l'assistant, chargement de {Path.GetFileName(modele)}. "
+            $"Démarrage de {declare?.Nom ?? "l'assistant"}, chargement de {Path.GetFileName(modele)}. "
             + "Compter plusieurs minutes la première fois.");
 
         // Moitié des cœurs, jamais tous : l'assistant tourne pendant qu'autre chose travaille —
@@ -347,7 +437,7 @@ public static class ServeurModele
             [
                 "-m", modele,
                 "--host", "127.0.0.1",
-                "--port", Port.ToString(CultureInfo.InvariantCulture),
+                "--port", port.ToString(CultureInfo.InvariantCulture),
                 "-ngl", "0",
                 "-t", fils,
 
@@ -366,7 +456,8 @@ public static class ServeurModele
                 // seule plafonnait à 8 192 pendant que la machine en réservait 32 768. Mesuré sur
                 // le 4B : 3,18 Go par défaut, 3,81 Go ici. Six cent trente mégaoctets pour
                 // quadrupler ce que l'assistant peut retenir.
-                "-c", Contexte.ToString(CultureInfo.InvariantCulture),
+                "-c", (declare is { Contexte: > 0 } ? declare.Contexte : Contexte)
+                    .ToString(CultureInfo.InvariantCulture),
                 "--parallel", "1",
 
                 // Le cache KV en huit bits, et l'attention qui n'a plus besoin de le matérialiser.
@@ -409,14 +500,21 @@ public static class ServeurModele
 
                 // La vue, si le projecteur est là. Sur le processeur comme le reste : l'invariante
                 // « jamais la carte » ne souffre pas d'exception pour une pièce de plus.
-                .. (Projecteur() is { } vue ? new[] { "--mmproj", vue, "--no-mmproj-offload" } : []),
+                .. ((declare is not null ? declare.Projecteur : Projecteur()) is { } vue
+                    ? new[] { "--mmproj", vue, "--no-mmproj-offload" }
+                    : []),
+
+                // Ce que le manifeste dicte en propre, ajoute en dernier pour qu'il puisse corriger
+                // ce qui precede : la reflexion coupee de l'aiguilleur, un cache different, un
+                // placement de poids. Vide pour un role que la table ignore.
+                .. (declare is not null ? declare.Arguments : []),
             ],
             Path.Combine(Racine, "llama.cpp"),
             journalier,
             environnement: null,
             identite: new Serveurs.ServeurLocal.Identite(
-                Ressource,
-                "Modèle de langage",
+                RessourceDe(role),
+                declare?.Nom ?? "Modèle de langage",
                 "assistant",
                 Serveurs.Poids.Leger,
                 CoutVideoMo: 0,
@@ -449,6 +547,25 @@ public static class ServeurModele
         if (Serveurs.Ressources.Arreter(Ressource))
         {
             journal?.Invoke("Modèle de langage déchargé : la fenêtre de l'assistant est fermée.");
+        }
+
+        // Puis tous les autres rôles de la table.
+        //
+        // La clé du registre est distincte par rôle, et n'arrêter que la clé historique laisserait
+        // l'aiguilleur et le codeur tourner après la fermeture — la fuite exacte que ce produit a
+        // déjà connue avec les serveurs MCP et le Moniteur, et qui s'entretient toute seule
+        // puisqu'un serveur orphelin est repris à la session suivante.
+        foreach (var role in Moteurs.Voies(journal))
+        {
+            if (string.Equals(role, Dialogue, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (Serveurs.Ressources.Arreter(RessourceDe(role)))
+            {
+                journal?.Invoke($"Moteur « {role} » déchargé : la fenêtre de l'assistant est fermée.");
+            }
         }
     }
 
