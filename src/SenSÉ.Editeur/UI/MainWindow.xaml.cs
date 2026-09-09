@@ -103,14 +103,15 @@ public partial class MainWindow : Window
         Sauver(dlg.FileName);
     }
 
-    // Phase B annulee : filter limite a md et txt. Docx/Odt viendront en Phase B-prime/C-prime natives.
+    // Phase B-prime : md, txt (natif TextePlain/Markdown) et docx (natif DocumentFormat.OpenXml via Format.Docx).
+    // odt arrive en Phase C-prime (ZIP+XML maison).
     private static readonly (string Extension, string Id)[] _formatsSauvegarde =
-        new (string, string)[] { (".md", "md"), (".txt", "txt") };
+        new (string, string)[] { (".md", "md"), (".txt", "txt"), (".docx", "docx") };
 
     private static string ConstruireFilterSauvegarde()
     {
-        // Phase B annulee : md et txt seulement. Docx/Odt arrivent en Phase B-prime/C-prime.
-        return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Tous les fichiers (*.*)|*.*";
+        // Phase B-prime : md, txt, docx (writer natif). odt en Phase C-prime.
+        return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Word (*.docx)|*.docx|Tous les fichiers (*.*)|*.*";
     }
 
     private static int IndexExtension(string ext)
@@ -125,13 +126,12 @@ public partial class MainWindow : Window
 
     private void Sauver(string chemin)
     {
-        // Phase B annulee : sauvegarde directe en .md ou .txt selon l'extension.
-        // .docx/.odt/etc arrivent en Phase B-prime (DocumentFormat.OpenXml) et C-prime (ZIP+XML maison).
+        // Phase B-prime : md / txt / docx (natif) sont supportes. odt en Phase C-prime.
         var ext = Path.GetExtension(chemin).ToLowerInvariant();
-        if (ext != ".md" && ext != ".txt")
+        if (ext != ".md" && ext != ".txt" && ext != ".docx")
         {
             MessageBox.Show(this,
-                "Format " + ext + " non encore supporte en ecriture native. Utilisez .md ou .txt pour l'instant (les writers .docx/.odt arrivent en Phase B-prime et C-prime).",
+                "Format " + ext + " non encore supporte en ecriture native. Formats disponibles : .md, .txt, .docx (.odt en Phase C-prime).",
                 "Format non supporte", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -140,7 +140,7 @@ public partial class MainWindow : Window
             Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
             _cheminActuel = chemin;
             Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-            Statut.Text = "Enregistré.";
+            Statut.Text = ext == ".docx" ? "Enregistré en Word (.docx)." : "Enregistré.";
         }
         catch (Exception ex)
         {

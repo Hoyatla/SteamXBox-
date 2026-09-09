@@ -13,13 +13,17 @@ public static class Chargeur
     {
         var ext = Path.GetExtension(chemin).ToLowerInvariant();
         var contenu = File.ReadAllText(chemin);
-        if (ext == ".md")
+        switch (ext)
         {
-            Format.Markdown.DepuisMarkdown(cible, contenu);
-        }
-        else
-        {
-            Format.TextePlain.DepuisPlainText(cible, contenu);
+            case ".md":
+                Format.Markdown.DepuisMarkdown(cible, contenu);
+                break;
+            case ".docx":
+                Format.Docx.DepuisDocx(cible, chemin); // .md / .docx ecrits sur disque
+                break;
+            default:
+                Format.TextePlain.DepuisPlainText(cible, contenu);
+                break;
         }
     }
 }

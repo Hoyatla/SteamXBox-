@@ -13,4 +13,7 @@
     <LangVersion>latest</LangVersion>
     <StartupObject>SenSÉ.Editeur.Program</StartupObject>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />
+  </ItemGroup>
 </Project>
