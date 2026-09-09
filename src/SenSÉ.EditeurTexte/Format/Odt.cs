@@ -8,7 +8,7 @@ using System.Windows.Documents;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace SenSÉ.Editeur.Format;
+namespace SenSÉ.EditeurTexte.Format;
 
 /// <summary>
 /// Writer/reader natif de fichiers .odt (OpenDocument Text, OASIS) sans dependance

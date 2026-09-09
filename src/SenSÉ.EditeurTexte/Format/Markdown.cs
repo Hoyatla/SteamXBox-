@@ -3,7 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Documents;
 
-namespace SenSÉ.Editeur.Format;
+namespace SenSÉ.EditeurTexte.Format;
 
 /// <summary>
 /// Parser/writer Markdown minimal mais correct pour les formats que la toolbar expose :

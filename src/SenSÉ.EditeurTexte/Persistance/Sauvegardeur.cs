@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using System.Windows.Documents;
 
-namespace SenSÉ.Editeur.Persistance;
+namespace SenSÉ.EditeurTexte.Persistance;
 
 /// <summary>
 /// Inverse de <see cref="Chargeur"/>. Meme routage par extension.

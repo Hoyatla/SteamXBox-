@@ -7,7 +7,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
-namespace SenSÉ.Editeur.Format;
+namespace SenSÉ.EditeurTexte.Format;
 
 /// <summary>
 /// Writer/reader natif de fichiers .docx (Office Open XML) via

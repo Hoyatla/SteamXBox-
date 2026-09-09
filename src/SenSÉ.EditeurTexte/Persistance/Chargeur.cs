@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using System.Windows.Documents;
 
-namespace SenSÉ.Editeur.Persistance;
+namespace SenSÉ.EditeurTexte.Persistance;
 
 /// <summary>
 /// Charge un fichier dans un <see cref="FlowDocument"/>. Routage par extension :

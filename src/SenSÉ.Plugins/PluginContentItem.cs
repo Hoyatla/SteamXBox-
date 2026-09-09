@@ -1,4 +1,4 @@
-﻿namespace SenSÉ.Plugins;
+﻿﻿namespace SenSÉ.Plugins;
 
 /// <summary>
 /// Une façon de faire le travail d'un outil : un graphe, ses liaisons, et ce qu'elle réclame.
@@ -359,7 +359,7 @@ public static class PluginActions
     /// </remarks>
     public const string Atelier = "atelier";
 
-    /// <summary>Lance l'editeur de texte SenSÉ (Process.Start sur Outils/Editeur/SenSÉ.Editeur.exe).</summary>
+    /// <summary>Lance l'editeur de texte SenSÉ (Process.Start sur Outils/ÉditeurTexte/SenSÉ.EditeurTexte.exe).</summary>
     public const string Editor = "editeur";
 
     /// <summary>

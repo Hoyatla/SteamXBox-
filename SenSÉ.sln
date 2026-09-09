@@ -43,7 +43,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SenSÉ.Mcp.DebugApi", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SenSÉ.Mcp.Cdp", "src\SenSÉ.Mcp.Cdp\SenSÉ.Mcp.Cdp.csproj", "{9D4A590D-FF57-4B23-8785-67DB9F0DF5E2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SenSÉ.Editeur", "src\SenSÉ.Editeur\SenSÉ.Editeur.csproj", "{F0E1D2C3-B4A5-4698-89AB-CDEF01234567}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SenSÉ.EditeurTexte", "src\SenSÉ.EditeurTexte\SenSÉ.EditeurTexte.csproj", "{F0E1D2C3-B4A5-4698-89AB-CDEF01234567}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

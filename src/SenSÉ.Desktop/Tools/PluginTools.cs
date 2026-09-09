@@ -532,7 +532,7 @@ public static class PluginTools
                     return Atelier.AtelierWindow.Ouvrir(target, log);
 
                 case PluginActions.Editor:
-                    return LancerExterne(Resoudre("{tools}\\Editeur\\SenSÉ.Editeur.exe"), log, "SenSÉ.Editeur");
+                    return LancerExterne(Resoudre("{tools}\\ÉditeurTexte\\SenSÉ.EditeurTexte.exe"), log, "SenSÉ.EditeurTexte");
 
                 default:
                     // Unreachable through the catalogue, which refuses an unknown action at load.

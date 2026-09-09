@@ -1,6 +1,6 @@
 ﻿using System.Windows.Documents;
 
-namespace SenSÉ.Editeur.Format;
+namespace SenSÉ.EditeurTexte.Format;
 
 /// <summary>Lecture/ecriture d'un <see cref="FlowDocument"/> en texte pur, sans formatage.</summary>
 public static class TextePlain

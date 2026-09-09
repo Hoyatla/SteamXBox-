@@ -3,7 +3,7 @@ using System.Windows;
 using System.Text;
 using System.Windows.Documents;
 
-namespace SenSÉ.Editeur.Format;
+namespace SenSÉ.EditeurTexte.Format;
 
 /// <summary>
 /// Serialise/deserialise un <see cref="FlowDocument"/> en XAML WPF via <see cref="DataFormats.Xaml"/>.

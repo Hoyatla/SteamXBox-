@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Windows;
 
-namespace SenSÉ.Editeur;
+namespace SenSÉ.EditeurTexte;
 
 public static class Program
 {

@@ -5,13 +5,13 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>SenSÉ.Editeur</AssemblyName>
-    <RootNamespace>SenSÉ.Editeur</RootNamespace>
+    <AssemblyName>SenSÉ.EditeurTexte</AssemblyName>
+    <RootNamespace>SenSÉ.EditeurTexte</RootNamespace>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <LangVersion>latest</LangVersion>
-    <StartupObject>SenSÉ.Editeur.Program</StartupObject>
+    <StartupObject>SenSÉ.EditeurTexte.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />

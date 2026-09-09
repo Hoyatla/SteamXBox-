@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Windows.Documents;
-using SenSÉ.Editeur.Format;
+using SenSÉ.EditeurTexte.Format;
 
-namespace SenSÉ.Editeur.Edition;
+namespace SenSÉ.EditeurTexte.Edition;
 
 /// <summary>
 /// Pile d'etats de <see cref="FlowDocument"/> pour annuler/retablir.

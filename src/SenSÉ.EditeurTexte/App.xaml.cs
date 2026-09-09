@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace SenSÉ.Editeur;
+namespace SenSÉ.EditeurTexte;
 
 public partial class App : Application
 {

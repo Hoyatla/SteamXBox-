@@ -7,11 +7,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using SenSÉ.Editeur.Edition;
-using SenSÉ.Editeur.Format;
-using SenSÉ.Editeur.Persistance;
+using SenSÉ.EditeurTexte.Edition;
+using SenSÉ.EditeurTexte.Format;
+using SenSÉ.EditeurTexte.Persistance;
 
-namespace SenSÉ.Editeur.UI;
+namespace SenSÉ.EditeurTexte.UI;
 
 public partial class MainWindow : Window
 {
