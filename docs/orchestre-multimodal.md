@@ -219,7 +219,64 @@ charger à l'ouverture rendrait le démarrage interminable ; tout charger à la
 demande fait payer 7 à 10 secondes au premier usage de chaque voie. Il faut
 choisir, probablement par rôle.
 
-**Ling n'a pas été mesuré.** Sa vitesse, sa fidélité au format, sa tenue à l'appel
-d'outils : rien de tout cela n'est vérifié à l'heure où ce document est écrit. Les
-chiffres du §2 sont sa taille sur le disque, pas sa performance. **C'est la
-première chose à mesurer avant de bâtir l'aiguillage sur lui.**
+**Ling a été mesuré, et écarté.** Voir §9.
+
+---
+
+## 9. L'aiguilleur, mesuré — et le résultat n'est pas celui qu'on attendait
+
+Banc du 9 septembre 2026 : huit demandes à router vers cinq voies, même invite
+système, mêmes trois exemples, même température nulle, tous sur processeur seul.
+
+| Candidat | Justes | Latence moyenne | Poids |
+|---|---|---|---|
+| Ling 3.0 tiny, réflexion coupée | 4/8 | 284 ms | 4,58 Go |
+| Ling 3.0 tiny, réflexion rendue | 6/8 | **10 081 ms** | 4,58 Go |
+| Qwen 3.5 9B | 7/8 | 848 ms | 6,15 Go |
+| **Qwen 2.5 Coder 3B** | **7/8** | **232 ms** | **1,80 Go** |
+
+**Ling est écarté du rôle.** Il raisonne par défaut, et sa réflexion coûte dix
+secondes par décision — rédhibitoire pour un aiguilleur dont tout l'intérêt est
+d'être bon marché. Réflexion coupée, il répond en 284 ms mais ne juge juste
+qu'une fois sur deux : il répond à la demande au lieu de l'aiguiller, ou colle à
+sa réponse précédente.
+
+**Ce que ce banc n'établit pas :** huit cas, une invite, une tâche. Il ne dit rien
+de Ling sur du travail lourd en raisonnement, où il est peut-être excellent. Il
+dit seulement qu'il n'est pas l'aiguilleur de ce système.
+
+### Le remplaçant était déjà là
+
+**Qwen 2.5 Coder 3B tient l'aiguillage : 7/8 en 232 ms.** La meilleure justesse
+*et* la meilleure latence des quatre, pour le plus petit des modèles — et il est
+déjà dans la flottille pour le codage.
+
+Son unique erreur est prévisible et corrigible : « Explique-moi la différence
+entre RAM et VRAM » est parti vers `codage`. C'est un modèle de code, une question
+technique lui ressemble à du code. Une ligne d'invite suffit — dire qu'une
+question à laquelle *on répond en prose* va vers `texte`, même technique.
+
+### Ce que cela change à la table du §2
+
+Un modèle de moins, et le plus gros des petits. La flottille passe de 13,10 Go de
+poids à **8,52 Go** :
+
+```
+codage + orchestre   Qwen 2.5 Coder 3B   1,80 Go   (deux rôles, un fichier)
+texte                Qwen 3.5 9B          6,15 Go
+audio                Whisper turbo        0,57 Go
+                                          ────────
+                                          8,52 Go
+```
+
+**Réserve à tenir :** aiguiller et coder demandent deux invites système
+différentes. Alterner deux invites système sur **un** serveur invalide le cache de
+préfixe à chaque bascule — le même piège qu'au §4. Il faut donc deux serveurs sur
+deux ports, lisant le même fichier de poids.
+
+### Et Ling ?
+
+Il reste sur le disque, son manifeste marqué `"actif": false` avec le détail de la
+mesure. Un modèle qui raisonne dix secondes n'est pas mauvais : il est mal
+employé. S'il trouve un rôle où l'on paie volontiers dix secondes pour une
+meilleure réponse, il est là.

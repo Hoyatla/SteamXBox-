@@ -17,8 +17,17 @@
 
   "_pourquoi_pas_qwen3": "« Qwen3-Coder-3B » n'existe pas. Le plus petit Qwen3-Coder est un MoE 30B-A3B : les « 3B » sont les parametres ACTIFS, mais il faut loger les 30 — 17,28 Go en Q4_K_M. Hors budget a cote du 9B (6,15), de Ling (4,58) et de Whisper (0,57). Le 2.5 Coder 3B est dense, pese 1,80 Go, et tient l'intention : un petit modele reellement devoue au code.",
 
-  "mesures": null,
-  "_mesures": "NON MESURE au 9 septembre 2026. A eprouver sur ce qui compte ici — l'appel d'outils et la discipline de sortie courte — et non sur des scores de banc : dans l'Atelier ce modele remplit un nœud, il ne tient pas une conversation.",
+  "role_secondaire": "orchestre",
+  "_role_secondaire": "IL TIENT AUSSI L'AIGUILLAGE, et c'est la surprise de la mesure du 9 septembre 2026. Sur le meme banc de huit demandes a router vers cinq voies : 7/8 en 232 ms — la meilleure justesse ET la meilleure latence des quatre candidats, pour 1,80 Go. Ling 3.0 tiny faisait 4/8 en 284 ms reflexion coupee, 6/8 en 10 081 ms reflexion rendue ; le Qwen 9B, 7/8 en 848 ms.",
+
+  "mesures": {
+    "routage": { "justes": "7/8", "latence_ms": 232, "invite_jetons": 161 },
+    "sur": "i7-14700KF, processeur seul, invite de ~160 jetons avec trois exemples"
+  },
+
+  "_biais_connu": "Son unique erreur d'aiguillage est previsible : « Explique-moi la difference entre RAM et VRAM » est parti vers « codage ». C'est un modele de code, une question technique lui ressemble a du code. Une ligne d'invite le corrige — dire qu'une question A LAQUELLE ON REPOND EN PROSE va vers texte, meme technique.",
+
+  "_deux_roles_un_modele": "Aiguiller et coder avec le meme processus resident economise un modele entier. Attention toutefois : les deux usages ont des invites systeme differentes, et alterner deux invites systeme sur UN serveur invalide le cache de prefixe a chaque bascule. Il faut donc deux serveurs sur deux ports, ou accepter de repayer l'ingestion. Deux serveurs du meme fichier ne doublent que le cache, pas les poids si le systeme les partage en lecture.",
 
   "_dependance": "Un modele qui ecrit du code ne vaut sa RAM que si le code peut etre execute. L'Atelier ecrit aujourd'hui en douze langages et n'en execute qu'un. Voir src/SenSE.Atelier/PLAN-LANGAGES.md : le modele codeur et les moteurs de langage sont le meme chantier.",
 

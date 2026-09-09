@@ -19,8 +19,22 @@
 
   "_serveur_propre": "Il a son port a lui, et ce n'est pas par confort. Partager le serveur du modele de dialogue ferait alterner deux invites systeme differentes ; or reecrire le message systeme invalide le cache de prefixe en entier, et le tour suivant repaierait l'ingestion complete — douze secondes pour les 6 500 jetons de consigne. Le port separe est ce qui rend l'aiguillage bon marche.",
 
-  "mesures": null,
-  "_mesures": "NON MESURE au 9 septembre 2026. Ni sa vitesse, ni sa fidelite au format de sortie, ni sa tenue a l'appel d'outils. Les 4,58 Go ci-dessus sont sa taille sur le disque, pas sa performance. C'EST LA PREMIERE CHOSE A MESURER avant de batir l'aiguillage sur lui — la comparaison utile est le Qwen 9B : 533 jetons/s en lecture, 8,25 en generation.",
+  "actif": false,
+  "_actif": "MESURE LE 9 SEPTEMBRE 2026, ET ECARTE DU ROLE D'AIGUILLEUR. Banc de huit demandes a router vers cinq voies, meme invite et memes cas pour tous les candidats :",
+
+  "mesures": {
+    "reflexion_coupee":  { "justes": "4/8", "latence_ms": 284 },
+    "reflexion_rendue":  { "justes": "6/8", "latence_ms": 10081 },
+    "comparaison_qwen9b":       { "justes": "7/8", "latence_ms": 848 },
+    "comparaison_coder3b":      { "justes": "7/8", "latence_ms": 232 },
+    "sur": "i7-14700KF, processeur seul, invite de ~180 jetons avec trois exemples"
+  },
+
+  "_verdict": "Ling raisonne par defaut, et la reflexion coute DIX SECONDES par decision — redhibitoire pour un aiguilleur dont tout l'interet est d'etre bon marche. Reflexion coupee il repond en 284 ms mais ne juste qu'une fois sur deux : il repond a la demande au lieu de l'aiguiller, ou colle a sa reponse precedente. Dans les deux reglages il est battu par des modeles deja presents.",
+
+  "_ce_que_cela_n_etablit_pas": "Huit cas, une invite, une tache. Ceci ne dit rien de Ling sur du travail lourd en raisonnement, ou il est peut-etre excellent. Il dit seulement qu'il n'est pas l'aiguilleur de ce systeme.",
+
+  "_remplacant": "Qwen2.5-Coder-3B — voir codage/modele.json. 7/8 en 232 ms, la meilleure justesse ET la meilleure latence des quatre, pour 1,80 Go deja telecharges.",
 
   "_famille": "Ling est une famille MoE d'inclusionAI. Un MoE annonce deux tailles : les parametres totaux, qu'il faut tous loger en RAM, et les actifs, qui seuls calculent. « tiny » decrit les actifs — d'ou 4,58 Go sur le disque pour un modele dit minuscule. Sur cette machine c'est le bon compromis : rapide comme un petit, plus juste qu'un petit.",
 
