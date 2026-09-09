@@ -95,6 +95,39 @@ public static class AssistantCdp
         ];
     }
 
+    /// <summary>Vrai si mcp-cdp a été branché. Une capacité qui ne peut pas aboutir ne s'offre pas.</summary>
+    public static bool Pret => _http is not null && _url.Length > 0;
+
+    /// <summary>
+    /// Va à une URL. Rend un message d'échec, ou une chaîne vide si tout va bien.
+    /// </summary>
+    /// <remarks>
+    /// <b>La convention s'inverse ici, et c'est voulu.</b> Les capacités rendent au modèle une
+    /// phrase à lire, réussite comprise ; un appelant qui enchaîne, lui, a besoin de savoir
+    /// <i>si</i> continuer. « Vide veut dire que ça a marché » est la même convention que
+    /// <c>ServeurModele.Demarrer</c>, et elle évite d'avoir à relire une phrase pour deviner un
+    /// booléen.
+    /// </remarks>
+    public static string Naviguer(string url)
+        => Echoue(AppelerAsync("cdp/navigate", new { url })) is { } probleme ? probleme : "";
+
+    /// <summary>Évalue du JavaScript dans la page courante et rend ce qu'il a produit.</summary>
+    public static string Evaluer(string expression)
+        => AppelerAsync("cdp/eval", new { expression });
+
+    /// <summary>Le message d'échec caché dans une réponse, ou null si c'en est une bonne.</summary>
+    /// <remarks>
+    /// <c>AppelerAsync</c> signale ses échecs par un préfixe plutôt que par une exception. Le
+    /// reconnaître ici, une fois, vaut mieux que de le reconnaître dans chaque appelant — et que
+    /// de le manquer dans l'un d'eux, ce qui ferait passer un « navigateur injoignable » pour une
+    /// page vide.
+    /// </remarks>
+    private static string? Echoue(string rendu)
+        => rendu.StartsWith("mcp-cdp:", StringComparison.Ordinal)
+           || rendu.StartsWith("erreur mcp-cdp:", StringComparison.Ordinal)
+            ? rendu
+            : null;
+
     private static string AppelerAsync(string chemin, object body)
     {
         if (_http is null || string.IsNullOrEmpty(_url))

@@ -946,6 +946,44 @@ public partial class AssistantWindow : Window
                 ],
                 reglages => Chercher(web, Valeur(reglages, "sujet"), journal)));
         }
+        else if (SenSÉ.Tools.Assistant.AssistantCdp.Pret)
+        {
+            // LE NAVIGATEUR EST LE REPLI, PAS LE REMPLACANT.
+            //
+            // Le modele tenait deja cdp_navigate et cdp_eval — donc les moyens de chercher — et
+            // repondait « je ne peux pas faire de recherche web » : personne ne lui avait dit que
+            // ces verbes en etaient un. Le nom et la description ne changent pas d'un chemin a
+            // l'autre, expres : ce qui change est la plomberie, pas le vocabulaire du modele.
+            //
+            // Une instance reste preferable quand il y en a une — elle interroge un moteur qui
+            // veut bien etre interroge, la ou un navigateur pilote se heurte aux murs de
+            // consentement. Mais un repli qui marche vaut mieux qu'une capacite absente.
+            journal?.Invoke("assistant: recherche web par le navigateur intégré (aucune instance configurée).");
+
+            capacites.Add(new AssistantLocal.Capacite(
+                "chercher_web",
+                "Cherche sur le web et rend les extraits trouvés AVEC leurs sources numérotées. "
+                + "À employer pour tout ce qui n'est pas dans ce que tu sais déjà : une actualité, "
+                + "la version d'un logiciel, un prix, un fait daté. Une question par appel, en "
+                + "mots-clés plutôt qu'en phrase. Cite ensuite chaque affirmation par son numéro.",
+                [
+                    new AssistantLocal.Parametre(
+                        "sujet", "Ce qu'il faut chercher, en quelques mots-clés.", []),
+                ],
+                reglages => ChercherParLeNavigateur(Valeur(reglages, "sujet"), journal)));
+
+            capacites.Add(new AssistantLocal.Capacite(
+                "dossier_recherche",
+                "Écrit la DERNIÈRE recherche dans un dossier daté : ta synthèse, les pages telles "
+                + "qu'elles ont été lues, et un manifeste. À employer quand l'utilisateur veut "
+                + "garder, imprimer ou convertir le résultat plutôt que le lire dans le fil. Rend "
+                + "le chemin du dossier.",
+                [
+                    new AssistantLocal.Parametre(
+                        "synthese", "Ta réponse rédigée, avec ses renvois [1], [2].", []),
+                ],
+                reglages => Consigner(Valeur(reglages, "synthese"), journal)));
+        }
         else
         {
             journal?.Invoke(
@@ -1563,6 +1601,57 @@ public partial class AssistantWindow : Window
         }
 
         return texte.ToString();
+    }
+
+    /// <summary>La dernière récolte, pour que le dossier ne relance pas la recherche.</summary>
+    /// <remarks>
+    /// <b>Chercher deux fois rendrait la trace mensongère.</b> Le web bouge entre deux appels : la
+    /// synthèse porterait alors sur des pages que le dossier ne contient pas, et l'inverse. Ce qui
+    /// est écrit doit être exactement ce que le modèle a lu — donc la même récolte, gardée.
+    /// </remarks>
+    private SenSÉ.Tools.Assistant.Recolte? _recolte;
+
+    /// <summary>Cherche par le navigateur intégré, et garde la récolte pour le dossier.</summary>
+    private string ChercherParLeNavigateur(string sujet, Action<string>? journal)
+    {
+        var recolte = SenSÉ.Tools.Assistant.RechercheWeb.Moissonner(
+            sujet,
+            SenSÉ.Tools.Assistant.AssistantCdp.Naviguer,
+            SenSÉ.Tools.Assistant.AssistantCdp.Evaluer,
+            journal);
+
+        if (!recolte.Vide)
+        {
+            _recolte = recolte;
+        }
+
+        return SenSÉ.Tools.Assistant.RechercheWeb.Rediger(recolte);
+    }
+
+    /// <summary>Écrit la dernière récolte et la synthèse du modèle dans un dossier daté.</summary>
+    private string Consigner(string synthese, Action<string>? journal)
+    {
+        if (_recolte is not { } recolte)
+        {
+            return "Rien à consigner : aucune recherche n'a encore été faite. "
+                + "Appelle chercher_web d'abord.";
+        }
+
+        try
+        {
+            var dossier = SenSÉ.Tools.Assistant.RechercheWeb.Dossier(recolte, synthese, journal);
+
+            return $"Dossier écrit : {dossier}\n"
+                + "Il contient RECHERCHE.md, RECHERCHE.html, sources.json et les pages conservées. "
+                + "Pour un PDF ou un Word, lance l'outil « convertir-document » sur le "
+                + "RECHERCHE.html de ce dossier.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            journal?.Invoke($"dossier de recherche: {exception.GetType().Name}: {exception.Message}");
+
+            return "Le dossier n'a pas pu être écrit : " + exception.Message;
+        }
     }
 
     private static string Valeur(IReadOnlyDictionary<string, string> reglages, string nom)
