@@ -18,6 +18,12 @@
                 <MenuItem Header="_Annuler"        InputGestureText="Ctrl+Z" Click="MnuAnnuler_Click"/>
                 <MenuItem Header="_Rétablir"       InputGestureText="Ctrl+Y" Click="MnuRetablir_Click"/>
             </MenuItem>
+            <MenuItem Header="Insertion">
+                <MenuItem Header="Image _locale..." Click="InsererImageLocale_Click" InputGestureText="Ctrl+I"/>
+                <Separator/>
+                <MenuItem Header="_Demander à l'IA..." Click="DemanderIa_Click" InputGestureText="Ctrl+K"/>
+                <MenuItem Header="_Dicter..."        Click="Dicter_Click" InputGestureText="Ctrl+M"/>
+            </MenuItem>
         </Menu>
         <ToolBarTray DockPanel.Dock="Top">
             <ToolBar>

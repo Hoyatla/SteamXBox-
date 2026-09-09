@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using SenSÉ.Editeur.Edition;
 using SenSÉ.Editeur.Format;
@@ -261,11 +263,216 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private static readonly HashSet<string> _extensionsImage =
+        new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp" };
+
     private void Fenetre_Drop(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         var fichiers = (string[])e.Data.GetData(DataFormats.FileDrop);
-        if (fichiers.Length > 0) Charger(fichiers[0]);
+        if (fichiers is null || fichiers.Length == 0) return;
+
+        // Premier fichier texte -> on charge, comme avant.
+        // Tous les fichiers image -> on insere au point d'insertion, dans l'ordre.
+        // Autres (PDF, Office, etc.) -> ignores silencieusement.
+        foreach (var fichier in fichiers)
+        {
+            var ext = Path.GetExtension(fichier);
+            if (_extensionsImage.Contains(ext))
+            {
+                InsererImage(fichier);
+            }
+            else if (fichiers.Length == 1 && !_extensionsImage.Contains(ext))
+            {
+                // Drop d'un seul fichier non-image : on tente de charger comme doc.
+                Charger(fichier);
+                return;
+            }
+            // Sinon, on ignore : drop multi-fichiers heterogene, on prend que les images.
+        }
+    }
+
+    private void InsererImageLocale_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "Images (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|Tous les fichiers (*.*)|*.*",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        InsererImage(dlg.FileName);
+    }
+
+    /// <summary>
+    /// Insere une image au point d'insertion du RichTextBox, avec une legende
+    /// optionnelle en italique gris juste apres.
+    /// </summary>
+    private void InsererImage(string cheminImage, string? legende = null)
+    {
+        try
+        {
+            if (!File.Exists(cheminImage))
+            {
+                MessageBox.Show(this, "Image introuvable : " + cheminImage,
+                    "Insertion", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var img = new System.Windows.Controls.Image
+            {
+                Source = new BitmapImage(new Uri(cheminImage, UriKind.Absolute)),
+                MaxWidth = 600,
+                Stretch = System.Windows.Media.Stretch.Uniform,
+            };
+
+            // Selection.Start peut etre null si le document est vide et non focalise.
+            // On prend CaretPosition en fallback.
+            var pos = Rtb.Selection.Start ?? Rtb.CaretPosition;
+            if (pos is null || pos.Paragraph is null) return;
+
+            var container = new InlineUIContainer(img, pos);
+
+            if (!string.IsNullOrEmpty(legende))
+            {
+                // Avance la position apres l'image, insere un Run italique gris.
+                var posApres = pos.GetNextInsertionPosition(LogicalDirection.Forward);
+                if (posApres is not null && posApres.Paragraph is not null)
+                {
+                    posApres.Paragraph.Inlines.Add(new Run(legende)
+                    {
+                        FontStyle = FontStyles.Italic,
+                        Foreground = Brushes.Gray,
+                    });
+                }
+            }
+
+            Statut.Text = "Image inseree : " + Path.GetFileName(cheminImage);
+            Rtb.Focus();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Erreur d'insertion d'image",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void DemanderIa_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new FenetrePromptIA(Rtb.Selection.IsEmpty
+            ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
+            : Rtb.Selection.Text);
+        if (dlg.ShowDialog() != true) return;
+
+        var prompt = dlg.PromptSaisi;
+        var contexte = new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text;
+        var nbCaracteres = contexte.Length;
+
+        // [TODO Phase D2] Remplacer par appel Atelier.EnvoyerPromptAsync(prompt, contexte)
+        // quand l'endpoint LLM stable de l'Atelier sera expose.
+        MessageBox.Show(this,
+            $"Stub : envoyerais a l'Atelier le prompt « {prompt} » avec contexte de {nbCaracteres} caracteres.",
+            "Demander a l'IA (stub)",
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void Dicter_Click(object sender, RoutedEventArgs e)
+    {
+        // [TODO Phase D2] Remplacer par enregistrement micro + envoi Whisper + insertion
+        // de la transcription dans le FlowDocument au CaretPosition.
+        MessageBox.Show(this,
+            "Stub : demarrerait l'enregistrement micro, enverrait a Whisper, insererait la transcription.",
+            "Dicter (stub)",
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+}
+
+/// <summary>Fenetre modale simple pour saisir un prompt IA. Renvoie DialogResult=true
+/// si OK, false si Annuler. La prompt est accessible via <see cref="PromptSaisi"/>.</summary>
+internal sealed class FenetrePromptIA : Window
+{
+    public string PromptSaisi { get; private set; } = "";
+
+    public FenetrePromptIA(string contexte)
+    {
+        Title = "Demander a l'IA";
+        Width = 640;
+        Height = 360;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.NoResize;
+        ShowInTaskbar = false;
+
+        var racine = new DockPanel { Margin = new Thickness(12) };
+
+        var label = new TextBlock
+        {
+            Text = "Que voulez-vous demander a l'IA ?",
+            Margin = new Thickness(0, 0, 0, 6),
+        };
+        DockPanel.SetDock(label, Dock.Top);
+        racine.Children.Add(label);
+
+        var prompt = new TextBox
+        {
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            AcceptsTab = false,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        DockPanel.SetDock(prompt, Dock.Top);
+        prompt.Height = 160;
+        racine.Children.Add(prompt);
+
+        var contexteBloc = new TextBlock
+        {
+            Text = "Contexte : " + (string.IsNullOrEmpty(contexte) ? "(document vide)" : contexte.Length + " caracteres selectionnes ou document complet"),
+            Margin = new Thickness(0, 6, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Brushes.Gray,
+        };
+        DockPanel.SetDock(contexteBloc, Dock.Top);
+        racine.Children.Add(contexteBloc);
+
+        var boutons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        DockPanel.SetDock(boutons, Dock.Bottom);
+
+        var btnOk = new Button
+        {
+            Content = "OK",
+            Width = 80,
+            Height = 28,
+            Margin = new Thickness(0, 0, 8, 0),
+            IsDefault = true,
+        };
+        btnOk.Click += (_, _) =>
+        {
+            PromptSaisi = prompt.Text ?? "";
+            DialogResult = true;
+            Close();
+        };
+        var btnAnnuler = new Button
+        {
+            Content = "Annuler",
+            Width = 80,
+            Height = 28,
+            IsCancel = true,
+        };
+        btnAnnuler.Click += (_, _) => { DialogResult = false; Close(); };
+
+        boutons.Children.Add(btnAnnuler);
+        boutons.Children.Add(btnOk);
+        racine.Children.Add(boutons);
+
+        // Zone qui prend le reste (vide, pour pousser les controles en haut).
+        var spacer = new System.Windows.Controls.TextBlock();
+        DockPanel.SetDock(spacer, Dock.Top);
+        racine.Children.Add(spacer);
+
+        Content = racine;
+        Loaded += (_, _) => prompt.Focus();
     }
 }
 
