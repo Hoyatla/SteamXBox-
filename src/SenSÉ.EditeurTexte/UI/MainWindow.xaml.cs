@@ -141,9 +141,17 @@ public partial class MainWindow : Window
 
     private void Onglets_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // Desabonne les anciens onglets.
+        foreach (var ancien in e.RemovedItems.OfType<OngletDocument>())
+        {
+            ancien.SelectionChangee -= Onglet_SelectionChangee;
+            ancien.EstModifie -= Onglet_EstModifie;
+        }
         // Phase H : la AutoSave suit l'onglet actif.
         if (OngletActif() is { } o)
         {
+            o.SelectionChangee += Onglet_SelectionChangee;
+            o.EstModifie += Onglet_EstModifie;
             _autoSave.CheminCourant = o.Chemin;
             _autoSave.Document = o.RtbInterne.Document;
             Title = o.Chemin is null ? "Éditeur — SenSÉ" : "Éditeur — SenSÉ — " + Path.GetFileName(o.Chemin);
@@ -155,6 +163,21 @@ public partial class MainWindow : Window
             _autoSave.Document = null;
             Title = "Éditeur — SenSÉ";
         }
+        // Phase I.1 bugfix : syncs combobox + comptage sur changement d'onglet.
+        SyncCombosAvecSelection();
+        MettreAJourComptage();
+    }
+
+    private void Onglet_SelectionChangee(object? sender, EventArgs e)
+    {
+        SyncCombosAvecSelection();
+        MettreAJourComptage();
+    }
+
+    private void Onglet_EstModifie(object? sender, EventArgs e)
+    {
+        if (sender is OngletDocument o) o.Historique.Push(o.RtbInterne.Document);
+        MettreAJourComptage();
     }
 
     private void BtnFermerOnglet_Click(object sender, RoutedEventArgs e)
@@ -268,7 +291,7 @@ public partial class MainWindow : Window
 
     private void PoliceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _ignoreComboboxEvents) return;
         if (PoliceCombo.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;
         var name = item.Content?.ToString();
         if (string.IsNullOrEmpty(name) || RtbActif() is not { } rtb) return;
@@ -284,7 +307,7 @@ public partial class MainWindow : Window
 
     private void TailleCombo_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _ignoreComboboxEvents) return;
         if (!double.TryParse(TailleCombo.Text, System.Globalization.NumberStyles.Any,
                              System.Globalization.CultureInfo.InvariantCulture, out var size)) return;
         if (size <= 0 || size > 999) return;
@@ -326,6 +349,56 @@ public partial class MainWindow : Window
         if (p is null) return;
         p.FontSize = niveau switch { 1 => 24.0, 2 => 18.0, 3 => 14.0, _ => 12.0 };
         p.FontWeight = niveau == 1 ? FontWeights.Bold : FontWeights.Normal;
+    }
+
+    // Phase I.1 bugfix : flag pour eviter la boucle SyncCombos <-> ComboBox.SelectionChanged.
+    private bool _ignoreComboboxEvents;
+
+    private void SyncCombosAvecSelection()
+    {
+        if (OngletActif() is not { } o) return;
+        var rtb = o.RtbInterne;
+        _ignoreComboboxEvents = true;
+        try
+        {
+            // Police.
+            var ffObj = rtb.Selection.GetPropertyValue(Inline.FontFamilyProperty);
+            if (ffObj is FontFamily ff)
+            {
+                var source = ff.Source ?? ff.ToString();
+                foreach (var it in PoliceCombo.Items)
+                {
+                    if (it is System.Windows.Controls.ComboBoxItem ci && string.Equals(ci.Content?.ToString(), source, StringComparison.OrdinalIgnoreCase))
+                    {
+                        PoliceCombo.SelectedItem = ci;
+                        break;
+                    }
+                }
+            }
+            // Taille.
+            var fsObj = rtb.Selection.GetPropertyValue(Inline.FontSizeProperty);
+            if (fsObj is double size && size > 0)
+                TailleCombo.Text = size.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            _ignoreComboboxEvents = false;
+        }
+    }
+
+    private void MettreAJourComptage()
+    {
+        if (OngletActif() is not { } o)
+        {
+            Comptage.Text = "0 mots | 0 caractères";
+            return;
+        }
+        var texte = new TextRange(o.RtbInterne.Document.ContentStart, o.RtbInterne.Document.ContentEnd).Text;
+        var mots = string.IsNullOrWhiteSpace(texte)
+            ? 0
+            : texte.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        var caracteres = texte.Length;
+        Comptage.Text = mots + " mots | " + caracteres + " caractères";
     }
 
     // ============== Drag & drop ==============
