@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Media.Imaging;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -33,9 +34,12 @@ public static class Docx
         mainPart.Document = new Document();
         var body = mainPart.Document.AppendChild(new Body());
 
+        // Phase F : compteur d'images pour les Drawing inline.
+        var imageCounter = 0;
+
         foreach (var block in doc.Blocks)
         {
-            var element = BlockVersWml(block);
+            var element = BlockVersWml(block, mainPart, ref imageCounter);
             if (element is not null) body.AppendChild(element);
         }
 
@@ -47,23 +51,24 @@ public static class Docx
     {
         cible.Blocks.Clear();
         using var pkg = WordprocessingDocument.Open(chemin, false);
-        var body = pkg.MainDocumentPart!.Document.Body!;
+        var mainPart = pkg.MainDocumentPart!;
+        var body = mainPart.Document.Body!;
         foreach (var para in body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>())
         {
-            cible.Blocks.Add(ParagrapheWmlVersFlow(para));
+            cible.Blocks.Add(ParagrapheWmlVersFlow(para, mainPart));
         }
     }
 
     // ============== Writer ==============
 
-    private static OpenXmlElement? BlockVersWml(System.Windows.Documents.Block block) => block switch
+    private static OpenXmlElement? BlockVersWml(System.Windows.Documents.Block block, MainDocumentPart mainPart, ref int imageCounter) => block switch
     {
-        System.Windows.Documents.Paragraph p when EstTitre1(p) => TitreWml("Heading1", RunsVersWml(p.Inlines)),
-        System.Windows.Documents.Paragraph p when EstTitre2(p) => TitreWml("Heading2", RunsVersWml(p.Inlines)),
-        System.Windows.Documents.Paragraph p when EstTitre3(p) => TitreWml("Heading3", RunsVersWml(p.Inlines)),
-        System.Windows.Documents.Paragraph p when EstListePucese(p) => ListeWml(p, numbered: false),
-        System.Windows.Documents.Paragraph p when EstListeNum(p)   => ListeWml(p, numbered: true),
-        System.Windows.Documents.Paragraph p => ParagrapheWml(RunsVersWml(p.Inlines)),
+        System.Windows.Documents.Paragraph p when EstTitre1(p) => TitreWml("Heading1", RunsVersWml(p.Inlines, mainPart, ref imageCounter)),
+        System.Windows.Documents.Paragraph p when EstTitre2(p) => TitreWml("Heading2", RunsVersWml(p.Inlines, mainPart, ref imageCounter)),
+        System.Windows.Documents.Paragraph p when EstTitre3(p) => TitreWml("Heading3", RunsVersWml(p.Inlines, mainPart, ref imageCounter)),
+        System.Windows.Documents.Paragraph p when EstListePucese(p) => ListeWml(p, numbered: false, mainPart, ref imageCounter),
+        System.Windows.Documents.Paragraph p when EstListeNum(p)   => ListeWml(p, numbered: true, mainPart, ref imageCounter),
+        System.Windows.Documents.Paragraph p => ParagrapheWml(RunsVersWml(p.Inlines, mainPart, ref imageCounter)),
         _ => null,
     };
 
@@ -84,7 +89,7 @@ public static class Docx
         return p;
     }
 
-    private static DocumentFormat.OpenXml.Wordprocessing.Paragraph ListeWml(System.Windows.Documents.Paragraph src, bool numbered)
+    private static DocumentFormat.OpenXml.Wordprocessing.Paragraph ListeWml(System.Windows.Documents.Paragraph src, bool numbered, MainDocumentPart mainPart, ref int imageCounter)
     {
         // Phase B-prime : prefixe texte (les vrais w:num demandent un
         // NumberingDefinitionsPart, qu'on ajoutera en Phase D si besoin).
@@ -92,19 +97,103 @@ public static class Docx
         var prefixe = numbered ? "1. " : "* ";
         p.AppendChild(new DocumentFormat.OpenXml.Wordprocessing.Run(
             new DocumentFormat.OpenXml.Wordprocessing.Text(prefixe) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve }));
-        foreach (var r in RunsVersWml(src.Inlines)) p.AppendChild(r);
+        foreach (var r in RunsVersWml(src.Inlines, mainPart, ref imageCounter)) p.AppendChild(r);
         return p;
     }
 
-    private static System.Collections.Generic.IEnumerable<OpenXmlElement> RunsVersWml(InlineCollection inlines)
+    private static System.Collections.Generic.List<OpenXmlElement> RunsVersWml(InlineCollection inlines, MainDocumentPart mainPart, ref int imageCounter)
     {
-        if (inlines.Count == 0) { yield return new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Text("")); yield break; }
+        var liste = new System.Collections.Generic.List<OpenXmlElement>();
+        if (inlines.Count == 0)
+        {
+            liste.Add(new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Text("")));
+            return liste;
+        }
         foreach (var inline in inlines)
         {
-            if (inline is System.Windows.Documents.Run run) { yield return RunVersWml(run); }
-            else if (inline is LineBreak) { yield return new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Break()); }
-            // InlineUIContainer (images), Hyperlink, etc. : ignores en Phase B-prime.
+            if (inline is System.Windows.Documents.Run run) liste.Add(RunVersWml(run));
+            else if (inline is LineBreak) liste.Add(new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Break()));
+            else if (inline is InlineUIContainer iuc && iuc.Child is System.Windows.Controls.Image)
+                liste.Add(ImageRunWml(mainPart, (System.Windows.Controls.Image)iuc.Child, ref imageCounter));
+            // Hyperlink, etc. : ignores.
         }
+        return liste;
+    }
+
+    /// <summary>Construit le Run w:drawing/wp:inline pour une image, en utilisant
+    /// le schema DrawingML Pictures (pic:pic / a:blip) requis par Word.</summary>
+    private static DocumentFormat.OpenXml.Wordprocessing.Run ImageRunWml(MainDocumentPart main, System.Windows.Controls.Image img, ref int imageCounter)
+    {
+        // 1) Charger l'image (1600px max) et l'ajouter au package comme ImagePart PNG.
+        // Le chemin source est recupere depuis le BitmapImage.UriSource. Si l'image
+        // n'a pas de source fichier (image programme), on saute et on met un Run vide.
+        BitmapImage? bi = img.Source as BitmapImage;
+        string? chemin = null;
+        if (bi is not null && bi.UriSource is not null)
+        {
+            try { chemin = bi.UriSource.LocalPath; } catch { chemin = null; }
+        }
+        if (string.IsNullOrEmpty(chemin) || !System.IO.File.Exists(chemin))
+            return new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Text(""));
+
+        byte[]? bytes = null;
+        try { bytes = System.IO.File.ReadAllBytes(chemin); } catch { }
+        if (bytes is null || bytes.Length == 0)
+            return new DocumentFormat.OpenXml.Wordprocessing.Run(new DocumentFormat.OpenXml.Wordprocessing.Text(""));
+
+        var part = main.AddImagePart(ImagePartType.Png);
+        using (var partStream = part.GetStream(System.IO.FileMode.Create))
+        {
+            partStream.Write(bytes, 0, bytes.Length);
+        }
+        var relId = main.GetIdOfPart(part);
+        imageCounter++;
+
+        // 2) Dimensions en EMU. 1 pixel @ 96 DPI = 9525 EMU.
+        BitmapImage biLocal = bi!;
+        int pixelW = (int)(biLocal.PixelWidth > 0 ? biLocal.PixelWidth : img.ActualWidth);
+        int pixelH = (int)(biLocal.PixelHeight > 0 ? biLocal.PixelHeight : img.ActualHeight);
+        if (pixelW <= 0) pixelW = 800;
+        if (pixelH <= 0) pixelH = 600;
+        long emuW = (long)pixelW * 9525L;
+        long emuH = (long)pixelH * 9525L;
+
+        // 3) XML inline complet. On utilise InnerXml pour eviter de naviguer
+        // dans la hierarchie OpenXml verbeuse (Drawing/Inline/Extent/DocProperties/...).
+        var drawingXml = "<w:drawing xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" "
+            + "xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" "
+            + "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+            + "xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" "
+            + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+            + "<wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">"
+            + "<wp:extent cx=\"" + emuW + "\" cy=\"" + emuH + "\"/>"
+            + "<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>"
+            + "<wp:docPr id=\"" + imageCounter + "\" name=\"Image " + imageCounter + "\"/>"
+            + "<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect=\"1\"/></wp:cNvGraphicFramePr>"
+            + "<a:graphic>"
+            + "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">"
+            + "<pic:pic>"
+            + "<pic:nvPicPr>"
+            + "<pic:cNvPr id=\"0\" name=\"img.png\"/>"
+            + "<pic:cNvPicPr/>"
+            + "</pic:nvPicPr>"
+            + "<pic:blipFill>"
+            + "<a:blip r:embed=\"" + relId + "\"/>"
+            + "<a:stretch><a:fillRect/></a:stretch>"
+            + "</pic:blipFill>"
+            + "<pic:spPr>"
+            + "<a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"" + emuW + "\" cy=\"" + emuH + "\"/></a:xfrm>"
+            + "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
+            + "</pic:spPr>"
+            + "</pic:pic>"
+            + "</a:graphicData>"
+            + "</a:graphic>"
+            + "</wp:inline>"
+            + "</w:drawing>";
+
+        var drawing = new DocumentFormat.OpenXml.Wordprocessing.Drawing();
+        drawing.InnerXml = drawingXml;
+        return new DocumentFormat.OpenXml.Wordprocessing.Run(drawing);
     }
 
     private static DocumentFormat.OpenXml.Wordprocessing.Run RunVersWml(System.Windows.Documents.Run src)
@@ -142,7 +231,7 @@ public static class Docx
 
     // ============== Reader ==============
 
-    private static System.Windows.Documents.Paragraph ParagrapheWmlVersFlow(DocumentFormat.OpenXml.Wordprocessing.Paragraph src)
+    private static System.Windows.Documents.Paragraph ParagrapheWmlVersFlow(DocumentFormat.OpenXml.Wordprocessing.Paragraph src, MainDocumentPart mainPart)
     {
         var flowPara = new System.Windows.Documents.Paragraph();
         var pPr = src.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.ParagraphProperties>();
@@ -159,6 +248,17 @@ public static class Docx
             switch (child)
             {
                 case DocumentFormat.OpenXml.Wordprocessing.Run r:
+                    // Phase F : un Run peut contenir un Drawing (image inline).
+                    var drawing = r.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.Drawing>();
+                    if (drawing is not null && mainPart is not null)
+                    {
+                        var img = TryExtraireImage(drawing, mainPart);
+                        if (img is not null)
+                        {
+                            flowPara.Inlines.Add(img);
+                            break;
+                        }
+                    }
                     flowPara.Inlines.Add(RunWmlVersFlow(r));
                     break;
                 case DocumentFormat.OpenXml.Wordprocessing.Hyperlink link:
@@ -169,6 +269,46 @@ public static class Docx
             }
         }
         return flowPara;
+    }
+
+    /// <summary>Essaie d'extraire l'image d'un w:drawing/wp:inline et de l'inserer
+    /// dans le FlowDocument. Retourne null si pas une image (texte brut, etc.).</summary>
+    private static Inline? TryExtraireImage(DocumentFormat.OpenXml.Wordprocessing.Drawing drawing, MainDocumentPart mainPart)
+    {
+        try
+        {
+            // Le schema DrawingML stocke le rId du Blip dans <a:blip r:embed="rIdN"/>.
+            // On cherche l'element Blip n'importe ou dans le dessin.
+            var blip = drawing.Descendants<DocumentFormat.OpenXml.Drawing.Blip>().FirstOrDefault();
+            if (blip is null) return null;
+            var relId = blip.Embed?.Value;
+            if (string.IsNullOrEmpty(relId)) return null;
+
+            // Resoudre l'ImagePart via le relationship ID du mainPart.
+            var part = (ImagePart)mainPart.GetPartById(relId);
+            if (part is null) return null;
+
+            // Lire les bytes et les sauver dans le cache LocalAppData (evite de garder le .docx ouvert).
+            byte[] bytes;
+            using (var s = part.GetStream())
+            {
+                using var ms = new System.IO.MemoryStream();
+                s.CopyTo(ms);
+                bytes = ms.ToArray();
+            }
+            var cachedPath = ImageHelper.SauverDansCache(bytes);
+            if (string.IsNullOrEmpty(cachedPath)) return null;
+
+            // Creer l'Image WPF et l'InlineUIContainer.
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new System.Uri(cachedPath, System.UriKind.Absolute);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            var img = new System.Windows.Controls.Image { Source = bmp, MaxWidth = ImageHelper.DefaultMaxDim };
+            return new InlineUIContainer(img);
+        }
+        catch { return null; }
     }
 
     private static System.Windows.Documents.Run RunWmlVersFlow(DocumentFormat.OpenXml.Wordprocessing.Run src)
