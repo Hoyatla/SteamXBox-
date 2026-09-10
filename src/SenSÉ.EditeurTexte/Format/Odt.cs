@@ -123,6 +123,9 @@ public static class Odt
         {
             switch (block)
             {
+                case System.Windows.Documents.List list:
+                    AppendList(sb, list, nomsImages);
+                    break;
                 case System.Windows.Documents.Paragraph p when EstTitre1(p):
                     AppendH(sb, 1, TexteRunsAvecImages(p.Inlines, nomsImages));
                     break;
@@ -146,6 +149,27 @@ public static class Odt
 
         sb.Append("</office:text></office:body></office:document-content>");
         return sb.ToString();
+    }
+
+    /// <summary>Append une List WPF (Block contenant des ListItem) sous forme
+    /// de <c>&lt;text:list&gt;&lt;text:list-item&gt;...&lt;/text:list-item&gt;&lt;/text:list&gt;</c>.
+    /// Chaque ListItem est emis comme un <c>&lt;text:p&gt;</c>.</summary>
+    private static void AppendList(StringBuilder sb, System.Windows.Documents.List list,
+        Dictionary<string, string> nomsImages)
+    {
+        sb.Append("<text:list>");
+        foreach (var item in list.ListItems)
+        {
+            sb.Append("<text:list-item>");
+            foreach (var sub in item.Blocks)
+            {
+                if (sub is System.Windows.Documents.Paragraph p)
+                    sb.Append("<text:p>").Append(TexteRunsAvecImages(p.Inlines, nomsImages)).Append("</text:p>");
+                // Sous-listes imbriquees : ignorees en G.1b (cas rare).
+            }
+            sb.Append("</text:list-item>");
+        }
+        sb.Append("</text:list>");
     }
 
     private static void AppendH(StringBuilder sb, int niveau, string contenu)
@@ -308,12 +332,27 @@ public static class Odt
                     cible.Blocks.Add(PWmlVersFlow(elem, zip));
                     break;
                 case "list":
-                    // Phase C-prime : on aplatit en paragraphes (vraies <text:list-item> en Phase D).
-                    foreach (var li in elem.Descendants().Where(e => e.Name.LocalName == "li"))
-                        cible.Blocks.Add(LiWmlVersFlow(li, zip));
+                    // Phase G.1b : vraies <text:list>/<text:list-item> -> List WPF.
+                    cible.Blocks.Add(ListOdtVersFlow(elem, zip));
                     break;
             }
         }
+    }
+
+    /// <summary>Convertit un <c>&lt;text:list&gt;</c> en List WPF avec ListItem(s).
+    /// Le MarkerStyle est laisse par defaut (Disc) - on ne tente pas de le recuperer
+    /// des attributs text:style-name en G.1b.</summary>
+    private static System.Windows.Documents.List ListOdtVersFlow(XElement list, ZipArchive zip)
+    {
+        var flowList = new System.Windows.Documents.List();
+        foreach (var li in list.Elements().Where(e => e.Name.LocalName == "list-item" && e.Name.NamespaceName == TextNs))
+        {
+            var item = new System.Windows.Documents.ListItem();
+            foreach (var p in li.Elements().Where(e => e.Name.LocalName == "p" && e.Name.NamespaceName == TextNs))
+                item.Blocks.Add(PWmlVersFlow(p, zip));
+            if (item.Blocks.Count > 0) flowList.ListItems.Add(item);
+        }
+        return flowList;
     }
 
     private static System.Windows.Documents.Paragraph HWmlVersFlow(XElement h, ZipArchive zip)

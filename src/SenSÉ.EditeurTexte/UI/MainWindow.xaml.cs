@@ -178,8 +178,10 @@ public partial class MainWindow : Window
     private void BtnH1_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(1);
     private void BtnH2_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(2);
     private void BtnH3_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(3);
-    private void BtnListePuces_Click(object sender, RoutedEventArgs e) => AppliquerListe(false);
-    private void BtnListeNum_Click(object sender, RoutedEventArgs e)   => AppliquerListe(true);
+    // Phase G.1b : EditingCommands.ToggleBullets/ToggleNumbering creent une vraie List WPF (Block > ListItem).
+    // Le writer ecrit le <w:numPr> (docx) ou <text:list> (odt) correspondant.
+    private void BtnListePuces_Click(object sender, RoutedEventArgs e) { EditingCommands.ToggleBullets.Execute(null, Rtb); Rtb.Focus(); }
+    private void BtnListeNum_Click(object sender, RoutedEventArgs e)   { EditingCommands.ToggleNumbering.Execute(null, Rtb); Rtb.Focus(); }
 
     // Phase G.1a : combobox police/taille. Selection vide -> affecte le paragraphe
     // sous le curseur (ou la propriete par defaut du RichTextBox). Sinon ->

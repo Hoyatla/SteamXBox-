@@ -39,6 +39,12 @@ public static class Docx
 
         foreach (var block in doc.Blocks)
         {
+            if (block is System.Windows.Documents.List list)
+            {
+                // Phase G.1b : vraie liste, <w:numPr> avec NumberingPart.
+                ListVersWml(list, mainPart, body, ref imageCounter);
+                continue;
+            }
             var element = BlockVersWml(block, mainPart, ref imageCounter);
             if (element is not null) body.AppendChild(element);
         }
@@ -46,17 +52,52 @@ public static class Docx
         mainPart.Document.Save();
     }
 
-    /// <summary>Charge un .docx dans un FlowDocument existant (vide prealablement).</summary>
+    /// <summary>Charge un .docx dans un FlowDocument existant (vide prealablement).
+    /// Phase G.1b : les paragraphes consecutifs portant un <c>&lt;w:numPr&gt;</c> avec le meme
+    /// <c>w:numId</c> sont regroupes dans une List WPF (ListItem par paragraphe).</summary>
     public static void DepuisDocx(FlowDocument cible, string chemin)
     {
         cible.Blocks.Clear();
         using var pkg = WordprocessingDocument.Open(chemin, false);
         var mainPart = pkg.MainDocumentPart!;
         var body = mainPart.Document.Body!;
+
+        System.Windows.Documents.List? listCourante = null;
+        int? numIdCourant = null;
+
         foreach (var para in body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>())
         {
-            cible.Blocks.Add(ParagrapheWmlVersFlow(para, mainPart));
+            int? numId = LireNumId(para);
+            if (numId is int nid && nid >= 1)
+            {
+                if (listCourante is null || numIdCourant != nid)
+                {
+                    listCourante = new System.Windows.Documents.List
+                    {
+                        MarkerStyle = (nid == 2) ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc
+                    };
+                    numIdCourant = nid;
+                    cible.Blocks.Add(listCourante);
+                }
+                var li = new System.Windows.Documents.ListItem(ParagrapheWmlVersFlow(para, mainPart));
+                listCourante.ListItems.Add(li);
+            }
+            else
+            {
+                listCourante = null;
+                numIdCourant = null;
+                cible.Blocks.Add(ParagrapheWmlVersFlow(para, mainPart));
+            }
         }
+    }
+
+    /// <summary>Lit le <c>w:numId</c> d'un paragraphe OpenXml, ou null si pas un item de liste.</summary>
+    private static int? LireNumId(DocumentFormat.OpenXml.Wordprocessing.Paragraph para)
+    {
+        var pPr = para.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.ParagraphProperties>();
+        var numPr = pPr?.GetFirstChild<NumberingProperties>();
+        var numId = numPr?.GetFirstChild<NumberingId>();
+        return numId?.Val?.Value;
     }
 
     // ============== Writer ==============
@@ -87,6 +128,80 @@ public static class Docx
         p.AppendChild(pPr);
         foreach (var r in runs) p.AppendChild(r);
         return p;
+    }
+
+    /// <summary>Phase G.1b : cree un NumberingPart avec 2 definitions (bullet numId=1, decimal numId=2)
+    /// si pas deja present. Appele une seule fois par sauvegarde (idempotent).</summary>
+    private static void EnsureNumberingPart(MainDocumentPart mainPart)
+    {
+        if (mainPart.NumberingDefinitionsPart is not null) return;
+        var np = mainPart.AddNewPart<NumberingDefinitionsPart>();
+
+        // AbstractNum 0 : bullet (•).
+        var abs0 = new AbstractNum { AbstractNumberId = 0 };
+        abs0.Append(new Level(
+            new StartNumberingValue { Val = 1 },
+            new NumberingFormat { Val = NumberFormatValues.Bullet },
+            new LevelText { Val = "\u2022" },
+            new LevelJustification { Val = LevelJustificationValues.Left },
+            new PreviousParagraphProperties(
+                new Indentation { Left = "720", Hanging = "360" }
+            )
+        ) { LevelIndex = 0 });
+
+        // AbstractNum 1 : decimal (1. 2. 3.).
+        var abs1 = new AbstractNum { AbstractNumberId = 1 };
+        abs1.Append(new Level(
+            new StartNumberingValue { Val = 1 },
+            new NumberingFormat { Val = NumberFormatValues.Decimal },
+            new LevelText { Val = "%1." },
+            new LevelJustification { Val = LevelJustificationValues.Left },
+            new PreviousParagraphProperties(
+                new Indentation { Left = "720", Hanging = "360" }
+            )
+        ) { LevelIndex = 0 });
+
+        var numbering = new Numbering();
+        numbering.Append(abs0);
+        numbering.Append(abs1);
+        numbering.Append(new NumberingInstance(new AbstractNumId { Val = 0 }) { NumberID = 1 });
+        numbering.Append(new NumberingInstance(new AbstractNumId { Val = 1 }) { NumberID = 2 });
+        np.Numbering = numbering;
+    }
+
+    /// <summary>Phase G.1b : ecrit une List WPF (Block avec ListItem) sous forme de paragraphes
+    /// consecutifs portant un <c>&lt;w:numPr&gt;&lt;w:ilvl/&gt;&lt;w:numId/&gt;&lt;/w:numPr&gt;</c>.
+    /// Le numId depend du MarkerStyle : 1=bullet (Disc/Circle/Square/Box), 2=decimal.</summary>
+    private static void ListVersWml(System.Windows.Documents.List list, MainDocumentPart mainPart,
+        Body body, ref int imageCounter)
+    {
+        EnsureNumberingPart(mainPart);
+        int numId = list.MarkerStyle switch
+        {
+            TextMarkerStyle.Decimal => 2,
+            TextMarkerStyle.LowerRoman or TextMarkerStyle.UpperRoman
+             or TextMarkerStyle.LowerLatin or TextMarkerStyle.UpperLatin => 2,
+            _ => 1,
+        };
+        foreach (var item in list.ListItems)
+        {
+            foreach (var sub in item.Blocks)
+            {
+                if (sub is System.Windows.Documents.Paragraph p)
+                {
+                    var wmlP = new DocumentFormat.OpenXml.Wordprocessing.Paragraph();
+                    var pPr = new DocumentFormat.OpenXml.Wordprocessing.ParagraphProperties(
+                        new NumberingProperties(
+                            new NumberingLevelReference { Val = 0 },
+                            new NumberingId { Val = numId }
+                        ));
+                    wmlP.AppendChild(pPr);
+                    foreach (var r in RunsVersWml(p.Inlines, mainPart, ref imageCounter))
+                        wmlP.AppendChild(r);
+                    body.AppendChild(wmlP);
+                }
+            }
+        }
     }
 
     private static DocumentFormat.OpenXml.Wordprocessing.Paragraph ListeWml(System.Windows.Documents.Paragraph src, bool numbered, MainDocumentPart mainPart, ref int imageCounter)
