@@ -54,6 +54,11 @@ public partial class MainWindow : Window
         _autoSave.Demarrer();
         this.Closed += (_, _) => _autoSave.Arreter();
 
+        // Phase I.2 : charger le theme depuis settings.json et l'appliquer.
+        var theme = ThemeManager.Charger();
+        ThemeManager.Appliquer(this, theme);
+        SyncRadioTheme(theme);
+
         CreerNouvelOnglet();
     }
 
@@ -399,6 +404,27 @@ public partial class MainWindow : Window
             : texte.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
         var caracteres = texte.Length;
         Comptage.Text = mots + " mots | " + caracteres + " caractères";
+    }
+
+    // ============== Phase I.2 : Themes ==============
+
+    private void MnuThemeClair_Click(object sender, RoutedEventArgs e) => ChangerTheme(ThemeApp.Light);
+    private void MnuThemeSombre_Click(object sender, RoutedEventArgs e) => ChangerTheme(ThemeApp.Dark);
+    private void MnuThemeSysteme_Click(object sender, RoutedEventArgs e) => ChangerTheme(ThemeApp.SystemDefault);
+
+    private void ChangerTheme(ThemeApp theme)
+    {
+        ThemeManager.Appliquer(this, theme);
+        ThemeManager.Sauvegarder(theme);
+        SyncRadioTheme(theme);
+        Statut.Text = "Theme : " + theme;
+    }
+
+    private void SyncRadioTheme(ThemeApp theme)
+    {
+        MnuThemeClair.IsChecked = theme == ThemeApp.Light;
+        MnuThemeSombre.IsChecked = theme == ThemeApp.Dark;
+        MnuThemeSysteme.IsChecked = theme == ThemeApp.SystemDefault;
     }
 
     // ============== Drag & drop ==============

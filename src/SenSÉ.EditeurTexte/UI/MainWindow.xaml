@@ -66,6 +66,11 @@
                 <MenuItem Header="_Rechercher..."  InputGestureText="Ctrl+F" Click="BtnRechercher_Click"/>
                 <MenuItem Header="_Remplacer..."   InputGestureText="Ctrl+H" Click="BtnRemplacer_Click"/>
             </MenuItem>
+            <MenuItem Header="Affichage">
+                <MenuItem x:Name="MnuThemeClair" Header="_Clair" Click="MnuThemeClair_Click" IsCheckable="True"/>
+                <MenuItem x:Name="MnuThemeSombre" Header="_Sombre" Click="MnuThemeSombre_Click" IsCheckable="True"/>
+                <MenuItem x:Name="MnuThemeSysteme" Header="_Système" Click="MnuThemeSysteme_Click" IsCheckable="True"/>
+            </MenuItem>
             <MenuItem Header="Insertion">
                 <MenuItem Header="Image _locale..." Click="InsererImageLocale_Click" InputGestureText="Ctrl+I"/>
                 <Separator/>
