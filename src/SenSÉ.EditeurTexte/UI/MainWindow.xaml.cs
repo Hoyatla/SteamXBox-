@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -26,6 +27,10 @@ public partial class MainWindow : Window
     private readonly RelayCommand _cmdItalique;
     private readonly RelayCommand _cmdSouligne;
 
+    // Phase G.1a : la fenetre de recherche/remplacement est creee paresseusement
+    // pour qu'elle survive entre deux ouvertures (historique des recherches).
+    private FenetreRecherche? _fenetreRecherche;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -40,6 +45,15 @@ public partial class MainWindow : Window
         _cmdSouligne   = new RelayCommand(_ => Toggle(Inline.TextDecorationsProperty, TextDecorations.Underline));
 
         DataContext = this;
+
+        // Phase G.1a : la ComboBox editable ne supporte pas TextChanged en XAML directement.
+        // On s'abonne au routed event TextBoxBase.TextChangedEvent qui remonte du TextBox interne.
+        TailleCombo.AddHandler(TextBoxBase.TextChangedEvent,
+            new TextChangedEventHandler(TailleCombo_TextChanged));
+
+        // Phase G.1a : etat initial de la combobox Taille sur la valeur par defaut
+        // de l'editeur (12pt).
+        TailleCombo.Text = Rtb.FontSize > 0 ? Rtb.FontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "12";
     }
 
     public ICommand MnuNouveau    => _cmdNouveau;
@@ -103,13 +117,11 @@ public partial class MainWindow : Window
         Sauver(dlg.FileName);
     }
 
-    // Phase B-prime + C-prime : md, txt, docx (DocumentFormat.OpenXml) et odt (ZIP+XML maison).
     private static readonly (string Extension, string Id)[] _formatsSauvegarde =
         new (string, string)[] { (".md", "md"), (".txt", "txt"), (".docx", "docx"), (".odt", "odt") };
 
     private static string ConstruireFilterSauvegarde()
     {
-        // Phase B-prime + C-prime : md, txt, docx, odt. Tous ecrits en natif.
         return "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Word (*.docx)|*.docx|OpenDocument (*.odt)|*.odt|Tous les fichiers (*.*)|*.*";
     }
 
@@ -118,14 +130,13 @@ public partial class MainWindow : Window
         var low = ext.ToLowerInvariant();
         for (int i = 0; i < _formatsSauvegarde.Length; i++)
         {
-            if (_formatsSauvegarde[i].Extension == low) return i + 2; // +1 (Tous) +1 (1-based)
+            if (_formatsSauvegarde[i].Extension == low) return i + 2;
         }
-        return 1; // defaut : "Tous"
+        return 1;
     }
 
     private void Sauver(string chemin)
     {
-        // Phase B-prime + C-prime : md / txt / docx / odt sont supportes nativement.
         var ext = Path.GetExtension(chemin).ToLowerInvariant();
         if (ext != ".md" && ext != ".txt" && ext != ".docx" && ext != ".odt")
         {
@@ -170,6 +181,71 @@ public partial class MainWindow : Window
     private void BtnListePuces_Click(object sender, RoutedEventArgs e) => AppliquerListe(false);
     private void BtnListeNum_Click(object sender, RoutedEventArgs e)   => AppliquerListe(true);
 
+    // Phase G.1a : combobox police/taille. Selection vide -> affecte le paragraphe
+    // sous le curseur (ou la propriete par defaut du RichTextBox). Sinon ->
+    // ApplyPropertyValue sur la selection.
+    private void PoliceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _ignoreSelectionChangedCombos) return;
+        if (PoliceCombo.SelectedItem is not ComboBoxItem item) return;
+        var name = item.Content?.ToString();
+        if (string.IsNullOrEmpty(name)) return;
+        try
+        {
+            var ff = new FontFamily(name);
+            if (Rtb.Selection.IsEmpty)
+                Rtb.FontFamily = ff;
+            else
+                Rtb.Selection.ApplyPropertyValue(Inline.FontFamilyProperty, ff);
+            Rtb.Focus();
+        }
+        catch (Exception ex)
+        {
+            Statut.Text = "Police : " + ex.Message;
+        }
+    }
+
+    private void TailleCombo_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded || _ignoreSelectionChangedCombos) return;
+        if (!double.TryParse(TailleCombo.Text, System.Globalization.NumberStyles.Any,
+                             System.Globalization.CultureInfo.InvariantCulture, out var size)) return;
+        if (size <= 0 || size > 999) return;
+        if (Rtb.Selection.IsEmpty)
+        {
+            Rtb.Selection.Start?.Paragraph?.SetCurrentValue(Paragraph.FontSizeProperty, size);
+        }
+        else
+        {
+            Rtb.Selection.ApplyPropertyValue(Inline.FontSizeProperty, size);
+        }
+    }
+
+    // Phase G.1a : alignement via les EditingCommands natives WPF.
+    private void BtnAlignerGauche_Click(object sender, RoutedEventArgs e) { EditingCommands.AlignLeft.Execute(null, Rtb);    Rtb.Focus(); }
+    private void BtnCentrer_Click(object sender, RoutedEventArgs e)       { EditingCommands.AlignCenter.Execute(null, Rtb);  Rtb.Focus(); }
+    private void BtnAlignerDroite_Click(object sender, RoutedEventArgs e) { EditingCommands.AlignRight.Execute(null, Rtb);   Rtb.Focus(); }
+    private void BtnJustifier_Click(object sender, RoutedEventArgs e)     { EditingCommands.AlignJustify.Execute(null, Rtb); Rtb.Focus(); }
+
+    // Phase G.1a : ouvre (ou remonte) la fenetre de recherche. L'implementation
+    // complete (suivant, precedent, remplacer, tout remplacer) est branchee
+    // en G.4. Pour l'instant on affiche juste la fenetre.
+    private void BtnRechercher_Click(object sender, RoutedEventArgs e) => OuvrirFenetreRecherche(false);
+    private void BtnRemplacer_Click(object sender, RoutedEventArgs e)  => OuvrirFenetreRecherche(true);
+
+    private void OuvrirFenetreRecherche(bool modeRemplacement)
+    {
+        if (_fenetreRecherche is null)
+        {
+            _fenetreRecherche = new FenetreRecherche(Rtb) { Owner = this };
+            _fenetreRecherche.Closed += (_, _) => _fenetreRecherche = null;
+        }
+        _fenetreRecherche.ModeRemplacement = modeRemplacement;
+        if (!_fenetreRecherche.IsVisible) _fenetreRecherche.Show();
+        _fenetreRecherche.Activate();
+        _fenetreRecherche.Focus();
+    }
+
     private void Toggle(DependencyProperty prop, object value)
     {
         if (Rtb.Selection.IsEmpty) return;
@@ -203,9 +279,64 @@ public partial class MainWindow : Window
         paragraph.Inlines.InsertBefore(first, new Run(prefixe));
     }
 
+    // Phase G.1a + G.5 : pousser dans l'historique sur modification, mettre a jour
+    // le compteur mots/caracteres dans la status bar.
     private void Rtb_TextChanged(object sender, TextChangedEventArgs e)
     {
         _historique.Push(Rtb.Document);
+        // Phase G.5 (commit suivant) : MettreAJourComptage();
+    }
+
+    // Phase G.5 : compteur mots/caracteres. Appele sur chaque TextChanged.
+    private void MettreAJourComptage()
+    {
+        var texte = new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text;
+        var mots = string.IsNullOrWhiteSpace(texte)
+            ? 0
+            : texte.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        var caracteres = texte.Length;
+        Comptage.Text = $"{mots} mots | {caracteres} caractères";
+    }
+
+    // Phase G.1a : SelectionChanged -> resynchroniser les combobox Police/Taille avec
+    // l'etat de la selection. Un flag empeche les handlers de Combobox de repondre
+    // quand c'est nous qui les mettons a jour.
+    private bool _ignoreSelectionChangedCombos;
+    private void Rtb_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        SyncCombosAvecSelection();
+    }
+
+    private void SyncCombosAvecSelection()
+    {
+        _ignoreSelectionChangedCombos = true;
+        try
+        {
+            // Police.
+            var ffObj = Rtb.Selection.GetPropertyValue(Inline.FontFamilyProperty);
+            if (ffObj is FontFamily ff)
+            {
+                var source = ff.Source ?? ff.ToString();
+                foreach (var it in PoliceCombo.Items)
+                {
+                    if (it is ComboBoxItem ci && string.Equals(ci.Content?.ToString(), source, StringComparison.OrdinalIgnoreCase))
+                    {
+                        PoliceCombo.SelectedItem = ci;
+                        break;
+                    }
+                }
+            }
+            // Taille.
+            var fsObj = Rtb.Selection.GetPropertyValue(Inline.FontSizeProperty);
+            if (fsObj is double size && size > 0)
+            {
+                TailleCombo.Text = size.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+        finally
+        {
+            _ignoreSelectionChangedCombos = false;
+        }
     }
 
     private void Fenetre_DragOver(object sender, DragEventArgs e)
@@ -223,9 +354,6 @@ public partial class MainWindow : Window
         var fichiers = (string[])e.Data.GetData(DataFormats.FileDrop);
         if (fichiers is null || fichiers.Length == 0) return;
 
-        // Premier fichier texte -> on charge, comme avant.
-        // Tous les fichiers image -> on insere au point d'insertion, dans l'ordre.
-        // Autres (PDF, Office, etc.) -> ignores silencieusement.
         foreach (var fichier in fichiers)
         {
             var ext = Path.GetExtension(fichier);
@@ -235,11 +363,9 @@ public partial class MainWindow : Window
             }
             else if (fichiers.Length == 1 && !_extensionsImage.Contains(ext))
             {
-                // Drop d'un seul fichier non-image : on tente de charger comme doc.
                 Charger(fichier);
                 return;
             }
-            // Sinon, on ignore : drop multi-fichiers heterogene, on prend que les images.
         }
     }
 
@@ -253,10 +379,6 @@ public partial class MainWindow : Window
         InsererImage(dlg.FileName);
     }
 
-    /// <summary>
-    /// Insere une image au point d'insertion du RichTextBox, avec une legende
-    /// optionnelle en italique gris juste apres.
-    /// </summary>
     private void InsererImage(string cheminImage, string? legende = null)
     {
         try
@@ -275,8 +397,6 @@ public partial class MainWindow : Window
                 Stretch = System.Windows.Media.Stretch.Uniform,
             };
 
-            // Selection.Start peut etre null si le document est vide et non focalise.
-            // On prend CaretPosition en fallback.
             var pos = Rtb.Selection.Start ?? Rtb.CaretPosition;
             if (pos is null || pos.Paragraph is null) return;
 
@@ -284,7 +404,6 @@ public partial class MainWindow : Window
 
             if (!string.IsNullOrEmpty(legende))
             {
-                // Avance la position apres l'image, insere un Run italique gris.
                 var posApres = pos.GetNextInsertionPosition(LogicalDirection.Forward);
                 if (posApres is not null && posApres.Paragraph is not null)
                 {
@@ -314,12 +433,11 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() != true) return;
 
         var prompt = dlg.PromptSaisi;
-        var contexteComplet = 
+        var contexteComplet =
             (Rtb.Selection.IsEmpty
                 ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
                 : Rtb.Selection.Text);
 
-        // Phase E : envoi a Atelier /atelier/llm/complete, qui delegue a pc-agent (8765).
         Statut.Text = "IA : envoi a l'Atelier...";
         try
         {
@@ -337,9 +455,6 @@ public partial class MainWindow : Window
 
     private async void Dicter_Click(object sender, RoutedEventArgs e)
     {
-        // Phase E.1 : pas de backend Whisper stable, ClientAtelier.TranscrireAsync
-        // leve NotImplementedException avec un message clair. En E.2 on remplacera
-        // par l'enregistrement micro (NAudio) + transcription reelle.
         Statut.Text = "Dicter : envoi a l'Atelier...";
         try
         {
@@ -360,8 +475,7 @@ public partial class MainWindow : Window
     }
 }
 
-/// <summary>Fenetre modale simple pour saisir un prompt IA. Renvoie DialogResult=true
-/// si OK, false si Annuler. La prompt est accessible via <see cref="PromptSaisi"/>.</summary>
+/// <summary>Fenetre modale simple pour saisir un prompt IA.</summary>
 internal sealed class FenetrePromptIA : Window
 {
     public string PromptSaisi { get; private set; } = "";
@@ -414,34 +528,15 @@ internal sealed class FenetrePromptIA : Window
         };
         DockPanel.SetDock(boutons, Dock.Bottom);
 
-        var btnOk = new Button
-        {
-            Content = "OK",
-            Width = 80,
-            Height = 28,
-            Margin = new Thickness(0, 0, 8, 0),
-            IsDefault = true,
-        };
-        btnOk.Click += (_, _) =>
-        {
-            PromptSaisi = prompt.Text ?? "";
-            DialogResult = true;
-            Close();
-        };
-        var btnAnnuler = new Button
-        {
-            Content = "Annuler",
-            Width = 80,
-            Height = 28,
-            IsCancel = true,
-        };
+        var btnOk = new Button { Content = "OK", Width = 80, Height = 28, Margin = new Thickness(0, 0, 8, 0), IsDefault = true };
+        btnOk.Click += (_, _) => { PromptSaisi = prompt.Text ?? ""; DialogResult = true; Close(); };
+        var btnAnnuler = new Button { Content = "Annuler", Width = 80, Height = 28, IsCancel = true };
         btnAnnuler.Click += (_, _) => { DialogResult = false; Close(); };
 
         boutons.Children.Add(btnAnnuler);
         boutons.Children.Add(btnOk);
         racine.Children.Add(boutons);
 
-        // Zone qui prend le reste (vide, pour pousser les controles en haut).
         var spacer = new System.Windows.Controls.TextBlock();
         DockPanel.SetDock(spacer, Dock.Top);
         racine.Children.Add(spacer);

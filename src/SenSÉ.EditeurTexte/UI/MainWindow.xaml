@@ -3,6 +3,25 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Éditeur — SenSÉ" Height="800" Width="1100"
         AllowDrop="True" Drop="Fenetre_Drop" DragOver="Fenetre_DragOver">
+    <Window.Resources>
+        <Style x:Key="Btn" TargetType="Button">
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Padding" Value="4,0"/>
+        </Style>
+        <Style x:Key="Cmb" TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="Glyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
     <DockPanel>
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_Fichier">
@@ -17,6 +36,9 @@
             <MenuItem Header="É_dition">
                 <MenuItem Header="_Annuler"        InputGestureText="Ctrl+Z" Click="MnuAnnuler_Click"/>
                 <MenuItem Header="_Rétablir"       InputGestureText="Ctrl+Y" Click="MnuRetablir_Click"/>
+                <Separator/>
+                <MenuItem Header="_Rechercher..."  InputGestureText="Ctrl+F" Click="BtnRechercher_Click"/>
+                <MenuItem Header="_Remplacer..."   InputGestureText="Ctrl+H" Click="BtnRemplacer_Click"/>
             </MenuItem>
             <MenuItem Header="Insertion">
                 <MenuItem Header="Image _locale..." Click="InsererImageLocale_Click" InputGestureText="Ctrl+I"/>
@@ -27,27 +49,91 @@
         </Menu>
         <ToolBarTray DockPanel.Dock="Top">
             <ToolBar>
-                <Button x:Name="BtnGras"        Click="BtnGras_Click"        ToolTip="Gras (Ctrl+B)" FontWeight="Bold">G</Button>
-                <Button x:Name="BtnItalique"    Click="BtnItalique_Click"    ToolTip="Italique (Ctrl+I)" FontStyle="Italic">I</Button>
-                <Button x:Name="BtnSouligne"    Click="BtnSouligne_Click"    ToolTip="Souligné (Ctrl+U)">
-                    <TextBlock Text="U" TextDecorations="Underline"/>
+                <Button x:Name="BtnGras" Style="{StaticResource Btn}" Click="BtnGras_Click" ToolTip="Gras (Ctrl+B)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8DD;"/>
+                </Button>
+                <Button x:Name="BtnItalique" Style="{StaticResource Btn}" Click="BtnItalique_Click" ToolTip="Italique (Ctrl+I)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8DB;"/>
+                </Button>
+                <Button x:Name="BtnSouligne" Style="{StaticResource Btn}" Click="BtnSouligne_Click" ToolTip="Souligné (Ctrl+U)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8DC;"/>
                 </Button>
                 <Separator/>
-                <Button x:Name="BtnH1"           Click="BtnH1_Click"           ToolTip="Titre 1">H1</Button>
-                <Button x:Name="BtnH2"           Click="BtnH2_Click"           ToolTip="Titre 2">H2</Button>
-                <Button x:Name="BtnH3"           Click="BtnH3_Click"           ToolTip="Titre 3">H3</Button>
+                <Button x:Name="BtnH1" Style="{StaticResource Btn}" Click="BtnH1_Click" ToolTip="Titre 1">
+                    <TextBlock Text="H1" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </Button>
+                <Button x:Name="BtnH2" Style="{StaticResource Btn}" Click="BtnH2_Click" ToolTip="Titre 2">
+                    <TextBlock Text="H2" HorizontalAlignment="Center"/>
+                </Button>
+                <Button x:Name="BtnH3" Style="{StaticResource Btn}" Click="BtnH3_Click" ToolTip="Titre 3">
+                    <TextBlock Text="H3" HorizontalAlignment="Center"/>
+                </Button>
                 <Separator/>
-                <Button x:Name="BtnListePuces"   Click="BtnListePuces_Click"   ToolTip="Liste à puces">•≡</Button>
-                <Button x:Name="BtnListeNum"     Click="BtnListeNum_Click"     ToolTip="Liste numérotée">1.</Button>
+                <Button x:Name="BtnListePuces" Style="{StaticResource Btn}" Click="BtnListePuces_Click" ToolTip="Liste à puces">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8FD;"/>
+                </Button>
+                <Button x:Name="BtnListeNum" Style="{StaticResource Btn}" Click="BtnListeNum_Click" ToolTip="Liste numérotée">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE9C1;"/>
+                </Button>
+                <Separator/>
+                <ComboBox x:Name="PoliceCombo" Style="{StaticResource Cmb}" Width="120"
+                          ToolTip="Police" SelectionChanged="PoliceCombo_SelectionChanged">
+                    <ComboBoxItem Content="Segoe UI"/>
+                    <ComboBoxItem Content="Arial"/>
+                    <ComboBoxItem Content="Calibri"/>
+                    <ComboBoxItem Content="Consolas"/>
+                    <ComboBoxItem Content="Times New Roman"/>
+                </ComboBox>
+                <ComboBox x:Name="TailleCombo" Style="{StaticResource Cmb}" Width="60"
+                          ToolTip="Taille" IsEditable="True">
+                    <ComboBoxItem Content="8"/>
+                    <ComboBoxItem Content="10"/>
+                    <ComboBoxItem Content="12"/>
+                    <ComboBoxItem Content="14"/>
+                    <ComboBoxItem Content="16"/>
+                    <ComboBoxItem Content="18"/>
+                    <ComboBoxItem Content="20"/>
+                    <ComboBoxItem Content="24"/>
+                    <ComboBoxItem Content="32"/>
+                </ComboBox>
+                <Separator/>
+                <Button x:Name="BtnAlignerGauche" Style="{StaticResource Btn}" Click="BtnAlignerGauche_Click"
+                        ToolTip="Aligner à gauche (Ctrl+L)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE1D5;"/>
+                </Button>
+                <Button x:Name="BtnCentrer" Style="{StaticResource Btn}" Click="BtnCentrer_Click"
+                        ToolTip="Centrer (Ctrl+E)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE1D2;"/>
+                </Button>
+                <Button x:Name="BtnAlignerDroite" Style="{StaticResource Btn}" Click="BtnAlignerDroite_Click"
+                        ToolTip="Aligner à droite (Ctrl+R)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE1D3;"/>
+                </Button>
+                <Button x:Name="BtnJustifier" Style="{StaticResource Btn}" Click="BtnJustifier_Click"
+                        ToolTip="Justifier (Ctrl+J)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE1D4;"/>
+                </Button>
+                <Separator/>
+                <Button x:Name="BtnRechercher" Style="{StaticResource Btn}" Click="BtnRechercher_Click"
+                        ToolTip="Rechercher (Ctrl+F)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE721;"/>
+                </Button>
+                <Button x:Name="BtnRemplacer" Style="{StaticResource Btn}" Click="BtnRemplacer_Click"
+                        ToolTip="Remplacer (Ctrl+H)">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE8AD;"/>
+                </Button>
             </ToolBar>
         </ToolBarTray>
         <StatusBar DockPanel.Dock="Bottom">
             <TextBlock x:Name="Statut"/>
+            <Separator/>
+            <TextBlock x:Name="Comptage" Text="0 mots | 0 caractères"/>
         </StatusBar>
         <RichTextBox x:Name="Rtb"
                      AcceptsTab="True"
                      SpellCheck.IsEnabled="False"
-                     TextChanged="Rtb_TextChanged">
+                     TextChanged="Rtb_TextChanged"
+                     SelectionChanged="Rtb_SelectionChanged">
             <FlowDocument PageWidth="2000">
                 <Paragraph/>
             </FlowDocument>
@@ -62,5 +148,11 @@
         <KeyBinding Key="B" Modifiers="Control" Command="{Binding MnuGras}"/>
         <KeyBinding Key="I" Modifiers="Control" Command="{Binding MnuItalique}"/>
         <KeyBinding Key="U" Modifiers="Control" Command="{Binding MnuSouligne}"/>
+        <KeyBinding Key="F" Modifiers="Control" Command="ApplicationCommands.Find"/>
+        <KeyBinding Key="H" Modifiers="Control" Command="ApplicationCommands.Replace"/>
     </Window.InputBindings>
+    <Window.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Find"    Executed="BtnRechercher_Click"/>
+        <CommandBinding Command="ApplicationCommands.Replace" Executed="BtnRemplacer_Click"/>
+    </Window.CommandBindings>
 </Window>
