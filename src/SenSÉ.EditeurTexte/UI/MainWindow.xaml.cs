@@ -286,7 +286,7 @@ public partial class MainWindow : Window
     private void Rtb_TextChanged(object sender, TextChangedEventArgs e)
     {
         _historique.Push(Rtb.Document);
-        // Phase G.5 (commit suivant) : MettreAJourComptage();
+        MettreAJourComptage();
     }
 
     // Phase G.5 : compteur mots/caracteres. Appele sur chaque TextChanged.
