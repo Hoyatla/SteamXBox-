@@ -17,7 +17,8 @@ namespace SenSÉ.EditeurTexte.UI;
 public partial class MainWindow : Window
 {
     private string? _cheminActuel;
-    private readonly Historique _historique = new();
+    private readonly Edition.Historique _historique = new();
+    private readonly AutoSave _autoSave = new();
     private readonly RelayCommand _cmdNouveau;
     private readonly RelayCommand _cmdOuvrir;
     private readonly RelayCommand _cmdEnregistrer;
@@ -45,6 +46,10 @@ public partial class MainWindow : Window
         _cmdSouligne   = new RelayCommand(_ => Toggle(Inline.TextDecorationsProperty, TextDecorations.Underline));
 
         DataContext = this;
+
+        // Phase H : auto-save periodique. DispatcherTimer donc thread UI.
+        _autoSave.Demarrer();
+        this.Closed += (_, _) => _autoSave.Arreter();
 
         // Phase G.1a : la ComboBox editable ne supporte pas TextChanged en XAML directement.
         // On s'abonne au routed event TextBoxBase.TextChangedEvent qui remonte du TextBox interne.
@@ -92,6 +97,13 @@ public partial class MainWindow : Window
             _historique.Reset();
             Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
             Statut.Text = "Ouvert.";
+
+            // Phase H : brancher l'autosave sur ce document + ce chemin.
+            _autoSave.CheminCourant = chemin;
+            _autoSave.Document = Rtb.Document;
+
+            // Phase H : proposer la restauration si autosave plus recent que le fichier.
+            ProposerRestaurationAutoSave(chemin);
         }
         catch (Exception ex)
         {
@@ -147,6 +159,8 @@ public partial class MainWindow : Window
         }
         try
         {
+            // Phase H : archiver l'ANCIEN fichier (avant ecriture).
+            Persistance.Historique.Archiver(chemin);
             Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
             _cheminActuel = chemin;
             Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
@@ -156,6 +170,8 @@ public partial class MainWindow : Window
                 ".odt"  => "Enregistré en OpenDocument (.odt).",
                 _       => "Enregistré."
             };
+            // Phase H : supprimer l'autosave (l'historique garde la trace).
+            AutoSave.Supprimer(chemin);
         }
         catch (Exception ex)
         {
@@ -473,6 +489,51 @@ public partial class MainWindow : Window
         {
             Statut.Text = "Dicter : erreur.";
             MessageBox.Show(this, ex.Message, "Dicter", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // Phase H : menu Fichier > Voir l'historique... -> FenetreHistorique.
+    private void MnuVoirHistorique_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_cheminActuel))
+        {
+            MessageBox.Show(this, "Aucun fichier ouvert. L'historique est lie au chemin du fichier.",
+                "Historique", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var fen = new FenetreHistorique(_cheminActuel) { Owner = this };
+        fen.ShowDialog();
+    }
+
+    // Phase H : restauration de l'autosave. Si une version non sauvegardee existe et est
+    // plus recente que le fichier sur disque, propose a l'utilisateur de la recharger.
+    private void ProposerRestaurationAutoSave(string chemin)
+    {
+        if (!AutoSave.ExisteRestauration(chemin, out var modifieLe, out var autosavePath)) return;
+        var dateFichierDisque = File.Exists(chemin) ? File.GetLastWriteTime(chemin) : DateTime.MinValue;
+        if (modifieLe <= dateFichierDisque) return; // l'autosave n'est pas plus recent
+        var age = DateTime.Now - modifieLe;
+        var minutes = (int)Math.Round(age.TotalMinutes);
+        var label = minutes < 1 ? "moins d'1 min" : minutes + " min";
+        var result = MessageBox.Show(this,
+            "Une version non sauvegardee existe pour " + Path.GetFileName(chemin) + " (modifiee il y a " + label + ")." +
+            Environment.NewLine + Environment.NewLine + "Restaurer ?",
+            "Restauration auto-save",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+        try
+        {
+            var contenu = AutoSave.Lire(autosavePath);
+            Rtb.Document = new FlowDocument();
+            Format.Markdown.DepuisMarkdown(Rtb.Document, contenu);
+            _historique.Reset();
+            _autoSave.Document = Rtb.Document;
+            Statut.Text = "Restauration auto-save appliquee (non encore sauvegarde).";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Erreur de restauration",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

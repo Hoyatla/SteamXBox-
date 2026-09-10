@@ -44,6 +44,8 @@
                 <MenuItem Header="_Enregistrer"    InputGestureText="Ctrl+S" Click="MnuEnregistrer_Click"/>
                 <MenuItem Header="Enregistrer _sous..." Click="MnuEnregistrerSous_Click"/>
                 <Separator/>
+                <MenuItem Header="Voir l'_historique..." Click="MnuVoirHistorique_Click"/>
+                <Separator/>
                 <MenuItem Header="_Quitter"        InputGestureText="Alt+F4" Click="MnuQuitter_Click"/>
             </MenuItem>
             <MenuItem Header="É_dition">

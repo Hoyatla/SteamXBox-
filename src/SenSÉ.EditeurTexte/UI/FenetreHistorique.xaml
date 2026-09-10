@@ -1,0 +1,34 @@
+<Window x:Class="SenSÉ.EditeurTexte.UI.FenetreHistorique"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Historique des versions" Height="400" Width="640"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" x:Name="LabelInfo" Margin="0,0,0,8" Foreground="Gray"
+                   TextWrapping="Wrap"/>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button x:Name="BtnRestaurer" Content="Restaurer" Width="100" Height="28"
+                    Margin="0,0,8,0" IsDefault="True" Click="BtnRestaurer_Click"
+                    IsEnabled="False"/>
+            <Button x:Name="BtnFermer"    Content="Fermer"    Width="100" Height="28"
+                    IsCancel="True" Click="BtnFermer_Click"/>
+        </StackPanel>
+        <ListBox x:Name="ListeVersions" SelectionChanged="ListeVersions_SelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Vertical" Margin="2,4">
+                        <TextBlock Text="{Binding Nom}" FontFamily="Consolas" FontSize="12"/>
+                        <TextBlock FontSize="11" Foreground="Gray">
+                            <Run Text="{Binding Date, StringFormat=yyyy-MM-dd HH:mm:ss}"/>
+                            <Run Text=" | "/>
+                            <Run Text="{Binding Taille, StringFormat={}{0:N0} octets}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>
