@@ -22,6 +22,16 @@
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- Phase I.1 : style du header de tab : titre + bouton fermer. -->
+        <DataTemplate x:Key="OngletHeaderTemplate" DataType="{x:Type local:OngletDocument}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Titre}" VerticalAlignment="Center" Margin="4,0,8,0"/>
+                <Button Content="×" Width="20" Height="20" Padding="0" Margin="0"
+                        FontSize="14" FontWeight="Bold"
+                        Click="BtnFermerOnglet_Click" Tag="{Binding}"
+                        ToolTip="Fermer l'onglet"/>
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -43,6 +53,7 @@
                 <Separator/>
                 <MenuItem Header="_Enregistrer"    InputGestureText="Ctrl+S" Click="MnuEnregistrer_Click"/>
                 <MenuItem Header="Enregistrer _sous..." Click="MnuEnregistrerSous_Click"/>
+                <MenuItem Header="Fermer l'_onglet"  InputGestureText="Ctrl+W" Click="MnuFermerOnglet_Click"/>
                 <Separator/>
                 <MenuItem Header="Voir l'_historique..." Click="MnuVoirHistorique_Click"/>
                 <Separator/>
@@ -141,24 +152,15 @@
             </ToolBar>
         </ToolBarTray>
 
-        <!-- Phase G.3 : regles. Coin haut-gauche vide, H au-dessus du Rtb, V a gauche. -->
         <Border Grid.Row="2" Grid.Column="0" Background="#F5F5F5"/>
         <local:Ruler x:Name="RulerH" Grid.Row="2" Grid.Column="1" Height="16"
                      Orientation="Horizontal" Length="2000"/>
         <local:Ruler x:Name="RulerV" Grid.Row="3" Grid.Column="0" Width="16"
                      Orientation="Vertical" Length="1200"/>
 
-        <RichTextBox Grid.Row="3" Grid.Column="1" x:Name="Rtb"
-                     AcceptsTab="True"
-                     SpellCheck.IsEnabled="False"
-                     TextChanged="Rtb_TextChanged"
-                     SelectionChanged="Rtb_SelectionChanged"
-                     HorizontalScrollBarVisibility="Auto"
-                     VerticalScrollBarVisibility="Auto">
-            <FlowDocument PageWidth="2000">
-                <Paragraph/>
-            </FlowDocument>
-        </RichTextBox>
+        <TabControl Grid.Row="3" Grid.Column="1" x:Name="Onglets"
+                    ItemTemplate="{StaticResource OngletHeaderTemplate}"
+                    SelectionChanged="Onglets_SelectionChanged"/>
 
         <StatusBar Grid.Row="4" Grid.ColumnSpan="2">
             <TextBlock x:Name="Statut"/>
@@ -175,6 +177,7 @@
         <KeyBinding Key="B" Modifiers="Control" Command="{Binding MnuGras}"/>
         <KeyBinding Key="I" Modifiers="Control" Command="{Binding MnuItalique}"/>
         <KeyBinding Key="U" Modifiers="Control" Command="{Binding MnuSouligne}"/>
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding MnuFermerOnglet}"/>
         <KeyBinding Key="F" Modifiers="Control" Command="ApplicationCommands.Find"/>
         <KeyBinding Key="H" Modifiers="Control" Command="ApplicationCommands.Replace"/>
     </Window.InputBindings>

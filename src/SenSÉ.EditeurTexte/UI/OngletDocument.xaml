@@ -1,0 +1,14 @@
+<UserControl x:Class="SenSÉ.EditeurTexte.UI.OngletDocument"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <RichTextBox x:Name="Rtb"
+                 AcceptsTab="True"
+                 SpellCheck.IsEnabled="False"
+                 HorizontalScrollBarVisibility="Auto"
+                 VerticalScrollBarVisibility="Auto">
+        <FlowDocument PageWidth="2000">
+            <Paragraph/>
+        </FlowDocument>
+    </RichTextBox>
+</UserControl>

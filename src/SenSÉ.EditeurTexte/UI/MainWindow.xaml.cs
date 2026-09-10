@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -16,8 +18,7 @@ namespace SenSÉ.EditeurTexte.UI;
 
 public partial class MainWindow : Window
 {
-    private string? _cheminActuel;
-    private readonly Edition.Historique _historique = new();
+    private readonly ObservableCollection<OngletDocument> _onglets = new();
     private readonly AutoSave _autoSave = new();
     private readonly RelayCommand _cmdNouveau;
     private readonly RelayCommand _cmdOuvrir;
@@ -27,83 +28,83 @@ public partial class MainWindow : Window
     private readonly RelayCommand _cmdGras;
     private readonly RelayCommand _cmdItalique;
     private readonly RelayCommand _cmdSouligne;
-
-    // Phase G.1a : la fenetre de recherche/remplacement est creee paresseusement
-    // pour qu'elle survive entre deux ouvertures (historique des recherches).
+    private readonly RelayCommand _cmdFermerOnglet;
     private FenetreRecherche? _fenetreRecherche;
 
     public MainWindow()
     {
         InitializeComponent();
+        Onglets.ItemsSource = _onglets;
 
-        _cmdNouveau    = new RelayCommand(_ => Nouveau());
-        _cmdOuvrir     = new RelayCommand(_ => Ouvrir());
-        _cmdEnregistrer = new RelayCommand(_ => Enregistrer());
-        _cmdAnnuler    = new RelayCommand(_ => _historique.Undo(Rtb.Document),    () => _historique.PeutAnnuler);
-        _cmdRetablir   = new RelayCommand(_ => _historique.Redo(Rtb.Document),    () => _historique.PeutRetablir);
-        _cmdGras       = new RelayCommand(_ => Toggle(Inline.FontWeightProperty, FontWeights.Bold));
-        _cmdItalique   = new RelayCommand(_ => Toggle(Inline.FontStyleProperty,  FontStyles.Italic));
-        _cmdSouligne   = new RelayCommand(_ => Toggle(Inline.TextDecorationsProperty, TextDecorations.Underline));
+        _cmdNouveau       = new RelayCommand(_ => CreerNouvelOnglet());
+        _cmdOuvrir        = new RelayCommand(_ => OuvrirDansNouvelOnglet());
+        _cmdEnregistrer   = new RelayCommand(_ => EnregistrerOngletActif(), () => OngletActif() is not null);
+        _cmdAnnuler       = new RelayCommand(_ => AnnulerOngletActif(),   () => OngletActif()?.Historique.PeutAnnuler ?? false);
+        _cmdRetablir      = new RelayCommand(_ => RetablirOngletActif(),  () => OngletActif()?.Historique.PeutRetablir ?? false);
+        _cmdGras          = new RelayCommand(_ => Toggle(Inline.FontWeightProperty, FontWeights.Bold));
+        _cmdItalique      = new RelayCommand(_ => Toggle(Inline.FontStyleProperty, FontStyles.Italic));
+        _cmdSouligne      = new RelayCommand(_ => Toggle(Inline.TextDecorationsProperty, TextDecorations.Underline));
+        _cmdFermerOnglet  = new RelayCommand(_ => FermerOngletActif());
 
         DataContext = this;
 
-        // Phase H : auto-save periodique. DispatcherTimer donc thread UI.
-        _autoSave.Demarrer();
-        this.Closed += (_, _) => _autoSave.Arreter();
-
-        // Phase G.1a : la ComboBox editable ne supporte pas TextChanged en XAML directement.
-        // On s'abonne au routed event TextBoxBase.TextChangedEvent qui remonte du TextBox interne.
         TailleCombo.AddHandler(TextBoxBase.TextChangedEvent,
             new TextChangedEventHandler(TailleCombo_TextChanged));
 
-        // Phase G.1a : etat initial de la combobox Taille sur la valeur par defaut
-        // de l'editeur (12pt).
-        TailleCombo.Text = Rtb.FontSize > 0 ? Rtb.FontSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) : "12";
+        _autoSave.Demarrer();
+        this.Closed += (_, _) => _autoSave.Arreter();
+
+        CreerNouvelOnglet();
     }
 
-    public ICommand MnuNouveau    => _cmdNouveau;
-    public ICommand MnuOuvrir     => _cmdOuvrir;
-    public ICommand MnuEnregistrer => _cmdEnregistrer;
-    public ICommand MnuAnnuler    => _cmdAnnuler;
-    public ICommand MnuRetablir   => _cmdRetablir;
-    public ICommand MnuGras       => _cmdGras;
-    public ICommand MnuItalique   => _cmdItalique;
-    public ICommand MnuSouligne   => _cmdSouligne;
+    public ICommand MnuNouveau       => _cmdNouveau;
+    public ICommand MnuOuvrir        => _cmdOuvrir;
+    public ICommand MnuEnregistrer   => _cmdEnregistrer;
+    public ICommand MnuAnnuler       => _cmdAnnuler;
+    public ICommand MnuRetablir      => _cmdRetablir;
+    public ICommand MnuGras          => _cmdGras;
+    public ICommand MnuItalique      => _cmdItalique;
+    public ICommand MnuSouligne      => _cmdSouligne;
+    public ICommand MnuFermerOnglet  => _cmdFermerOnglet;
 
-    private void Nouveau()
+    // ============== Gestion des onglets ==============
+
+    public OngletDocument? OngletActif() => Onglets.SelectedItem as OngletDocument;
+
+    public System.Windows.Controls.RichTextBox? RtbActif() => OngletActif()?.RtbInterne;
+
+    private void CreerNouvelOnglet()
     {
-        _cheminActuel = null;
-        Rtb.Document = new FlowDocument(new Paragraph());
-        _historique.Reset();
-        Title = "Éditeur — SenSÉ";
+        var onglet = new OngletDocument();
+        _onglets.Add(onglet);
+        Onglets.SelectedItem = onglet;
+        onglet.Focus();
     }
 
-    private void Ouvrir()
+    private void OuvrirDansNouvelOnglet()
     {
         var dlg = new OpenFileDialog
         {
-            Filter = "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Tous les fichiers (*.*)|*.*",
+            Filter = "Markdown (*.md)|*.md|Texte (*.txt)|*.txt|Word (*.docx)|*.docx|OpenDocument (*.odt)|*.odt|Tous les fichiers (*.*)|*.*",
         };
         if (dlg.ShowDialog(this) != true) return;
-        Charger(dlg.FileName);
+        ChargerDansNouvelOnglet(dlg.FileName);
     }
 
-    private void Charger(string chemin)
+    private void ChargerDansNouvelOnglet(string chemin)
     {
         try
         {
-            Chargeur.Charger(chemin, Rtb.Document);
-            _cheminActuel = chemin;
-            _historique.Reset();
-            Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-            Statut.Text = "Ouvert.";
-
-            // Phase H : brancher l'autosave sur ce document + ce chemin.
-            _autoSave.CheminCourant = chemin;
-            _autoSave.Document = Rtb.Document;
-
-            // Phase H : proposer la restauration si autosave plus recent que le fichier.
-            ProposerRestaurationAutoSave(chemin);
+            var onglet = new OngletDocument();
+            Chargeur.Charger(chemin, onglet.RtbInterne.Document);
+            onglet.Chemin = chemin;
+            onglet.MarquerSauvegarde();
+            onglet.Historique.Reset();
+            _onglets.Add(onglet);
+            Onglets.SelectedItem = onglet;
+            Statut.Text = "Ouvert : " + Path.GetFileName(chemin);
+            // Phase H : proposer restauration si autosave plus recent.
+            ProposerRestaurationAutoSave(onglet, chemin);
         }
         catch (Exception ex)
         {
@@ -111,26 +112,118 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Enregistrer()
+    private bool FermerOnglet(OngletDocument onglet)
     {
-        if (_cheminActuel is null) EnregistrerSous();
-        else Sauver(_cheminActuel);
+        if (!onglet.EstSauvegarde)
+        {
+            var name = onglet.Titre;
+            var r = MessageBox.Show(this,
+                name + " a des modifications non sauvegardees. Sauver avant de fermer ?",
+                "Fermer l'onglet",
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (r == MessageBoxResult.Cancel) return false;
+            if (r == MessageBoxResult.Yes)
+            {
+                // Selectionner l'onglet et sauver.
+                Onglets.SelectedItem = onglet;
+                if (!SauverOnglet(onglet)) return false;
+            }
+        }
+        _onglets.Remove(onglet);
+        if (_onglets.Count == 0) CreerNouvelOnglet();
+        return true;
     }
 
-    private void EnregistrerSous()
+    private void FermerOngletActif()
+    {
+        if (OngletActif() is { } o) FermerOnglet(o);
+    }
+
+    private void Onglets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Phase H : la AutoSave suit l'onglet actif.
+        if (OngletActif() is { } o)
+        {
+            _autoSave.CheminCourant = o.Chemin;
+            _autoSave.Document = o.RtbInterne.Document;
+            Title = o.Chemin is null ? "Éditeur — SenSÉ" : "Éditeur — SenSÉ — " + Path.GetFileName(o.Chemin);
+            o.Historique.Push(o.RtbInterne.Document); // etat initial
+        }
+        else
+        {
+            _autoSave.CheminCourant = null;
+            _autoSave.Document = null;
+            Title = "Éditeur — SenSÉ";
+        }
+    }
+
+    private void BtnFermerOnglet_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as System.Windows.Controls.Button)?.Tag is OngletDocument o) FermerOnglet(o);
+    }
+
+    // ============== Sauvegarde ==============
+
+    private void EnregistrerOngletActif()
+    {
+        if (OngletActif() is { } o) SauverOnglet(o);
+    }
+
+    private bool SauverOnglet(OngletDocument onglet)
+    {
+        if (string.IsNullOrEmpty(onglet.Chemin)) return SauverOngletSous(onglet);
+        return SauverOngletA(onglet, onglet.Chemin!);
+    }
+
+    private void MnuEnregistrerSous_Click(object sender, RoutedEventArgs e)
+    {
+        if (OngletActif() is { } o) SauverOngletSous(o);
+    }
+
+    private bool SauverOngletSous(OngletDocument onglet)
     {
         var dlg = new SaveFileDialog
         {
             Filter = ConstruireFilterSauvegarde(),
-            FilterIndex = _cheminActuel is null ? 1 : IndexExtension(Path.GetExtension(_cheminActuel)),
-            FileName = _cheminActuel is null ? "sans-titre.md" : Path.GetFileName(_cheminActuel),
+            FilterIndex = onglet.Chemin is null ? 1 : IndexExtension(Path.GetExtension(onglet.Chemin)),
+            FileName = onglet.Chemin is null ? "sans-titre.md" : Path.GetFileName(onglet.Chemin),
         };
-        if (dlg.ShowDialog(this) != true) return;
-        Sauver(dlg.FileName);
+        if (dlg.ShowDialog(this) != true) return false;
+        return SauverOngletA(onglet, dlg.FileName);
     }
 
-    private static readonly (string Extension, string Id)[] _formatsSauvegarde =
-        new (string, string)[] { (".md", "md"), (".txt", "txt"), (".docx", "docx"), (".odt", "odt") };
+    private bool SauverOngletA(OngletDocument onglet, string chemin)
+    {
+        var ext = Path.GetExtension(chemin).ToLowerInvariant();
+        if (ext != ".md" && ext != ".txt" && ext != ".docx" && ext != ".odt")
+        {
+            MessageBox.Show(this, "Format " + ext + " non supporte.", "Format non supporte",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+        try
+        {
+            // Archive l'ancien fichier si on ecrase un fichier deja existant.
+            if (File.Exists(chemin)) Persistance.Historique.Archiver(chemin);
+            Sauvegardeur.Sauvegarder(onglet.RtbInterne.Document, chemin);
+            onglet.Chemin = chemin;
+            onglet.MarquerSauvegarde();
+            AutoSave.Supprimer(chemin);
+            if (OngletActif() == onglet) Title = "Éditeur — SenSÉ — " + Path.GetFileName(chemin);
+            Statut.Text = ext switch
+            {
+                ".docx" => "Enregistré en Word (.docx).",
+                ".odt"  => "Enregistré en OpenDocument (.odt).",
+                _       => "Enregistré.",
+            };
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Erreur d'enregistrement", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
 
     private static string ConstruireFilterSauvegarde()
     {
@@ -140,53 +233,24 @@ public partial class MainWindow : Window
     private static int IndexExtension(string ext)
     {
         var low = ext.ToLowerInvariant();
-        for (int i = 0; i < _formatsSauvegarde.Length; i++)
-        {
-            if (_formatsSauvegarde[i].Extension == low) return i + 2;
-        }
+        string[] exts = { ".md", ".txt", ".docx", ".odt" };
+        for (int i = 0; i < exts.Length; i++) if (exts[i] == low) return i + 2;
         return 1;
     }
 
-    private void Sauver(string chemin)
-    {
-        var ext = Path.GetExtension(chemin).ToLowerInvariant();
-        if (ext != ".md" && ext != ".txt" && ext != ".docx" && ext != ".odt")
-        {
-            MessageBox.Show(this,
-                "Format " + ext + " non encore supporte en ecriture native. Formats disponibles : .md, .txt, .docx, .odt.",
-                "Format non supporte", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        try
-        {
-            // Phase H : archiver l'ANCIEN fichier (avant ecriture).
-            Persistance.Historique.Archiver(chemin);
-            Sauvegardeur.Sauvegarder(Rtb.Document, chemin);
-            _cheminActuel = chemin;
-            Title = $"Éditeur — SenSÉ — {Path.GetFileName(chemin)}";
-            Statut.Text = ext switch
-            {
-                ".docx" => "Enregistré en Word (.docx).",
-                ".odt"  => "Enregistré en OpenDocument (.odt).",
-                _       => "Enregistré."
-            };
-            // Phase H : supprimer l'autosave (l'historique garde la trace).
-            AutoSave.Supprimer(chemin);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Erreur d'enregistrement", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
+    // ============== Handlers toolbar / edition (operent sur l'onglet actif) ==============
 
     private void MnuQuitter_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void MnuNouveau_Click(object sender, RoutedEventArgs e)         => Nouveau();
-    private void MnuOuvrir_Click(object sender, RoutedEventArgs e)          => Ouvrir();
-    private void MnuEnregistrer_Click(object sender, RoutedEventArgs e)     => Enregistrer();
-    private void MnuEnregistrerSous_Click(object sender, RoutedEventArgs e) => EnregistrerSous();
-    private void MnuAnnuler_Click(object sender, RoutedEventArgs e)         => _historique.Undo(Rtb.Document);
-    private void MnuRetablir_Click(object sender, RoutedEventArgs e)        => _historique.Redo(Rtb.Document);
+    private void MnuNouveau_Click(object sender, RoutedEventArgs e) => CreerNouvelOnglet();
+    private void MnuOuvrir_Click(object sender, RoutedEventArgs e) => OuvrirDansNouvelOnglet();
+    private void MnuEnregistrer_Click(object sender, RoutedEventArgs e) => EnregistrerOngletActif();
+    private void MnuFermerOnglet_Click(object sender, RoutedEventArgs e) => FermerOngletActif();
+    private void MnuAnnuler_Click(object sender, RoutedEventArgs e) => AnnulerOngletActif();
+    private void MnuRetablir_Click(object sender, RoutedEventArgs e) => RetablirOngletActif();
+
+    private void AnnulerOngletActif() { if (OngletActif() is { } o) o.Historique.Undo(o.RtbInterne.Document); }
+    private void RetablirOngletActif() { if (OngletActif() is { } o) o.Historique.Redo(o.RtbInterne.Document); }
 
     private void BtnGras_Click(object sender, RoutedEventArgs e)        => Toggle(Inline.FontWeightProperty, FontWeights.Bold);
     private void BtnItalique_Click(object sender, RoutedEventArgs e)    => Toggle(Inline.FontStyleProperty, FontStyles.Italic);
@@ -194,68 +258,50 @@ public partial class MainWindow : Window
     private void BtnH1_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(1);
     private void BtnH2_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(2);
     private void BtnH3_Click(object sender, RoutedEventArgs e)         => AppliquerTitre(3);
-    // Phase G.1b : EditingCommands.ToggleBullets/ToggleNumbering creent une vraie List WPF (Block > ListItem).
-    // Le writer ecrit le <w:numPr> (docx) ou <text:list> (odt) correspondant.
-    private void BtnListePuces_Click(object sender, RoutedEventArgs e) { EditingCommands.ToggleBullets.Execute(null, Rtb); Rtb.Focus(); }
-    private void BtnListeNum_Click(object sender, RoutedEventArgs e)   { EditingCommands.ToggleNumbering.Execute(null, Rtb); Rtb.Focus(); }
+    private void BtnListePuces_Click(object sender, RoutedEventArgs e) { if (RtbActif() is { } r) { EditingCommands.ToggleBullets.Execute(null, r); r.Focus(); } }
+    private void BtnListeNum_Click(object sender, RoutedEventArgs e)   { if (RtbActif() is { } r) { EditingCommands.ToggleNumbering.Execute(null, r); r.Focus(); } }
 
-    // Phase G.1a : combobox police/taille. Selection vide -> affecte le paragraphe
-    // sous le curseur (ou la propriete par defaut du RichTextBox). Sinon ->
-    // ApplyPropertyValue sur la selection.
+    private void BtnAlignerGauche_Click(object sender, RoutedEventArgs e) { if (RtbActif() is { } r) { EditingCommands.AlignLeft.Execute(null, r);    r.Focus(); } }
+    private void BtnCentrer_Click(object sender, RoutedEventArgs e)       { if (RtbActif() is { } r) { EditingCommands.AlignCenter.Execute(null, r);  r.Focus(); } }
+    private void BtnAlignerDroite_Click(object sender, RoutedEventArgs e) { if (RtbActif() is { } r) { EditingCommands.AlignRight.Execute(null, r);   r.Focus(); } }
+    private void BtnJustifier_Click(object sender, RoutedEventArgs e)     { if (RtbActif() is { } r) { EditingCommands.AlignJustify.Execute(null, r); r.Focus(); } }
+
     private void PoliceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded || _ignoreSelectionChangedCombos) return;
-        if (PoliceCombo.SelectedItem is not ComboBoxItem item) return;
+        if (!IsLoaded) return;
+        if (PoliceCombo.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;
         var name = item.Content?.ToString();
-        if (string.IsNullOrEmpty(name)) return;
+        if (string.IsNullOrEmpty(name) || RtbActif() is not { } rtb) return;
         try
         {
             var ff = new FontFamily(name);
-            if (Rtb.Selection.IsEmpty)
-                Rtb.FontFamily = ff;
-            else
-                Rtb.Selection.ApplyPropertyValue(Inline.FontFamilyProperty, ff);
-            Rtb.Focus();
+            if (rtb.Selection.IsEmpty) rtb.FontFamily = ff;
+            else rtb.Selection.ApplyPropertyValue(Inline.FontFamilyProperty, ff);
+            rtb.Focus();
         }
-        catch (Exception ex)
-        {
-            Statut.Text = "Police : " + ex.Message;
-        }
+        catch (Exception ex) { Statut.Text = "Police : " + ex.Message; }
     }
 
     private void TailleCombo_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded || _ignoreSelectionChangedCombos) return;
+        if (!IsLoaded) return;
         if (!double.TryParse(TailleCombo.Text, System.Globalization.NumberStyles.Any,
                              System.Globalization.CultureInfo.InvariantCulture, out var size)) return;
         if (size <= 0 || size > 999) return;
-        if (Rtb.Selection.IsEmpty)
-        {
-            Rtb.Selection.Start?.Paragraph?.SetCurrentValue(Paragraph.FontSizeProperty, size);
-        }
-        else
-        {
-            Rtb.Selection.ApplyPropertyValue(Inline.FontSizeProperty, size);
-        }
+        if (RtbActif() is not { } rtb) return;
+        if (rtb.Selection.IsEmpty) rtb.Selection.Start?.Paragraph?.SetCurrentValue(Paragraph.FontSizeProperty, size);
+        else rtb.Selection.ApplyPropertyValue(Inline.FontSizeProperty, size);
     }
 
-    // Phase G.1a : alignement via les EditingCommands natives WPF.
-    private void BtnAlignerGauche_Click(object sender, RoutedEventArgs e) { EditingCommands.AlignLeft.Execute(null, Rtb);    Rtb.Focus(); }
-    private void BtnCentrer_Click(object sender, RoutedEventArgs e)       { EditingCommands.AlignCenter.Execute(null, Rtb);  Rtb.Focus(); }
-    private void BtnAlignerDroite_Click(object sender, RoutedEventArgs e) { EditingCommands.AlignRight.Execute(null, Rtb);   Rtb.Focus(); }
-    private void BtnJustifier_Click(object sender, RoutedEventArgs e)     { EditingCommands.AlignJustify.Execute(null, Rtb); Rtb.Focus(); }
-
-    // Phase G.1a : ouvre (ou remonte) la fenetre de recherche. L'implementation
-    // complete (suivant, precedent, remplacer, tout remplacer) est branchee
-    // en G.4. Pour l'instant on affiche juste la fenetre.
     private void BtnRechercher_Click(object sender, RoutedEventArgs e) => OuvrirFenetreRecherche(false);
     private void BtnRemplacer_Click(object sender, RoutedEventArgs e)  => OuvrirFenetreRecherche(true);
 
     private void OuvrirFenetreRecherche(bool modeRemplacement)
     {
+        if (RtbActif() is not { } rtb) return;
         if (_fenetreRecherche is null)
         {
-            _fenetreRecherche = new FenetreRecherche(Rtb) { Owner = this };
+            _fenetreRecherche = new FenetreRecherche(rtb) { Owner = this };
             _fenetreRecherche.Closed += (_, _) => _fenetreRecherche = null;
         }
         _fenetreRecherche.ModeRemplacement = modeRemplacement;
@@ -266,96 +312,23 @@ public partial class MainWindow : Window
 
     private void Toggle(DependencyProperty prop, object value)
     {
-        if (Rtb.Selection.IsEmpty) return;
-        var current = Rtb.Selection.GetPropertyValue(prop);
+        if (RtbActif() is not { } rtb || rtb.Selection.IsEmpty) return;
+        var current = rtb.Selection.GetPropertyValue(prop);
         object? newValue = DependencyProperty.UnsetValue;
-        if (current == DependencyProperty.UnsetValue || !Equals(current, value))
-        {
-            newValue = value;
-        }
-        Rtb.Selection.ApplyPropertyValue(prop, newValue);
+        if (current == DependencyProperty.UnsetValue || !Equals(current, value)) newValue = value;
+        rtb.Selection.ApplyPropertyValue(prop, newValue);
     }
 
     private void AppliquerTitre(int niveau)
     {
-        var start = Rtb.Selection.Start;
-        var paragraph = start.Paragraph;
-        if (paragraph is null) return;
-        paragraph.FontSize = niveau switch { 1 => 24.0, 2 => 18.0, 3 => 14.0, _ => 12.0 };
-        paragraph.FontWeight = niveau == 1 ? FontWeights.Bold : FontWeights.Normal;
+        if (OngletActif() is not { } o) return;
+        var p = o.RtbInterne.Selection.Start?.Paragraph;
+        if (p is null) return;
+        p.FontSize = niveau switch { 1 => 24.0, 2 => 18.0, 3 => 14.0, _ => 12.0 };
+        p.FontWeight = niveau == 1 ? FontWeights.Bold : FontWeights.Normal;
     }
 
-    private void AppliquerListe(bool ordonnee)
-    {
-        var start = Rtb.Selection.Start;
-        var paragraph = start.Paragraph;
-        if (paragraph is null) return;
-        var prefixe = ordonnee ? "1. " : "• ";
-        var first = paragraph.Inlines.FirstInline;
-        if (first is null) return;
-        if (first is Run r && r.Text.StartsWith(prefixe)) return;
-        paragraph.Inlines.InsertBefore(first, new Run(prefixe));
-    }
-
-    // Phase G.1a + G.5 : pousser dans l'historique sur modification, mettre a jour
-    // le compteur mots/caracteres dans la status bar.
-    private void Rtb_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        _historique.Push(Rtb.Document);
-        MettreAJourComptage();
-    }
-
-    // Phase G.5 : compteur mots/caracteres. Appele sur chaque TextChanged.
-    private void MettreAJourComptage()
-    {
-        var texte = new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text;
-        var mots = string.IsNullOrWhiteSpace(texte)
-            ? 0
-            : texte.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
-        var caracteres = texte.Length;
-        Comptage.Text = $"{mots} mots | {caracteres} caractères";
-    }
-
-    // Phase G.1a : SelectionChanged -> resynchroniser les combobox Police/Taille avec
-    // l'etat de la selection. Un flag empeche les handlers de Combobox de repondre
-    // quand c'est nous qui les mettons a jour.
-    private bool _ignoreSelectionChangedCombos;
-    private void Rtb_SelectionChanged(object sender, RoutedEventArgs e)
-    {
-        SyncCombosAvecSelection();
-    }
-
-    private void SyncCombosAvecSelection()
-    {
-        _ignoreSelectionChangedCombos = true;
-        try
-        {
-            // Police.
-            var ffObj = Rtb.Selection.GetPropertyValue(Inline.FontFamilyProperty);
-            if (ffObj is FontFamily ff)
-            {
-                var source = ff.Source ?? ff.ToString();
-                foreach (var it in PoliceCombo.Items)
-                {
-                    if (it is ComboBoxItem ci && string.Equals(ci.Content?.ToString(), source, StringComparison.OrdinalIgnoreCase))
-                    {
-                        PoliceCombo.SelectedItem = ci;
-                        break;
-                    }
-                }
-            }
-            // Taille.
-            var fsObj = Rtb.Selection.GetPropertyValue(Inline.FontSizeProperty);
-            if (fsObj is double size && size > 0)
-            {
-                TailleCombo.Text = size.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
-            }
-        }
-        finally
-        {
-            _ignoreSelectionChangedCombos = false;
-        }
-    }
+    // ============== Drag & drop ==============
 
     private void Fenetre_DragOver(object sender, DragEventArgs e)
     {
@@ -371,17 +344,13 @@ public partial class MainWindow : Window
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         var fichiers = (string[])e.Data.GetData(DataFormats.FileDrop);
         if (fichiers is null || fichiers.Length == 0) return;
-
         foreach (var fichier in fichiers)
         {
             var ext = Path.GetExtension(fichier);
-            if (_extensionsImage.Contains(ext))
-            {
-                InsererImage(fichier);
-            }
+            if (_extensionsImage.Contains(ext)) InsererImage(fichier);
             else if (fichiers.Length == 1 && !_extensionsImage.Contains(ext))
             {
-                Charger(fichier);
+                ChargerDansNouvelOnglet(fichier);
                 return;
             }
         }
@@ -399,6 +368,7 @@ public partial class MainWindow : Window
 
     private void InsererImage(string cheminImage, string? legende = null)
     {
+        if (RtbActif() is not { } rtb) return;
         try
         {
             if (!File.Exists(cheminImage))
@@ -407,34 +377,17 @@ public partial class MainWindow : Window
                     "Insertion", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var img = new System.Windows.Controls.Image
             {
                 Source = new BitmapImage(new Uri(cheminImage, UriKind.Absolute)),
                 MaxWidth = 600,
                 Stretch = System.Windows.Media.Stretch.Uniform,
             };
-
-            var pos = Rtb.Selection.Start ?? Rtb.CaretPosition;
+            var pos = rtb.Selection.Start ?? rtb.CaretPosition;
             if (pos is null || pos.Paragraph is null) return;
-
-            var container = new InlineUIContainer(img, pos);
-
-            if (!string.IsNullOrEmpty(legende))
-            {
-                var posApres = pos.GetNextInsertionPosition(LogicalDirection.Forward);
-                if (posApres is not null && posApres.Paragraph is not null)
-                {
-                    posApres.Paragraph.Inlines.Add(new Run(legende)
-                    {
-                        FontStyle = FontStyles.Italic,
-                        Foreground = Brushes.Gray,
-                    });
-                }
-            }
-
+            new InlineUIContainer(img, pos);
             Statut.Text = "Image inseree : " + Path.GetFileName(cheminImage);
-            Rtb.Focus();
+            rtb.Focus();
         }
         catch (Exception ex)
         {
@@ -443,25 +396,22 @@ public partial class MainWindow : Window
         }
     }
 
+    // ============== IA / Dicter ==============
+
     private async void DemanderIa_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new FenetrePromptIA(Rtb.Selection.IsEmpty
-            ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
-            : Rtb.Selection.Text);
+        if (RtbActif() is not { } rtb) return;
+        var selection = rtb.Selection.IsEmpty
+            ? new TextRange(rtb.Document.ContentStart, rtb.Document.ContentEnd).Text
+            : rtb.Selection.Text;
+        var dlg = new FenetrePromptIA(selection);
         if (dlg.ShowDialog() != true) return;
-
-        var prompt = dlg.PromptSaisi;
-        var contexteComplet =
-            (Rtb.Selection.IsEmpty
-                ? new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd).Text
-                : Rtb.Selection.Text);
-
         Statut.Text = "IA : envoi a l'Atelier...";
         try
         {
             using var cli = new Integration.ClientAtelier();
-            var reponse = await cli.CompleterAsync(prompt + "\n\nContexte :\n" + contexteComplet, 2048);
-            Rtb.CaretPosition.InsertTextInRun(reponse + "\n");
+            var reponse = await cli.CompleterAsync(dlg.PromptSaisi + "\n\nContexte :\n" + selection, 2048);
+            rtb.CaretPosition.InsertTextInRun(reponse + "\n");
             Statut.Text = "IA : reponse inseree.";
         }
         catch (Exception ex)
@@ -492,42 +442,41 @@ public partial class MainWindow : Window
         }
     }
 
-    // Phase H : menu Fichier > Voir l'historique... -> FenetreHistorique.
+    // ============== Historique / AutoSave ==============
+
     private void MnuVoirHistorique_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(_cheminActuel))
+        if (OngletActif()?.Chemin is not { } chemin)
         {
-            MessageBox.Show(this, "Aucun fichier ouvert. L'historique est lie au chemin du fichier.",
+            MessageBox.Show(this, "Aucun fichier associe a cet onglet. Sauvegardez d'abord.",
                 "Historique", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var fen = new FenetreHistorique(_cheminActuel) { Owner = this };
+        var fen = new FenetreHistorique(chemin) { Owner = this };
         fen.ShowDialog();
     }
 
-    // Phase H : restauration de l'autosave. Si une version non sauvegardee existe et est
-    // plus recente que le fichier sur disque, propose a l'utilisateur de la recharger.
-    private void ProposerRestaurationAutoSave(string chemin)
+    private void ProposerRestaurationAutoSave(OngletDocument onglet, string chemin)
     {
         if (!AutoSave.ExisteRestauration(chemin, out var modifieLe, out var autosavePath)) return;
         var dateFichierDisque = File.Exists(chemin) ? File.GetLastWriteTime(chemin) : DateTime.MinValue;
-        if (modifieLe <= dateFichierDisque) return; // l'autosave n'est pas plus recent
+        if (modifieLe <= dateFichierDisque) return;
         var age = DateTime.Now - modifieLe;
         var minutes = (int)Math.Round(age.TotalMinutes);
         var label = minutes < 1 ? "moins d'1 min" : minutes + " min";
         var result = MessageBox.Show(this,
-            "Une version non sauvegardee existe pour " + Path.GetFileName(chemin) + " (modifiee il y a " + label + ")." +
-            Environment.NewLine + Environment.NewLine + "Restaurer ?",
+            "Une version non sauvegardee existe pour " + Path.GetFileName(chemin) +
+            " (modifiee il y a " + label + ")." + Environment.NewLine + Environment.NewLine + "Restaurer ?",
             "Restauration auto-save",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes) return;
         try
         {
             var contenu = AutoSave.Lire(autosavePath);
-            Rtb.Document = new FlowDocument();
-            Format.Markdown.DepuisMarkdown(Rtb.Document, contenu);
-            _historique.Reset();
-            _autoSave.Document = Rtb.Document;
+            onglet.RtbInterne.Document = new FlowDocument();
+            Format.Markdown.DepuisMarkdown(onglet.RtbInterne.Document, contenu);
+            onglet.Historique.Reset();
+            onglet.EstSauvegarde = false;
             Statut.Text = "Restauration auto-save appliquee (non encore sauvegarde).";
         }
         catch (Exception ex)
@@ -536,76 +485,55 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        // Verifier tous les onglets modifies avant de quitter.
+        foreach (var o in _onglets.ToList())
+        {
+            if (!o.EstSauvegarde)
+            {
+                var r = MessageBox.Show(this,
+                    o.Titre + " a des modifications non sauvegardees. Sauver avant de quitter ?",
+                    "Quitter",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                if (r == MessageBoxResult.Cancel) { e.Cancel = true; return; }
+                if (r == MessageBoxResult.Yes)
+                {
+                    Onglets.SelectedItem = o;
+                    if (!SauverOnglet(o)) { e.Cancel = true; return; }
+                }
+            }
+        }
+        base.OnClosing(e);
+    }
 }
 
-/// <summary>Fenetre modale simple pour saisir un prompt IA.</summary>
+/// <summary>Fenetre modale pour saisir un prompt IA.</summary>
 internal sealed class FenetrePromptIA : Window
 {
     public string PromptSaisi { get; private set; } = "";
-
     public FenetrePromptIA(string contexte)
     {
-        Title = "Demander a l'IA";
-        Width = 640;
-        Height = 360;
+        Title = "Demander a l'IA"; Width = 640; Height = 360;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false;
-
+        ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
         var racine = new DockPanel { Margin = new Thickness(12) };
-
-        var label = new TextBlock
-        {
-            Text = "Que voulez-vous demander a l'IA ?",
-            Margin = new Thickness(0, 0, 0, 6),
-        };
-        DockPanel.SetDock(label, Dock.Top);
-        racine.Children.Add(label);
-
-        var prompt = new TextBox
-        {
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            AcceptsTab = false,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
-        DockPanel.SetDock(prompt, Dock.Top);
-        prompt.Height = 160;
-        racine.Children.Add(prompt);
-
-        var contexteBloc = new TextBlock
-        {
-            Text = "Contexte : " + (string.IsNullOrEmpty(contexte) ? "(document vide)" : contexte.Length + " caracteres selectionnes ou document complet"),
-            Margin = new Thickness(0, 6, 0, 0),
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Brushes.Gray,
-        };
-        DockPanel.SetDock(contexteBloc, Dock.Top);
-        racine.Children.Add(contexteBloc);
-
-        var boutons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
-        };
+        var label = new TextBlock { Text = "Que voulez-vous demander a l'IA ?", Margin = new Thickness(0,0,0,6) };
+        DockPanel.SetDock(label, Dock.Top); racine.Children.Add(label);
+        var prompt = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, AcceptsTab = false, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Height = 160 };
+        DockPanel.SetDock(prompt, Dock.Top); racine.Children.Add(prompt);
+        var ctx = new TextBlock { Text = "Contexte : " + (string.IsNullOrEmpty(contexte) ? "(document vide)" : contexte.Length + " caracteres"), Margin = new Thickness(0,6,0,0), TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray };
+        DockPanel.SetDock(ctx, Dock.Top); racine.Children.Add(ctx);
+        var boutons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,12,0,0) };
         DockPanel.SetDock(boutons, Dock.Bottom);
-
-        var btnOk = new Button { Content = "OK", Width = 80, Height = 28, Margin = new Thickness(0, 0, 8, 0), IsDefault = true };
+        var btnOk = new Button { Content = "OK", Width = 80, Height = 28, Margin = new Thickness(0,0,8,0), IsDefault = true };
         btnOk.Click += (_, _) => { PromptSaisi = prompt.Text ?? ""; DialogResult = true; Close(); };
-        var btnAnnuler = new Button { Content = "Annuler", Width = 80, Height = 28, IsCancel = true };
-        btnAnnuler.Click += (_, _) => { DialogResult = false; Close(); };
-
-        boutons.Children.Add(btnAnnuler);
-        boutons.Children.Add(btnOk);
+        var btnAnn = new Button { Content = "Annuler", Width = 80, Height = 28, IsCancel = true };
+        btnAnn.Click += (_, _) => { DialogResult = false; Close(); };
+        boutons.Children.Add(btnAnn); boutons.Children.Add(btnOk);
         racine.Children.Add(boutons);
-
-        var spacer = new System.Windows.Controls.TextBlock();
-        DockPanel.SetDock(spacer, Dock.Top);
-        racine.Children.Add(spacer);
-
-        Content = racine;
-        Loaded += (_, _) => prompt.Focus();
+        Content = racine; Loaded += (_, _) => prompt.Focus();
     }
 }
 
